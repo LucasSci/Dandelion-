@@ -4,9 +4,6 @@ from discord import app_commands
 import os
 import re
 import json
-import io
-import time
-import requests
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -17,12 +14,9 @@ from google.genai import types
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-DEEPAI_API_KEY = os.getenv("DEEPAI_API_KEY")
 
 if not GEMINI_API_KEY:
     raise ValueError("❌ GEMINI_API_KEY não encontrado")
-if not DEEPAI_API_KEY:
-    raise ValueError("❌ DEEPAI_API_KEY não encontrado")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -60,107 +54,86 @@ class AIHandler(commands.Cog):
         self.bot = bot
 
         self.SYSTEM_PROMPT = """
-Você é Dandelion, o bardo do universo The Witcher narrando Zerrikania.
+Você é o Mestre do Jogo de Zerrikania (dark fantasy estilo The Witcher).
 
-Analise a pergunta e responda SOMENTE neste JSON:
+Estado atual:
+Jogador: {HP, mana}
+Inimigo: {nome, hp, status}
+
+O jogador disse: {mensagem}
+
+Responda SOMENTE neste JSON:
 
 {
-  "needs_image": true ou false,
-  "image_prompt": "descrição detalhada da criatura, objeto ou cena",
-  "answer": "resposta narrativa ao usuário"
+  "damage": numero,
+  "status": ["burn", "stun"],
+  "narration": "texto"
 }
 
 Regras:
-- needs_image deve ser true se a pergunta mencionar criatura, monstro, item, pessoa, local, cena ou algo visual.
-- image_prompt deve ser extremamente detalhado se needs_image = true.
-- Estilo visual: The Witcher 3, dark fantasy, realista, iluminação cinematográfica, alta definição.
-- Nunca escreva nada fora do JSON.
-- Português brasileiro.
+- damage deve ser um inteiro >= 0
+- status pode ser lista vazia
+- Nunca escreva nada fora do JSON
+- Português brasileiro
 """
 
-    @app_commands.command(name="dandelion", description="Fale com Dandelion, o bardo de Zerrikania")
-    @app_commands.checks.dynamic_cooldown(cooldown_dinamico, key=lambda i: (i.guild_id, i.user.id))
+    @app_commands.command(
+        name="dandelion",
+        description="Fale com Dandelion, o Mestre de Jogo de Zerrikania"
+    )
+    @app_commands.checks.dynamic_cooldown(
+        cooldown_dinamico,
+        key=lambda i: (i.guild_id, i.user.id)
+    )
     async def dandelion(self, interaction: discord.Interaction, solicitacao: str):
         await interaction.response.defer()
 
         try:
+            # ⚙️ Aqui depois você vai injetar o estado real do banco
+            estado = """
+Jogador: HP 30, Mana 20
+Inimigo: Nekker, HP 40, status nenhum
+"""
+
+            prompt = self.SYSTEM_PROMPT.replace("{mensagem}", solicitacao)
+            prompt = prompt.replace("{HP, mana}", "HP 30, Mana 20")
+            prompt = prompt.replace("{nome, hp, status}", "Nekker, HP 40, nenhum")
+
             # =========================
-            # 1️⃣ Gemini interpreta
+            # Gemini decide o turno
             # =========================
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
-                contents=solicitacao,
+                contents=prompt,
                 config=types.GenerateContentConfig(
-                    system_instruction=self.SYSTEM_PROMPT,
                     temperature=0.7
                 )
             )
 
             data = extract_json(response.text)
 
-            needs_image = data.get("needs_image", False)
-            image_prompt = data.get("image_prompt")
-            answer = data.get("answer", "O bardo perdeu o fio da canção.")
+            damage = int(data.get("damage", 0))
+            status = data.get("status", [])
+            narration = data.get("narration", "O destino ficou em silêncio.")
 
-            file = None
+            # ⚔️ Aqui depois você aplica o dano no banco
+            # ex: engine.combat.apply_damage(monstro_id, damage, status)
 
-            # =========================
-            # 2️⃣ Se precisar imagem → DeepAI
-            # =========================
-            if needs_image and image_prompt:
-                final_prompt = f"""
-{image_prompt}
-Style: The Witcher 3, dark fantasy, ultra realistic, cinematic lighting,
-gritty medieval fantasy, detailed textures, epic atmosphere
-"""
-
-                headers = {
-                    "api-key": DEEPAI_API_KEY
-                }
-
-                payload = {
-                    "text": final_prompt
-                }
-
-                r = requests.post(
-                    "https://api.deepai.org/api/text2img",
-                    headers=headers,
-                    data=payload,
-                    timeout=90
-                )
-
-                if r.status_code != 200:
-                    raise Exception(f"DeepAI erro {r.status_code}: {r.text}")
-
-                img_url = r.json()["output_url"]
-                img_bytes = requests.get(img_url).content
-
-                file = discord.File(
-                    fp=io.BytesIO(img_bytes),
-                    filename="zerrikania.png"
-                )
-
-            # =========================
-            # 3️⃣ Embed
-            # =========================
             embed = discord.Embed(
                 title="🪕 Crônicas de Zerrikania",
-                description=answer,
+                description=narration,
                 color=0x7A0000
             )
 
-            if file:
-                embed.set_image(url="attachment://zerrikania.png")
+            embed.add_field(name="Dano", value=f"**{damage}**", inline=True)
+            embed.add_field(name="Status", value=", ".join(status) if status else "Nenhum", inline=True)
 
             embed.set_footer(
-                text="Gemini 2.5 + DeepAI",
+                text="Gemini 2.5 • Mestre do Jogo",
                 icon_url=self.bot.user.display_avatar.url
             )
 
-            if file:
-                await interaction.followup.send(embed=embed, file=file)
-            else:
-                await interaction.followup.send(embed=embed)
+            await interaction.followup.send(embed=embed)
 
         except Exception as e:
             await interaction.followup.send(
