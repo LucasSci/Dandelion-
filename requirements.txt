@@ -1,0 +1,8 @@
+# Bibliotecas principais do Bot
+discord.py
+
+# Gerenciamento de chaves e ambiente
+python-dotenv
+
+# Integração com a Inteligência Artificial do Google
+google-genai

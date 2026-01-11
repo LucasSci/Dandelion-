@@ -4,138 +4,169 @@ from discord import app_commands
 import os
 import re
 import json
-import base64
+import io
+import time
+import requests
 from dotenv import load_dotenv
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
 # ============================
-# CARREGA .env
+# ENV
 # ============================
+
 load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+DEEPAI_API_KEY = os.getenv("DEEPAI_API_KEY")
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+if not GEMINI_API_KEY:
+    raise ValueError("❌ GEMINI_API_KEY não encontrado")
+if not DEEPAI_API_KEY:
+    raise ValueError("❌ DEEPAI_API_KEY não encontrado")
+
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ============================
-# FUNÇÃO: extrair JSON do modelo
+# JSON extractor
 # ============================
+
 def extract_json(text):
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
-        raise ValueError("Nenhum JSON encontrado na resposta do modelo")
+        raise ValueError("JSON não encontrado")
     return json.loads(match.group())
 
 # ============================
-# COOLDOWN DINÂMICO
+# Cooldown dinâmico
 # ============================
+
 def cooldown_dinamico(interaction: discord.Interaction):
     texto = interaction.namespace.solicitacao
     size = len(texto)
 
     if size < 50:
-        return app_commands.Cooldown(1, 8)
+        return app_commands.Cooldown(1, 10)
     elif size < 200:
-        return app_commands.Cooldown(1, 20)
+        return app_commands.Cooldown(1, 25)
     else:
-        return app_commands.Cooldown(1, 45)
+        return app_commands.Cooldown(1, 60)
 
 # ============================
 # COG
 # ============================
+
 class AIHandler(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        if not OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY não encontrada no .env")
-
         self.SYSTEM_PROMPT = """
-Você é Dandelion, o bardo de Zerrikania no universo The Witcher.
+Você é Dandelion, o bardo do universo The Witcher narrando Zerrikania.
 
-Analise a pergunta do usuário e responda SOMENTE neste JSON:
+Analise a pergunta e responda SOMENTE neste JSON:
 
 {
   "needs_image": true ou false,
-  "image_prompt": "descrição visual da criatura ou cena, ou null",
-  "answer": "resposta ao usuário no estilo do bardo"
+  "image_prompt": "descrição detalhada da criatura, objeto ou cena",
+  "answer": "resposta narrativa ao usuário"
 }
 
 Regras:
-- Se a pergunta for sobre criaturas, lugares, itens, pessoas ou monstros → needs_image = true
-- Perguntas conceituais, regras, lore abstrato → needs_image = false
-- image_prompt deve ser um prompt detalhado em inglês para geração de imagem
-- Nunca escreva nada fora do JSON
-- A resposta deve estar em português
+- needs_image deve ser true se a pergunta mencionar criatura, monstro, item, pessoa, local, cena ou algo visual.
+- image_prompt deve ser extremamente detalhado se needs_image = true.
+- Estilo visual: The Witcher 3, dark fantasy, realista, iluminação cinematográfica, alta definição.
+- Nunca escreva nada fora do JSON.
+- Português brasileiro.
 """
 
-    # ============================
-    # /dandelion
-    # ============================
-    @app_commands.command(name="dandelion", description="Fale com Dandelion, o bardo")
+    @app_commands.command(name="dandelion", description="Fale com Dandelion, o bardo de Zerrikania")
     @app_commands.checks.dynamic_cooldown(cooldown_dinamico, key=lambda i: (i.guild_id, i.user.id))
     async def dandelion(self, interaction: discord.Interaction, solicitacao: str):
-
         await interaction.response.defer()
 
         try:
-            # ========================
-            # 1️⃣ Pergunta ao GPT
-            # ========================
-            response = client.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=[
-                    {"role": "system", "content": self.SYSTEM_PROMPT},
-                    {"role": "user", "content": solicitacao}
-                ],
-                temperature=0.7
+            # =========================
+            # 1️⃣ Gemini interpreta
+            # =========================
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=solicitacao,
+                config=types.GenerateContentConfig(
+                    system_instruction=self.SYSTEM_PROMPT,
+                    temperature=0.7
+                )
             )
 
-            raw = response.choices[0].message.content
-            data = extract_json(raw)
+            data = extract_json(response.text)
 
             needs_image = data.get("needs_image", False)
-            answer = data.get("answer", "Erro na resposta.")
             image_prompt = data.get("image_prompt")
+            answer = data.get("answer", "O bardo perdeu o fio da canção.")
 
-            # ========================
-            # 2️⃣ Se precisa de imagem
-            # ========================
+            file = None
+
+            # =========================
+            # 2️⃣ Se precisar imagem → DeepAI
+            # =========================
             if needs_image and image_prompt:
-                img = client.images.generate(
-                    model="gpt-image-1",
-                    prompt=image_prompt,
-                    size="1024x1024"
+                final_prompt = f"""
+{image_prompt}
+Style: The Witcher 3, dark fantasy, ultra realistic, cinematic lighting,
+gritty medieval fantasy, detailed textures, epic atmosphere
+"""
+
+                headers = {
+                    "api-key": DEEPAI_API_KEY
+                }
+
+                payload = {
+                    "text": final_prompt
+                }
+
+                r = requests.post(
+                    "https://api.deepai.org/api/text2img",
+                    headers=headers,
+                    data=payload,
+                    timeout=90
                 )
 
-                image_base64 = img.data[0].b64_json
-                image_bytes = base64.b64decode(image_base64)
+                if r.status_code != 200:
+                    raise Exception(f"DeepAI erro {r.status_code}: {r.text}")
+
+                img_url = r.json()["output_url"]
+                img_bytes = requests.get(img_url).content
 
                 file = discord.File(
-                    fp=io.BytesIO(image_bytes),
-                    filename="image.png"
+                    fp=io.BytesIO(img_bytes),
+                    filename="zerrikania.png"
                 )
 
-                await interaction.followup.send(file=file)
-
-            # ========================
-            # 3️⃣ Envia o texto
-            # ========================
+            # =========================
+            # 3️⃣ Embed
+            # =========================
             embed = discord.Embed(
                 title="🪕 Crônicas de Zerrikania",
                 description=answer,
                 color=0x7A0000
             )
 
-            await interaction.followup.send(embed=embed)
+            if file:
+                embed.set_image(url="attachment://zerrikania.png")
+
+            embed.set_footer(
+                text="Gemini 2.5 + DeepAI",
+                icon_url=self.bot.user.display_avatar.url
+            )
+
+            if file:
+                await interaction.followup.send(embed=embed, file=file)
+            else:
+                await interaction.followup.send(embed=embed)
 
         except Exception as e:
             await interaction.followup.send(
-                f"❌ O bardo se engasgou nos próprios versos:\n`{str(e)}`",
+                f"❌ O bardo tropeçou nos próprios versos:\n`{str(e)}`",
                 ephemeral=True
             )
 
-# ============================
-# SETUP
-# ============================
 async def setup(bot):
     await bot.add_cog(AIHandler(bot))
