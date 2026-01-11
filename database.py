@@ -63,6 +63,34 @@ def init_db():
                 PRIMARY KEY (user_id, numero_slot)
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS status_personagem (
+                user_id INTEGER PRIMARY KEY,
+                hp INTEGER,
+                mana INTEGER,
+                stamina INTEGER
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS combates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                canal_id INTEGER,
+                turno INTEGER,
+            estado TEXT
+        )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS monstros_ativos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                combate_id INTEGER,
+                criatura_nome TEXT,
+                hp INTEGER,
+            status TEXT
+        )
+        """)
+        
         conn.commit()
 
         
