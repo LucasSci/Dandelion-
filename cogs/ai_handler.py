@@ -4,142 +4,78 @@ from discord import app_commands
 import os
 import re
 import json
+import asyncio
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-
-# ============================
-# ENV
-# ============================
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not GEMINI_API_KEY:
-    raise ValueError("❌ GEMINI_API_KEY não encontrado")
+    # Aviso para não parar o import se faltar a key, mas vai dar erro ao usar
+    print("⚠️ GEMINI_API_KEY não encontrado no .env")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+# Tenta criar o client apenas se a key existir
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-# ============================
-# JSON extractor
-# ============================
-
-def extract_json(text):
-    match = re.search(r"\{.*\}", text, re.DOTALL)
+def extract_json_safe(text):
+    text = re.sub(r"```json\s*|\s*```", "", text, flags=re.IGNORECASE)
+    match = re.search(r"(\{.*\})", text, re.DOTALL)
     if not match:
-        raise ValueError("JSON não encontrado")
-    return json.loads(match.group())
-
-# ============================
-# Cooldown dinâmico
-# ============================
+        try:
+            return json.loads(text)
+        except:
+            return {"damage": 0, "status": [], "narration": text}
+    return json.loads(match.group(1))
 
 def cooldown_dinamico(interaction: discord.Interaction):
-    texto = interaction.namespace.solicitacao
+    texto = interaction.namespace.solicitacao or ""
     size = len(texto)
-
-    if size < 50:
-        return app_commands.Cooldown(1, 10)
-    elif size < 200:
-        return app_commands.Cooldown(1, 25)
-    else:
-        return app_commands.Cooldown(1, 60)
-
-# ============================
-# COG
-# ============================
+    if size < 50: return app_commands.Cooldown(1, 10)
+    elif size < 200: return app_commands.Cooldown(1, 25)
+    else: return app_commands.Cooldown(1, 60)
 
 class AIHandler(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
         self.SYSTEM_PROMPT = """
-Você é o Mestre do Jogo de Zerrikania (dark fantasy estilo The Witcher).
-
-Estado atual:
-Jogador: {HP, mana}
-Inimigo: {nome, hp, status}
-
-O jogador disse: {mensagem}
-
+Você é o Mestre do Jogo de Zerrikania (dark fantasy).
 Responda SOMENTE neste JSON:
-
-{
-  "damage": numero,
-  "status": ["burn", "stun"],
-  "narration": "texto"
-}
-
-Regras:
-- damage deve ser um inteiro >= 0
-- status pode ser lista vazia
-- Nunca escreva nada fora do JSON
-- Português brasileiro
+{ "damage": int, "status": ["list"], "narration": "string" }
 """
 
-    @app_commands.command(
-        name="dandelion",
-        description="Fale com Dandelion, o Mestre de Jogo de Zerrikania"
-    )
-    @app_commands.checks.dynamic_cooldown(
-        cooldown_dinamico,
-        key=lambda i: (i.guild_id, i.user.id)
-    )
+    @app_commands.command(name="dandelion", description="Fale com Dandelion")
+    @app_commands.checks.dynamic_cooldown(cooldown_dinamico, key=lambda i: (i.guild_id, i.user.id))
     async def dandelion(self, interaction: discord.Interaction, solicitacao: str):
+        if not client:
+             return await interaction.response.send_message("❌ IA não configurada.", ephemeral=True)
+             
         await interaction.response.defer()
 
         try:
-            # ⚙️ Aqui depois você vai injetar o estado real do banco
-            estado = """
-Jogador: HP 30, Mana 20
-Inimigo: Nekker, HP 40, status nenhum
-"""
-
-            prompt = self.SYSTEM_PROMPT.replace("{mensagem}", solicitacao)
-            prompt = prompt.replace("{HP, mana}", "HP 30, Mana 20")
-            prompt = prompt.replace("{nome, hp, status}", "Nekker, HP 40, nenhum")
-
-            # =========================
-            # Gemini decide o turno
-            # =========================
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
+            prompt = f"{self.SYSTEM_PROMPT}\nJogador: {solicitacao}"
+            
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model="gemini-2.0-flash",
                 contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.7
-                )
+                config=types.GenerateContentConfig(temperature=0.7)
             )
 
-            data = extract_json(response.text)
-
-            damage = int(data.get("damage", 0))
-            status = data.get("status", [])
-            narration = data.get("narration", "O destino ficou em silêncio.")
-
-            # ⚔️ Aqui depois você aplica o dano no banco
-            # ex: engine.combat.apply_damage(monstro_id, damage, status)
-
+            data = extract_json_safe(response.text)
+            
             embed = discord.Embed(
-                title="🪕 Crônicas de Zerrikania",
-                description=narration,
+                title="🪕 Crônicas de Zerrikania", 
+                description=data.get("narration", "..."), 
                 color=0x7A0000
             )
-
-            embed.add_field(name="Dano", value=f"**{damage}**", inline=True)
-            embed.add_field(name="Status", value=", ".join(status) if status else "Nenhum", inline=True)
-
-            embed.set_footer(
-                text="Gemini 2.5 • Mestre do Jogo",
-                icon_url=self.bot.user.display_avatar.url
-            )
-
+            embed.add_field(name="Dano", value=str(data.get("damage", 0)), inline=True)
+            
             await interaction.followup.send(embed=embed)
 
         except Exception as e:
-            await interaction.followup.send(
-                f"❌ O bardo tropeçou nos próprios versos:\n`{str(e)}`",
-                ephemeral=True
-            )
+            await interaction.followup.send(f"❌ Erro: `{str(e)}`", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(AIHandler(bot))

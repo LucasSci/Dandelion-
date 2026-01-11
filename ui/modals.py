@@ -1,4 +1,4 @@
-import sqlite3
+import aiosqlite
 import discord
 from discord import ui
 
@@ -16,11 +16,12 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
     imagem = ui.TextInput(label="URL da Imagem", required=False)
 
     async def on_submit(self, interaction: discord.Interaction):
-        with sqlite3.connect(DB_NAME) as conn:
-            conn.execute("""
+        # Conexão assíncrona
+        async with aiosqlite.connect(DB_NAME) as conn:
+            await conn.execute("""
                 INSERT OR REPLACE INTO personagens
-                (user_id, nome, raca, classe, historia, imagem_url)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (user_id, nome, raca, classe, historia, imagem_url, ouro)
+                VALUES (?, ?, ?, ?, ?, ?, 0)
             """, (
                 interaction.user.id,
                 self.nome.value.title(),
@@ -29,6 +30,7 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
                 self.historia.value,
                 self.imagem.value
             ))
+            await conn.commit()
 
         await interaction.response.send_message(
             "✨ Ficha registrada com sucesso!",
