@@ -2,20 +2,18 @@ import sqlite3
 
 DB_NAME = "bestiario.db"
 
-
 def get_connection():
     """Cria e retorna uma conexão com o banco de dados."""
     return sqlite3.connect(DB_NAME)
 
-
 def init_db():
     """
     Inicializa as tabelas principais do sistema.
-    Deve ser chamada apenas uma vez na inicialização do bot.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
 
+        # Tabela Personagens
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS personagens (
                 user_id INTEGER PRIMARY KEY,
@@ -24,9 +22,20 @@ def init_db():
                 classe TEXT,
                 nivel INTEGER DEFAULT 1,
                 historia TEXT,
-                imagem_url TEXT
+                imagem_url TEXT,
+                ouro INTEGER DEFAULT 0
             )
         """)
+        
+        # --- CORREÇÃO DO ERRO ---
+        # Tenta adicionar a coluna 'ouro' em bancos antigos que não a tenham.
+        try:
+            cursor.execute("ALTER TABLE personagens ADD COLUMN ouro INTEGER DEFAULT 0")
+            print("✅ Coluna 'ouro' adicionada com sucesso.")
+        except sqlite3.OperationalError:
+            # Se der erro, é porque a coluna já existe, então ignoramos.
+            pass
+        # ------------------------
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS criaturas (
@@ -40,7 +49,7 @@ def init_db():
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS inventario (
-             id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
                 nome TEXT,
                 tipo TEXT,
@@ -48,6 +57,7 @@ def init_db():
                 efeito TEXT
             )
         """)
+        
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS habilidades_disponiveis (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +65,7 @@ def init_db():
                 efeito TEXT
             )
         """)
+        
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS slots_equipados (
                 user_id INTEGER,
@@ -63,51 +74,5 @@ def init_db():
                 PRIMARY KEY (user_id, numero_slot)
             )
         """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS status_personagem (
-                user_id INTEGER PRIMARY KEY,
-                hp INTEGER,
-                mana INTEGER,
-                stamina INTEGER
-            )
-        """)
-
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS combates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                canal_id INTEGER,
-                turno INTEGER,
-            estado TEXT
-        )
-        """)
-
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS monstros_ativos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                combate_id INTEGER,
-                criatura_nome TEXT,
-                hp INTEGER,
-            status TEXT
-        )
-        """)
         
         conn.commit()
-
-        
-
-
-def garantir_coluna_imagem_criaturas():
-    """
-    Garante que a coluna imagem_url exista na tabela criaturas.
-    Evita erro em bancos antigos.
-    """
-    try:
-        with get_connection() as conn:
-            conn.execute(
-                "ALTER TABLE criaturas ADD COLUMN imagem_url TEXT"
-            )
-            conn.commit()
-            print("✅ Coluna 'imagem_url' adicionada em criaturas.")
-    except sqlite3.OperationalError:
-        # Coluna já existe ou tabela ainda não foi criada
-        pass
