@@ -3,11 +3,11 @@ import aiosqlite
 import random
 import re
 from discord import ui
-
+from utils import rolar_dados
 DB_NAME = "bestiario.db"
 
 # --- FUNÇÃO AUXILIAR DE ROLAGEM ---
-def rolar_dados(formula: str):
+"""def rolar_dados(formula: str):
     formula = formula.lower().replace(" ", "")
     match = re.match(r'(\d+)d(\d+)(?:([+-])(\d+))?', formula)
     if not match: return None, 0
@@ -23,7 +23,7 @@ def rolar_dados(formula: str):
     if bonus: detalhes += f" {'+' if sinal=='+' else '-'} {bonus}"
     
     return detalhes, total
-
+"""
 # --- MODAL PARA CRIAR NOVA HABILIDADE ---
 class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
     def __init__(self, personagem_id, view_pai):

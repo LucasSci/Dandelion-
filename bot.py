@@ -33,7 +33,7 @@ class DandelionBot(commands.Bot):
         await self.add_cog(Characters(self))
         await self.add_cog(Dice(self))
         await self.add_cog(Inventory(self))
-        await self.add_cog(Skills(self))
+        #await self.add_cog(Skills(self))
 
         # Cogs carregadas como extensões (Arquivos na pasta cogs)
         await self.load_extension("cogs.ai_handler")

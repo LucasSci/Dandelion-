@@ -9,7 +9,8 @@ def init_db():
     with get_connection() as conn:
         cursor = conn.cursor()
 
-        # --- PERSONAGENS (Mantido) ---
+        # --- PERSONAGENS (ATUALIZADO) ---
+        # Adicionei colunas: hp_max, mp_max, ataque, defesa
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS personagens (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -20,12 +21,28 @@ def init_db():
                 nivel INTEGER DEFAULT 1,
                 historia TEXT,
                 imagem_url TEXT,
-                ouro INTEGER DEFAULT 0
+                ouro INTEGER DEFAULT 0,
+                hp_max INTEGER DEFAULT 30,
+                mp_max INTEGER DEFAULT 10,
+                ataque INTEGER DEFAULT 2,
+                defesa INTEGER DEFAULT 10
             )
         """)
+        
+        # Tenta adicionar colunas caso a tabela já exista (Migração simples)
+        colunas_extras = [
+            ("hp_max", "INTEGER DEFAULT 30"),
+            ("mp_max", "INTEGER DEFAULT 10"),
+            ("ataque", "INTEGER DEFAULT 2"),
+            ("defesa", "INTEGER DEFAULT 10")
+        ]
+        for col, tipo in colunas_extras:
+            try:
+                cursor.execute(f"ALTER TABLE personagens ADD COLUMN {col} {tipo}")
+            except sqlite3.OperationalError:
+                pass # Coluna já existe
 
-        # --- CRIATURAS (ATUALIZADO COM STATUS) ---
-        # Adicionamos HP Máximo, Iniciativa e Dano Base
+        # --- CRIATURAS ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS criaturas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,19 +56,7 @@ def init_db():
             )
         """)
         
-        # --- HABILIDADES DAS CRIATURAS (NOVO) ---
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS habilidades_criatura (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                criatura_id INTEGER,
-                nome TEXT,
-                descricao TEXT,
-                dano_formula TEXT,
-                FOREIGN KEY(criatura_id) REFERENCES criaturas(id) ON DELETE CASCADE
-            )
-        """)
-
-        # --- HABILIDADES DOS JOGADORES (Mantido) ---
+        # --- HABILIDADES (Unificado) ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS habilidades_personagem (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,7 +68,7 @@ def init_db():
             )
         """)
         
-        # (Outras tabelas mantidas...)
+        # --- INVENTÁRIO ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS inventario (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
