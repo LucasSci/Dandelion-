@@ -6,30 +6,13 @@ from discord import ui
 from utils import rolar_dados
 DB_NAME = "bestiario.db"
 
-# --- FUNÇÃO AUXILIAR DE ROLAGEM ---
-"""def rolar_dados(formula: str):
-    formula = formula.lower().replace(" ", "")
-    match = re.match(r'(\d+)d(\d+)(?:([+-])(\d+))?', formula)
-    if not match: return None, 0
-    
-    qtd, lados, sinal, bonus = match.groups()
-    qtd, lados = int(qtd), int(lados)
-    bonus = int(bonus) if bonus else 0
-    
-    rolls = [random.randint(1, lados) for _ in range(qtd)]
-    total = sum(rolls) + (bonus if sinal == "+" else -bonus)
-    
-    detalhes = f"[{', '.join(map(str, rolls))}]"
-    if bonus: detalhes += f" {'+' if sinal=='+' else '-'} {bonus}"
-    
-    return detalhes, total
-"""
 # --- MODAL PARA CRIAR NOVA HABILIDADE ---
 class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
-    def __init__(self, personagem_id, view_pai):
+    def __init__(self, personagem_id, view_pai, message: discord.Message):
         super().__init__()
         self.personagem_id = personagem_id
         self.view_pai = view_pai
+        self.message = message
 
     nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
     dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)")
@@ -48,8 +31,8 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
             await db.commit()
         
         await interaction.response.send_message(f"✅ Habilidade **{self.nome.value}** aprendida!", ephemeral=True)
-        # Atualiza a view antiga para mostrar o botão novo
-        await self.view_pai.atualizar_botoes_habilidade(interaction)
+        # Atualiza a mensagem original da ficha
+        await self.view_pai.update_message(self.message)
 
 # --- BOTÃO DE HABILIDADE (REALIZA A ROLAGEM) ---
 class HabilidadeButton(ui.Button):
@@ -95,7 +78,7 @@ class FichaView(ui.View):
 
     @ui.button(label="➕ Nova Skill", style=discord.ButtonStyle.gray, row=0)
     async def btn_add_skill(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self))
+        await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self, interaction.message))
 
     # --- MÉTODOS DE EXIBIÇÃO ---
     
@@ -119,7 +102,7 @@ class FichaView(ui.View):
         self.clear_dynamic_buttons()
         await interaction.response.edit_message(embed=embed, view=self)
 
-    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
+    async def _update_view_with_skills(self):
         # 1. Limpa botões antigos de habilidade
         self.clear_dynamic_buttons()
 
@@ -139,11 +122,20 @@ class FichaView(ui.View):
         for nome, dado, desc in skills[:20]:
             self.add_item(HabilidadeButton(nome, dado, desc))
 
+        return embed
+
+    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
+        embed = await self._update_view_with_skills()
+
         # Se a interação já foi respondida (ex: vindo do Modal), usamos edit_original_response
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
         else:
             await interaction.response.edit_message(embed=embed, view=self)
+
+    async def update_message(self, message: discord.Message):
+        embed = await self._update_view_with_skills()
+        await message.edit(embed=embed, view=self)
 
     def clear_dynamic_buttons(self):
         # Remove todos os itens que não sejam os botões fixos de navegação (Info, Skills, Add)
