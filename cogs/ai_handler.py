@@ -37,6 +37,7 @@ def cooldown_dinamico(interaction: discord.Interaction):
     else: return app_commands.Cooldown(1, 60)
 
 class AIHandler(commands.Cog):
+
     def __init__(self, bot):
         self.bot = bot
         self.SYSTEM_PROMPT = """
@@ -44,9 +45,22 @@ Você é o Mestre do Jogo de Zerrikania (dark fantasy).
 Responda SOMENTE neste JSON:
 { "damage": int, "status": ["list"], "narration": "string" }
 """
+    
+    async def acoes_autocomplete(self, interaction: discord.Interaction, current: str):
+        sugestoes = [
+            "Atacar com a espada",
+            "Lançar sinal Igni",
+            "Procurar pistas com sentidos de bruxo",
+            "Tentar intimidar o oponente",
+            "Esquivar e contra-atacar"
+        ]
+        return [
+            app_commands.Choice(name=s, value=s)
+            for s in sugestoes if current.lower() in s.lower()
+        ]
 
-    @app_commands.command(name="dandelion", description="Fale com Dandelion")
-    @app_commands.checks.dynamic_cooldown(cooldown_dinamico, key=lambda i: (i.guild_id, i.user.id))
+    @app_commands.command(name="dandelion", description="Fale com o Mestre de Jogo")
+    @app_commands.autocomplete(solicitacao=acoes_autocomplete) # <--- AQUI
     async def dandelion(self, interaction: discord.Interaction, solicitacao: str):
         if not client:
              return await interaction.response.send_message("❌ IA não configurada.", ephemeral=True)

@@ -9,11 +9,17 @@ class Skills(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="usar_habilidade")
-    async def usar_habilidade(self, interaction: discord.Interaction, slot: int):
-        if slot not in range(1, 5):
-            return await interaction.response.send_message("Use slots de 1 a 4.", ephemeral=True)
+    # Autocomplete para slots (1 a 4)
+    async def slot_autocomplete(self, interaction: discord.Interaction, current: str):
+        slots = ["1", "2", "3", "4"]
+        return [
+            app_commands.Choice(name=f"Slot {s}", value=int(s))
+            for s in slots if current in s
+        ]
 
+    @app_commands.command(name="usar_habilidade", description="Usa uma habilidade equipada")
+    @app_commands.autocomplete(slot=slot_autocomplete) # <--- AQUI
+    async def usar_habilidade(self, interaction: discord.Interaction, slot: int):
         async with aiosqlite.connect(DB_NAME) as conn:
             async with conn.execute("""
                 SELECT h.nome, h.efeito
@@ -24,12 +30,10 @@ class Skills(commands.Cog):
                 habilidade = await cursor.fetchone()
 
         if not habilidade:
-            return await interaction.response.send_message("❌ Slot vazio.", ephemeral=True)
+            return await interaction.response.send_message("❌ Slot vazio ou inválido.", ephemeral=True)
 
         nome, efeito = habilidade
-        await interaction.response.send_message(
-            f"✨ **{interaction.user.display_name}** usou **{nome}**!\n*{efeito}*"
-        )
+        await interaction.response.send_message(f"✨ **{interaction.user.display_name}** usou **{nome}**!\n*{efeito}*")
 
 async def setup(bot):
     await bot.add_cog(Skills(bot))
