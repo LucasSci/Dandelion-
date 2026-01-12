@@ -37,8 +37,10 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
 
     async def on_submit(self, interaction: discord.Interaction):
         # Valida fórmula de dado se preenchida
-        if self.dado.value and not re.match(r'(\d+)d(\d+)', self.dado.value.lower()):
-            return await interaction.response.send_message("❌ Fórmula de dados inválida. Use ex: 1d20+5", ephemeral=True)
+        if self.dado.value:
+            detalhes, _ = rolar_dados(self.dado.value)
+            if detalhes is None:
+                return await interaction.response.send_message("❌ Fórmula inválida. Use ex: `1d20+5` ou `10`", ephemeral=True)
 
         async with aiosqlite.connect(DB_NAME) as db:
             await db.execute("""
@@ -61,7 +63,7 @@ class HabilidadeButton(ui.Button):
         self.desc_habilidade = descricao
 
     async def callback(self, interaction: discord.Interaction):
-        embed = discord.Embed(title=f"⚔️ Usou {self.nome_habilidade}", color=0xFF5500)
+        embed = discord.Embed(title=f"⚔️ {interaction.user.display_name} usou {self.nome_habilidade}", color=0xFF5500)
         embed.description = self.desc_habilidade or "..."
         
         if self.dado_habilidade:
