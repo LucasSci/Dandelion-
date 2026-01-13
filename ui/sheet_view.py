@@ -6,24 +6,6 @@ from discord import ui
 from utils import rolar_dados
 DB_NAME = "bestiario.db"
 
-# --- FUNÇÃO AUXILIAR DE ROLAGEM ---
-"""def rolar_dados(formula: str):
-    formula = formula.lower().replace(" ", "")
-    match = re.match(r'(\d+)d(\d+)(?:([+-])(\d+))?', formula)
-    if not match: return None, 0
-    
-    qtd, lados, sinal, bonus = match.groups()
-    qtd, lados = int(qtd), int(lados)
-    bonus = int(bonus) if bonus else 0
-    
-    rolls = [random.randint(1, lados) for _ in range(qtd)]
-    total = sum(rolls) + (bonus if sinal == "+" else -bonus)
-    
-    detalhes = f"[{', '.join(map(str, rolls))}]"
-    if bonus: detalhes += f" {'+' if sinal=='+' else '-'} {bonus}"
-    
-    return detalhes, total
-"""
 # --- MODAL PARA CRIAR NOVA HABILIDADE ---
 class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
     def __init__(self, personagem_id, view_pai):
@@ -31,8 +13,8 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
         self.personagem_id = personagem_id
         self.view_pai = view_pai
 
-    nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
-    dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)")
+    nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo", max_length=50)
+    dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)", required=False)
     descricao = ui.TextInput(label="Descrição", style=discord.TextStyle.paragraph, required=False)
 
     async def on_submit(self, interaction: discord.Interaction):
