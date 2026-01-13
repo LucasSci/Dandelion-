@@ -77,12 +77,22 @@ class FichaView(ui.View):
         super().__init__(timeout=None)
         self.personagem_id = personagem_id
         self.dono_id = user_id_dono
+        self._update_buttons('info')
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.dono_id:
             await interaction.response.send_message("⛔ Esta ficha não é sua.", ephemeral=True)
             return False
         return True
+
+    def _update_buttons(self, active_mode):
+        # active_mode: 'info' or 'skills'
+        for child in self.children:
+            if isinstance(child, ui.Button):
+                if child.label == "📜 Info/Lore":
+                    child.disabled = (active_mode == 'info')
+                elif child.label == "⚔️ Habilidades":
+                    child.disabled = (active_mode == 'skills')
 
     # --- NAVEGAÇÃO ---
     @ui.button(label="📜 Info/Lore", style=discord.ButtonStyle.primary, row=0)
@@ -100,6 +110,7 @@ class FichaView(ui.View):
     # --- MÉTODOS DE EXIBIÇÃO ---
     
     async def mostrar_info_geral(self, interaction: discord.Interaction):
+        self._update_buttons('info')
         # Busca dados atualizados do banco
         async with aiosqlite.connect(DB_NAME) as db:
             async with db.execute("SELECT nome, raca, classe, nivel, historia, imagem_url, ouro FROM personagens WHERE id = ?", (self.personagem_id,)) as cursor:
@@ -120,6 +131,7 @@ class FichaView(ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
+        self._update_buttons('skills')
         # 1. Limpa botões antigos de habilidade
         self.clear_dynamic_buttons()
 
