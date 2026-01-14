@@ -32,7 +32,7 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
         self.view_pai = view_pai
 
     nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
-    dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)")
+    dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)", required=False)
     descricao = ui.TextInput(label="Descrição", style=discord.TextStyle.paragraph, required=False)
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -77,6 +77,16 @@ class FichaView(ui.View):
         super().__init__(timeout=None)
         self.personagem_id = personagem_id
         self.dono_id = user_id_dono
+        self.update_buttons_state("info")
+
+    def update_buttons_state(self, mode: str):
+        """Atualiza estado dos botões de navegação (visual feedback)"""
+        for item in self.children:
+            if isinstance(item, ui.Button) and item.label:
+                if item.label == "📜 Info/Lore":
+                    item.disabled = (mode == "info")
+                elif item.label == "⚔️ Habilidades":
+                    item.disabled = (mode == "skills")
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.dono_id:
@@ -100,6 +110,7 @@ class FichaView(ui.View):
     # --- MÉTODOS DE EXIBIÇÃO ---
     
     async def mostrar_info_geral(self, interaction: discord.Interaction):
+        self.update_buttons_state("info")
         # Busca dados atualizados do banco
         async with aiosqlite.connect(DB_NAME) as db:
             async with db.execute("SELECT nome, raca, classe, nivel, historia, imagem_url, ouro FROM personagens WHERE id = ?", (self.personagem_id,)) as cursor:
@@ -120,6 +131,7 @@ class FichaView(ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
+        self.update_buttons_state("skills")
         # 1. Limpa botões antigos de habilidade
         self.clear_dynamic_buttons()
 
