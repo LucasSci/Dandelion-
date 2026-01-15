@@ -60,9 +60,9 @@ class DandelionBot(commands.Bot):
 
     async def close(self):
         if hasattr(self, 'db') and self.db:
-        if self.db:
-            await self.db.close()
-        await super().close()
+            if self.db:
+                await self.db.close()
+            await super().close()
 
 bot = DandelionBot()
 

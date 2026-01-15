@@ -2,17 +2,13 @@ import discord
 from discord import ui
 from utils import rolar_dados
 
-# Não definimos mais DB_NAME aqui, pois usaremos a conexão do bot
-
 # --- MODAL PARA CRIAR NOVA HABILIDADE ---
 class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
-    def __init__(self, personagem_id, view_pai, message: discord.Message):
+    def __init__(self, personagem_id, view_pai):
         super().__init__()
         self.personagem_id = personagem_id
         self.view_pai = view_pai
-        self.message = message
 
-    nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo", max_length=50)
     nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
     # Mantido required=False pois o placeholder indica opcionalidade
     dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)", required=False)
@@ -34,8 +30,6 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
         await db.commit()
         
         await interaction.response.send_message(f"✅ Habilidade **{self.nome.value}** aprendida!", ephemeral=True)
-        # Atualiza a mensagem original da ficha
-        await self.view_pai.update_message(self.message)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
 # --- BOTÃO DE HABILIDADE (REALIZA A ROLAGEM) ---
@@ -64,12 +58,10 @@ class FichaView(ui.View):
         super().__init__(timeout=None)
         self.personagem_id = personagem_id
         self.dono_id = user_id_dono
-        self._update_buttons('info')
-        # Inicia com "Info/Lore" ativo (botão desativado)
-        self.btn_info.disabled = True
         self.update_buttons_state("info")
 
     def update_buttons_state(self, mode: str):
+        """Atualiza estado dos botões de navegação (visual feedback)"""
         for item in self.children:
             if isinstance(item, ui.Button) and item.label:
                 if item.label == "📜 Info/Lore":
@@ -83,15 +75,6 @@ class FichaView(ui.View):
             return False
         return True
 
-    def _update_buttons(self, active_mode):
-        # active_mode: 'info' or 'skills'
-        for child in self.children:
-            if isinstance(child, ui.Button):
-                if child.label == "📜 Info/Lore":
-                    child.disabled = (active_mode == 'info')
-                elif child.label == "⚔️ Habilidades":
-                    child.disabled = (active_mode == 'skills')
-
     # --- NAVEGAÇÃO ---
     @ui.button(label="📜 Info/Lore", style=discord.ButtonStyle.primary, row=0)
     async def btn_info(self, interaction: discord.Interaction, button: ui.Button):
@@ -103,20 +86,11 @@ class FichaView(ui.View):
 
     @ui.button(label="➕ Nova Skill", style=discord.ButtonStyle.gray, row=0)
     async def btn_add_skill(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self, interaction.message))
+        await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self))
 
     # --- MÉTODOS DE EXIBIÇÃO ---
     
     async def mostrar_info_geral(self, interaction: discord.Interaction):
-        self._update_buttons('info')
-        # Atualiza estado dos botões
-        self.btn_info.disabled = True
-        self.btn_skills.disabled = False
-
-        # Busca dados atualizados do banco
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute("SELECT nome, raca, classe, nivel, historia, imagem_url, ouro FROM personagens WHERE id = ?", (self.personagem_id,)) as cursor:
-                dados = await cursor.fetchone()
         self.update_buttons_state("info")
         
         # FIX: Usando connection pool compartilhado
@@ -139,14 +113,6 @@ class FichaView(ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
-        self._update_buttons('skills')
-        # Atualiza estado dos botões
-        self.btn_skills.disabled = True
-        self.btn_info.disabled = False
-
-    async def _update_view_with_skills(self):
-        # 1. Limpa botões antigos de habilidade
-    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
         self.update_buttons_state("skills")
         self.clear_dynamic_buttons()
 
@@ -165,20 +131,10 @@ class FichaView(ui.View):
         for nome, dado, desc in skills[:20]:
             self.add_item(HabilidadeButton(nome, dado, desc))
 
-        return embed
-
-    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
-        embed = await self._update_view_with_skills()
-
-        # Se a interação já foi respondida (ex: vindo do Modal), usamos edit_original_response
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
         else:
             await interaction.response.edit_message(embed=embed, view=self)
-
-    async def update_message(self, message: discord.Message):
-        embed = await self._update_view_with_skills()
-        await message.edit(embed=embed, view=self)
 
     def clear_dynamic_buttons(self):
         items_to_keep = [item for item in self.children if getattr(item, 'row', 0) == 0]
