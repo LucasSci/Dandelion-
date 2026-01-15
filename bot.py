@@ -28,10 +28,13 @@ class DandelionBot(commands.Bot):
             command_prefix="!",
             intents=discord.Intents.all()
         )
+        self.db = None
 
     async def setup_hook(self):
         # Conexão persistente com banco de dados (Performance)
         self.db = await aiosqlite.connect(DB_NAME)
+        self.db = await aiosqlite.connect(DB_NAME)
+        await self.db.execute("PRAGMA foreign_keys = ON")
 
         # Cogs carregadas diretamente (Classes importadas)
         await self.add_cog(Characters(self))
@@ -57,6 +60,7 @@ class DandelionBot(commands.Bot):
 
     async def close(self):
         if hasattr(self, 'db') and self.db:
+        if self.db:
             await self.db.close()
         await super().close()
 

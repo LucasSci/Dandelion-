@@ -84,4 +84,10 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_personagens_user_id ON personagens(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_inventario_user_id ON inventario(user_id)")
         
+        # --- ÍNDICES DE PERFORMANCE ---
+        # Adiciona índices para otimizar buscas frequentes por user_id e relacionamentos
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_personagens_user_id ON personagens(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_inventario_user_id ON inventario(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_habilidades_personagem_id ON habilidades_personagem(personagem_id)")
+
         conn.commit()
