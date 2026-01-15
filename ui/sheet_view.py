@@ -65,9 +65,13 @@ class FichaView(ui.View):
         for item in self.children:
             if isinstance(item, ui.Button) and item.label:
                 if item.label == "📜 Info/Lore":
-                    item.disabled = (mode == "info")
+                    is_active = (mode == "info")
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "⚔️ Habilidades":
-                    item.disabled = (mode == "skills")
+                    is_active = (mode == "skills")
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.dono_id:
@@ -76,15 +80,15 @@ class FichaView(ui.View):
         return True
 
     # --- NAVEGAÇÃO ---
-    @ui.button(label="📜 Info/Lore", style=discord.ButtonStyle.primary, row=0)
+    @ui.button(label="📜 Info/Lore", style=discord.ButtonStyle.secondary, row=0)
     async def btn_info(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_info_geral(interaction)
 
-    @ui.button(label="⚔️ Habilidades", style=discord.ButtonStyle.success, row=0)
+    @ui.button(label="⚔️ Habilidades", style=discord.ButtonStyle.secondary, row=0)
     async def btn_skills(self, interaction: discord.Interaction, button: ui.Button):
         await self.atualizar_botoes_habilidade(interaction)
 
-    @ui.button(label="➕ Nova Skill", style=discord.ButtonStyle.gray, row=0)
+    @ui.button(label="➕ Nova Skill", style=discord.ButtonStyle.success, row=0)
     async def btn_add_skill(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self))
 
