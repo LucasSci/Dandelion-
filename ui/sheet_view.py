@@ -1,29 +1,9 @@
 import discord
-import aiosqlite
-import random
-import re
 from discord import ui
 from utils import rolar_dados
-DB_NAME = "bestiario.db"
 
-# --- FUNÇÃO AUXILIAR DE ROLAGEM ---
-"""def rolar_dados(formula: str):
-    formula = formula.lower().replace(" ", "")
-    match = re.match(r'(\d+)d(\d+)(?:([+-])(\d+))?', formula)
-    if not match: return None, 0
-    
-    qtd, lados, sinal, bonus = match.groups()
-    qtd, lados = int(qtd), int(lados)
-    bonus = int(bonus) if bonus else 0
-    
-    rolls = [random.randint(1, lados) for _ in range(qtd)]
-    total = sum(rolls) + (bonus if sinal == "+" else -bonus)
-    
-    detalhes = f"[{', '.join(map(str, rolls))}]"
-    if bonus: detalhes += f" {'+' if sinal=='+' else '-'} {bonus}"
-    
-    return detalhes, total
-"""
+# Não definimos mais DB_NAME aqui, pois usaremos a conexão do bot
+
 # --- MODAL PARA CRIAR NOVA HABILIDADE ---
 class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
     def __init__(self, personagem_id, view_pai):
@@ -32,25 +12,26 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
         self.view_pai = view_pai
 
     nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
+    # Mantido required=False pois o placeholder indica opcionalidade
     dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)", required=False)
     descricao = ui.TextInput(label="Descrição", style=discord.TextStyle.paragraph, required=False)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Valida fórmula de dado se preenchida
         if self.dado.value:
             detalhes, _ = rolar_dados(self.dado.value)
             if detalhes is None:
                 return await interaction.response.send_message("❌ Fórmula inválida. Use ex: `1d20+5` ou `10`", ephemeral=True)
 
-        async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute("""
-                INSERT INTO habilidades_personagem (personagem_id, nome, descricao, dado)
-                VALUES (?, ?, ?, ?)
-            """, (self.personagem_id, self.nome.value, self.descricao.value, self.dado.value))
-            await db.commit()
+        # FIX: Usando a conexão compartilhada do bot via interaction.client
+        db = interaction.client.db
+        
+        await db.execute("""
+            INSERT INTO habilidades_personagem (personagem_id, nome, descricao, dado)
+            VALUES (?, ?, ?, ?)
+        """, (self.personagem_id, self.nome.value, self.descricao.value, self.dado.value))
+        await db.commit()
         
         await interaction.response.send_message(f"✅ Habilidade **{self.nome.value}** aprendida!", ephemeral=True)
-        # Atualiza a view antiga para mostrar o botão novo
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
 # --- BOTÃO DE HABILIDADE (REALIZA A ROLAGEM) ---
@@ -82,7 +63,6 @@ class FichaView(ui.View):
         self.update_buttons_state("info")
 
     def update_buttons_state(self, mode: str):
-        """Atualiza estado dos botões de navegação (visual feedback)"""
         for item in self.children:
             if isinstance(item, ui.Button) and item.label:
                 if item.label == "📜 Info/Lore":
@@ -113,10 +93,12 @@ class FichaView(ui.View):
     
     async def mostrar_info_geral(self, interaction: discord.Interaction):
         self.update_buttons_state("info")
-        # Busca dados atualizados do banco
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute("SELECT nome, raca, classe, nivel, historia, imagem_url, ouro FROM personagens WHERE id = ?", (self.personagem_id,)) as cursor:
-                dados = await cursor.fetchone()
+        
+        # FIX: Usando connection pool compartilhado
+        db = interaction.client.db
+        
+        async with db.execute("SELECT nome, raca, classe, nivel, historia, imagem_url, ouro FROM personagens WHERE id = ?", (self.personagem_id,)) as cursor:
+            dados = await cursor.fetchone()
         
         if not dados: return
         nome, raca, classe, nivel, historia, img, ouro = dados
@@ -128,40 +110,34 @@ class FichaView(ui.View):
         embed.add_field(name="Ouro", value=f"💰 {ouro}", inline=True)
         if img: embed.set_thumbnail(url=img)
         
-        # Limpa botões de habilidade (row 1+) para limpar a tela
         self.clear_dynamic_buttons()
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
         self.update_buttons_state("skills")
-        # 1. Limpa botões antigos de habilidade
         self.clear_dynamic_buttons()
 
-        # 2. Busca habilidades do banco
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (self.personagem_id,)) as cursor:
-                skills = await cursor.fetchall()
+        # FIX: Usando connection pool compartilhado
+        db = interaction.client.db
 
-        # 3. Cria Embed
+        async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (self.personagem_id,)) as cursor:
+            skills = await cursor.fetchall()
+
         embed = discord.Embed(title="⚔️ Grimório de Habilidades", color=0x992d22)
         if not skills:
             embed.description = "Nenhuma habilidade aprendida. Clique em '➕ Nova Skill'."
         else:
             embed.description = "Clique nos botões abaixo para usar:"
 
-        # 4. Adiciona um botão para cada habilidade (Max 20 por limite do Discord)
         for nome, dado, desc in skills[:20]:
             self.add_item(HabilidadeButton(nome, dado, desc))
 
-        # Se a interação já foi respondida (ex: vindo do Modal), usamos edit_original_response
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
         else:
             await interaction.response.edit_message(embed=embed, view=self)
 
     def clear_dynamic_buttons(self):
-        # Remove todos os itens que não sejam os botões fixos de navegação (Info, Skills, Add)
-        # Itens fixos estão na row 0. Dinâmicos na row 1.
         items_to_keep = [item for item in self.children if getattr(item, 'row', 0) == 0]
         self.clear_items()
         for item in items_to_keep:
