@@ -9,17 +9,49 @@ from utils import rolar_dados
 
 DB_NAME = "bestiario.db"
 
+# --- HELPER: SISTEMA DE XP ---
+async def aplicar_xp(db, user_id, xp_ganho, channel):
+    """Calcula XP, verifica Level Up e atualiza o banco."""
+    async with db.execute("SELECT nivel, xp_atual, hp_max, ataque FROM personagens WHERE user_id = ?", (user_id,)) as cursor:
+        dados = await cursor.fetchone()
+    
+    if not dados: return
+    nivel, xp, hp, atk = dados
+    
+    # Fórmula: Nível * 1000 de XP necessário para o próximo
+    xp_prox_nivel = nivel * 1000 
+    novo_xp = xp + xp_ganho
+    msg = ""
+
+    if novo_xp >= xp_prox_nivel:
+        novo_nivel = nivel + 1
+        novo_xp = novo_xp - xp_prox_nivel
+        
+        # Bônus de Level Up
+        novo_hp = hp + 5   # +5 de Vida
+        novo_atk = atk + 1 # +1 de Ataque
+        
+        await db.execute("""
+            UPDATE personagens 
+            SET nivel=?, xp_atual=?, hp_max=?, ataque=? 
+            WHERE user_id=?""", 
+            (novo_nivel, novo_xp, novo_hp, novo_atk, user_id))
+            
+        msg = f"\n🎉 **LEVEL UP!** Você alcançou o nível **{novo_nivel}**! (+5 HP, +1 ATK)"
+    else:
+        await db.execute("UPDATE personagens SET xp_atual=? WHERE user_id=?", (novo_xp, user_id))
+    
+    await db.commit()
+    if msg: await channel.send(f"<@{user_id}> {msg}")
+
+# --- CLASSE DE COMBATE ---
 class Combat(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.sessions = {}
 
-    # ... (Mantenha combate_criar e combate_entrar IGUAIS ao anterior) ...
-    # Vou repetir apenas as partes que mudaram a lógica
-    
     @app_commands.command(name="combate_criar", description="Cria uma sala de batalha")
     async def combate_criar(self, interaction: discord.Interaction, monstro_nome: str):
-        # (Código igual ao anterior para buscar monstro)
         async with self.bot.db.execute("SELECT nome, hp_max, imagem_url, iniciativa, dano_base FROM criaturas WHERE nome LIKE ?", (f'%{monstro_nome}%',)) as cursor:
             monster_data = await cursor.fetchone()
         
@@ -28,7 +60,7 @@ class Combat(commands.Cog):
         
         self.sessions[interaction.channel_id] = {
             'status': 'LOBBY',
-            'bloqueado': False, # NOVO FLAG
+            'bloqueado': False,
             'monstro': {'nome': nome, 'hp_max': hp, 'hp_atual': hp, 'img': img, 'ini': ini, 'dano_base': dano_base},
             'jogadores': [],
             'ordem': [],
@@ -42,7 +74,6 @@ class Combat(commands.Cog):
 
     @app_commands.command(name="combate_entrar", description="Entra no combate atual")
     async def combate_entrar(self, interaction: discord.Interaction):
-        # (Código igual: busca dados do banco e adiciona na session)
         session = self.sessions.get(interaction.channel_id)
         if not session or session['status'] != 'LOBBY': return await interaction.response.send_message("❌ Erro.", ephemeral=True)
         if any(p['user_id'] == interaction.user.id for p in session['jogadores']): return await interaction.response.send_message("Já está dentro!", ephemeral=True)
@@ -59,7 +90,6 @@ class Combat(commands.Cog):
         })
         await interaction.response.send_message(f"⚔️ **{interaction.user.display_name}** entrou! (HP: {hp_max})", ephemeral=False)
 
-    # --- MUDANÇA: INICIATIVA E TRAVA INICIAL ---
     @app_commands.command(name="combate_iniciar", description="Rola inciativa e começa")
     async def combate_iniciar(self, interaction: discord.Interaction):
         session = self.sessions.get(interaction.channel_id)
@@ -67,7 +97,7 @@ class Combat(commands.Cog):
         
         session['status'] = 'RODANDO'
         
-        # 1. Rola Iniciativa (Automático para agilizar, mas exibido no log)
+        # Rola Iniciativa
         ordem = []
         log_iniciativa = []
         
@@ -84,40 +114,32 @@ class Combat(commands.Cog):
         ordem.sort(key=lambda x: x['roll'], reverse=True)
         session['ordem'] = ordem
         
-        # Adiciona resultado ao log
         session['log'].append("--- 🎲 INICIATIVAS ---")
         session['log'].extend(log_iniciativa)
         
-        # 2. TRAVA O COMBATE PARA O MESTRE NARRAR O INÍCIO
+        # Trava inicial
         session['bloqueado'] = True 
         
         await interaction.response.send_message("🎲 Iniciativas definidas! O combate vai começar...", ephemeral=True)
         await self.atualizar_interface(interaction.channel)
 
-    # --- NOVO: FUNÇÃO DE DESTRAVAR ---
     async def destravar_turno(self, interaction, channel_id):
         session = self.sessions.get(channel_id)
         if not session: return
 
-        # Destrava
         session['bloqueado'] = False
-        
-        # Verifica de quem é a vez atual
         atual = session['ordem'][session['turno_index']]
         
-        # Se for a vez do Monstro, roda a IA imediatamente
         if atual['tipo'] == 'MONSTRO':
             await interaction.response.defer()
-            await interaction.message.delete() # Remove botão do mestre
-            await self.atualizar_interface(interaction.channel) # Mostra "Turno do Monstro"
+            await interaction.message.delete()
+            await self.atualizar_interface(interaction.channel)
             await self.turno_ia_monstro(interaction.channel)
         else:
-            # Se for Jogador, apenas atualiza a interface liberando os botões
             await interaction.response.defer()
             await interaction.message.delete()
             await self.atualizar_interface(interaction.channel)
 
-    # --- ATUALIZAÇÃO DA INTERFACE ---
     async def atualizar_interface(self, channel):
         session = self.sessions.get(channel.id)
         if not session: return
@@ -126,7 +148,6 @@ class Combat(commands.Cog):
         atual = session['ordem'][session['turno_index']]
         session['turno_monstro'] = (atual['tipo'] == 'MONSTRO')
 
-        # Descrição do Embed
         desc = f"**{monstro['nome']}**\n{gerar_barra(monstro['hp_atual'], monstro['hp_max'])} `{monstro['hp_atual']}/{monstro['hp_max']}`\n\n"
         for p in session['jogadores']:
             status = "💀 CAÍDO" if p['hp'] <= 0 else f"{p['hp']}/{p['hp_max']}"
@@ -137,19 +158,15 @@ class Combat(commands.Cog):
         embed = discord.Embed(title="⚔️ Campo de Batalha", description=desc, color=0x2b2d31)
         if monstro['img']: embed.set_thumbnail(url=monstro['img'])
 
-        # --- LÓGICA DA TRAVA ---
         if session['bloqueado']:
             embed.set_footer(text="⏸️ Cena Pausada - Aguardando Narração do Mestre")
-            embed.color = 0xFFD700 # Dourado para indicar espera
-            # Manda a View do Mestre
+            embed.color = 0xFFD700
             await channel.send(embed=embed, view=MestreView(self, channel.id))
             return
 
-        # Se não estiver bloqueado, segue fluxo normal
         if session['turno_monstro']:
             embed.set_footer(text=f"TURNO DO INIMIGO")
             await channel.send(embed=embed, view=CombateView(self, channel.id))
-            # Obs: A IA do monstro é chamada no 'destravar_turno' ou no final do turno do jogador
         else:
             skills_do_turno = []
             if atual['tipo'] == 'JOGADOR':
@@ -161,13 +178,11 @@ class Combat(commands.Cog):
             content = f"<@{atual['user_id']}>" if 'user_id' in atual else ""
             await channel.send(content=content, embed=embed, view=view)
 
-    # --- PROCESSAR AÇÃO ---
     async def processar_acao_jogador(self, interaction, channel_id, acao, detalhes_skill=None):
         session = self.sessions.get(channel_id)
         monstro = session['monstro']
         jogador = next(p for p in session['jogadores'] if p['user_id'] == interaction.user.id)
 
-        # (Cálculo de dano - Igual ao anterior)
         dano = 0
         narrativa = ""
         if acao == "Ataque Básico":
@@ -185,19 +200,36 @@ class Combat(commands.Cog):
         monstro['hp_atual'] -= dano
         session['log'].append(narrativa)
 
-        # Deleta msg antiga
         await interaction.response.defer()
         try: await interaction.message.delete()
         except: pass
 
+        # --- FIM DE COMBATE COM XP ---
         if monstro['hp_atual'] <= 0:
-            return await interaction.channel.send(f"🏆 **VITÓRIA!** O {monstro['nome']} foi derrotado!")
+            # XP Base = HP do Monstro * 1.5
+            xp_total = int(monstro['hp_max'] * 1.5)
+            if xp_total < 10: xp_total = 10
 
-        # --- AQUI ESTÁ O TRUQUE ---
-        # Avança o índice do turno, mas TRAVA o sistema
+            vivos = [p for p in session['jogadores'] if p['hp'] > 0]
+            
+            msg_vitoria = f"🏆 **VITÓRIA!** O {monstro['nome']} foi derrotado!"
+            
+            if vivos:
+                xp_individual = xp_total // len(vivos)
+                msg_vitoria += f"\n🌟 O grupo recebeu **{xp_total} XP** ({xp_individual} p/ cada)."
+                
+                # Distribui XP e salva no banco
+                for p in vivos:
+                    await aplicar_xp(self.bot.db, p['user_id'], xp_individual, interaction.channel)
+            else:
+                msg_vitoria += "\n💀 Mas todos morreram..."
+
+            await interaction.channel.send(msg_vitoria)
+            del self.sessions[channel_id]
+            return
+
         self.avancar_indice_turno(session)
-        session['bloqueado'] = True # <--- Trava para roleplay pós-ação
-        
+        session['bloqueado'] = True
         await self.atualizar_interface(interaction.channel)
 
     async def turno_ia_monstro(self, channel):
@@ -218,14 +250,11 @@ class Combat(commands.Cog):
         for p in session['ordem']:
             if p.get('user_id') == alvo['user_id']: p['hp'] = alvo['hp']
 
-        # Fim do turno do monstro: Avança índice e TRAVA
         self.avancar_indice_turno(session)
         session['bloqueado'] = True
-        
         await self.atualizar_interface(channel)
 
     def avancar_indice_turno(self, session):
-        # Apenas move o ponteiro para o próximo vivo
         start_index = session['turno_index']
         for _ in range(len(session['ordem'])):
             session['turno_index'] = (session['turno_index'] + 1) % len(session['ordem'])
@@ -233,7 +262,6 @@ class Combat(commands.Cog):
             
             if atual['tipo'] == 'MONSTRO': return
             
-            # Checa se jogador está vivo
             jogador_real = next((p for p in session['jogadores'] if p['user_id'] == atual['user_id']), None)
             if jogador_real and jogador_real['hp'] > 0: return
 

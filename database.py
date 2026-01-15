@@ -9,8 +9,7 @@ def init_db():
     with get_connection() as conn:
         cursor = conn.cursor()
 
-        # --- PERSONAGENS (ATUALIZADO) ---
-        # Adicionei colunas: hp_max, mp_max, ataque, defesa
+        # --- PERSONAGENS (ATUALIZADO COM XP) ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS personagens (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,6 +18,7 @@ def init_db():
                 raca TEXT,
                 classe TEXT,
                 nivel INTEGER DEFAULT 1,
+                xp_atual INTEGER DEFAULT 0,
                 historia TEXT,
                 imagem_url TEXT,
                 ouro INTEGER DEFAULT 0,
@@ -29,12 +29,13 @@ def init_db():
             )
         """)
         
-        # Tenta adicionar colunas caso a tabela já exista (Migração simples)
+        # Migração automática para tabelas existentes
         colunas_extras = [
             ("hp_max", "INTEGER DEFAULT 30"),
             ("mp_max", "INTEGER DEFAULT 10"),
             ("ataque", "INTEGER DEFAULT 2"),
-            ("defesa", "INTEGER DEFAULT 10")
+            ("defesa", "INTEGER DEFAULT 10"),
+            ("xp_atual", "INTEGER DEFAULT 0") # Coluna Nova
         ]
         for col, tipo in colunas_extras:
             try:
@@ -56,7 +57,7 @@ def init_db():
             )
         """)
         
-        # --- HABILIDADES (Unificado) ---
+        # --- HABILIDADES ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS habilidades_personagem (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,12 +81,7 @@ def init_db():
             )
         """)
 
-        # --- ÍNDICES ---
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_personagens_user_id ON personagens(user_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_inventario_user_id ON inventario(user_id)")
-        
         # --- ÍNDICES DE PERFORMANCE ---
-        # Adiciona índices para otimizar buscas frequentes por user_id e relacionamentos
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_personagens_user_id ON personagens(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_inventario_user_id ON inventario(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_habilidades_personagem_id ON habilidades_personagem(personagem_id)")

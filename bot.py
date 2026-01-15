@@ -33,26 +33,22 @@ class DandelionBot(commands.Bot):
     async def setup_hook(self):
         # Conexão persistente com banco de dados (Performance)
         self.db = await aiosqlite.connect(DB_NAME)
-        self.db = await aiosqlite.connect(DB_NAME)
         await self.db.execute("PRAGMA foreign_keys = ON")
 
         # Cogs carregadas diretamente (Classes importadas)
         await self.add_cog(Characters(self))
         await self.add_cog(Dice(self))
         await self.add_cog(Inventory(self))
-        #await self.add_cog(Skills(self))
+        await self.add_cog(Skills(self)) # Habilitado
 
-        # Cogs carregadas como extensões (Arquivos na pasta cogs)
-        await self.load_extension("cogs.ai_handler")
-        await self.load_extension("cogs.bestiary")
-        
-        # --- AQUI ESTAVA FALTANDO O COMBATE ---
-        try:
-            await self.load_extension("cogs.combat")
-            print("⚔️ Sistema de Combate carregado.")
-        except Exception as e:
-            print(f"❌ Erro ao carregar combate: {e}")
-        # --------------------------------------
+        # Carregamento seguro de extensões
+        extensoes = ["cogs.ai_handler", "cogs.bestiary", "cogs.combat"]
+        for ext in extensoes:
+            try:
+                await self.load_extension(ext)
+                print(f"✅ Extensão carregada: {ext}")
+            except Exception as e:
+                print(f"❌ Falha ao carregar {ext}: {e}")
 
         # Sincroniza os slash commands
         await self.tree.sync()
@@ -60,9 +56,8 @@ class DandelionBot(commands.Bot):
 
     async def close(self):
         if hasattr(self, 'db') and self.db:
-            if self.db:
-                await self.db.close()
-            await super().close()
+            await self.db.close()
+        await super().close()
 
 bot = DandelionBot()
 
@@ -84,10 +79,10 @@ async def on_app_command_error(interaction: discord.Interaction, error):
             ephemeral=True
         )
     else:
-        # Se for erro de comando não encontrado ou check failure, avisa
         print(f"Erro no comando: {error}")
 
 # ======================
 # INICIA O BOT
 # ======================
-bot.run(TOKEN)
+if __name__ == "__main__":
+    bot.run(TOKEN)

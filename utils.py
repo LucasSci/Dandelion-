@@ -30,3 +30,46 @@ def rolar_dados(formula: str):
     if bonus: detalhes += f" {'+' if sinal=='+' else '-'} {bonus}"
     
     return detalhes, total
+
+def calcular_xp_necessario(nivel_atual):
+    # Fórmula: Base 100 * (Nível ^ 2) * Constante de ajuste
+    # Exemplo simples estilo D&D:
+    tabela = {
+        1: 300, 2: 900, 3: 2700, 4: 6500, 5: 14000,
+        6: 23000, 7: 34000, 8: 48000, 9: 64000, 10: 85000
+    }
+    return tabela.get(nivel_atual, nivel_atual * 10000) # Fallback para níveis altos
+
+async def adicionar_xp(db, user_id, xp_ganho, channel):
+    async with db.execute("SELECT nivel, xp_atual, hp_max, ataque FROM personagens WHERE user_id = ?", (user_id,)) as cursor:
+        dados = await cursor.fetchone()
+    
+    if not dados: return
+    nivel, xp, hp, atk = dados
+    
+    novo_xp = xp + xp_ganho
+    xp_req = calcular_xp_necessario(nivel)
+    
+    msg = f"🌟 Ganhou **{xp_ganho} XP**!"
+    
+    # Check de Level Up
+    if novo_xp >= xp_req:
+        novo_nivel = nivel + 1
+        novo_xp = novo_xp - xp_req # O que sobra vai para o próximo (ou zera, depende do seu gosto)
+        
+        # Bônus de Atributos (Exemplo)
+        novo_hp = hp + 10
+        novo_atk = atk + 1
+        
+        await db.execute("""
+            UPDATE personagens 
+            SET nivel = ?, xp_atual = ?, hp_max = ?, ataque = ? 
+            WHERE user_id = ?
+        """, (novo_nivel, novo_xp, novo_hp, novo_atk, user_id))
+        
+        msg += f"\n🎉 **LEVEL UP!** Você alcançou o nível **{novo_nivel}**!\n(+10 HP, +1 ATK)"
+    else:
+        await db.execute("UPDATE personagens SET xp_atual = ? WHERE user_id = ?", (novo_xp, user_id))
+    
+    await db.commit()
+    await channel.send(msg)
