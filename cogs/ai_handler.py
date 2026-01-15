@@ -18,7 +18,13 @@ if not GEMINI_API_KEY:
 
 # Tenta criar o client apenas se a key existir
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-
+@app_commands.command(...)
+async def dandelion(self, interaction: discord.Interaction, solicitacao: str):
+    combat_cog = self.bot.get_cog("Combat")
+    contexto = combat_cog.obter_resumo_combate(interaction.channel_id) if combat_cog else ""
+    
+    prompt = f"{self.SYSTEM_PROMPT}\nContexto: {contexto}\nAção do Jogador: {solicitacao}"
+    
 def extract_json_safe(text):
     text = re.sub(r"```json\s*|\s*```", "", text, flags=re.IGNORECASE)
     match = re.search(r"(\{.*\})", text, re.DOTALL)
@@ -93,3 +99,4 @@ Responda SOMENTE neste JSON:
 
 async def setup(bot):
     await bot.add_cog(AIHandler(bot))
+

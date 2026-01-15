@@ -91,7 +91,12 @@ class Combat(commands.Cog):
         await interaction.response.send_message(f"⚔️ **{interaction.user.display_name}** entrou! (HP: {hp_max})", ephemeral=False)
 
     @app_commands.command(name="combate_iniciar", description="Rola inciativa e começa")
+
     async def combate_iniciar(self, interaction: discord.Interaction):
+        msg = await interaction.response.send_message("🎲 Iniciativas definidas!", ephemeral=True)
+        # Envie a mensagem inicial do painel e guarde o objeto message
+        painel_msg = await interaction.channel.send(embed=embed, view=view)
+        session['mensagem_id'] = painel_msg.id  # <--- Guarde isso
         session = self.sessions.get(interaction.channel_id)
         if not session or session['status'] != 'LOBBY': return
         
@@ -143,7 +148,7 @@ class Combat(commands.Cog):
     async def atualizar_interface(self, channel):
         session = self.sessions.get(channel.id)
         if not session: return
-
+        
         monstro = session['monstro']
         atual = session['ordem'][session['turno_index']]
         session['turno_monstro'] = (atual['tipo'] == 'MONSTRO')
@@ -177,6 +182,14 @@ class Combat(commands.Cog):
             view = CombateView(self, channel.id, habilidades_jogador=skills_do_turno)
             content = f"<@{atual['user_id']}>" if 'user_id' in atual else ""
             await channel.send(content=content, embed=embed, view=view)
+            try:
+                msg = await channel.fetch_message(session['mensagem_id'])
+                await msg.edit(embed=embed, view=view) # <--- EDITA em vez de enviar
+            except (discord.NotFound, KeyError):
+                # Se a mensagem foi deletada manualmente, envia uma nova e atualiza o ID
+                nova_msg = await channel.send(embed=embed, view=view)
+                session['mensagem_id'] = nova_msg.id
+        
 
     async def processar_acao_jogador(self, interaction, channel_id, acao, detalhes_skill=None):
         session = self.sessions.get(channel_id)
@@ -267,3 +280,16 @@ class Combat(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Combat(bot))
+
+def obter_resumo_combate(self, channel_id):
+    session = self.sessions.get(channel_id)
+    if not session: return "Nenhum combate ocorrendo."
+    
+    monstro = session['monstro']
+    jogadores_str = ", ".join([f"{p['nome']} (HP:{p['hp']})" for p in session['jogadores']])
+    
+    return f"""
+    CENÁRIO ATUAL:
+    Inimigo: {monstro['nome']} (HP: {monstro['hp_atual']}/{monstro['hp_max']}).
+    Heróis: {jogadores_str}.
+    """
