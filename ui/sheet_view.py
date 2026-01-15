@@ -6,10 +6,11 @@ from utils import rolar_dados
 
 # --- MODAL PARA CRIAR NOVA HABILIDADE ---
 class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
-    def __init__(self, personagem_id, view_pai):
+    def __init__(self, personagem_id, view_pai, message: discord.Message):
         super().__init__()
         self.personagem_id = personagem_id
         self.view_pai = view_pai
+        self.message = message
 
     nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
     # Mantido required=False pois o placeholder indica opcionalidade
@@ -32,6 +33,8 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
         await db.commit()
         
         await interaction.response.send_message(f"✅ Habilidade **{self.nome.value}** aprendida!", ephemeral=True)
+        # Atualiza a mensagem original da ficha
+        await self.view_pai.update_message(self.message)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
 # --- BOTÃO DE HABILIDADE (REALIZA A ROLAGEM) ---
@@ -87,7 +90,7 @@ class FichaView(ui.View):
 
     @ui.button(label="➕ Nova Skill", style=discord.ButtonStyle.gray, row=0)
     async def btn_add_skill(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self))
+        await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self, interaction.message))
 
     # --- MÉTODOS DE EXIBIÇÃO ---
     
@@ -113,6 +116,8 @@ class FichaView(ui.View):
         self.clear_dynamic_buttons()
         await interaction.response.edit_message(embed=embed, view=self)
 
+    async def _update_view_with_skills(self):
+        # 1. Limpa botões antigos de habilidade
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
         self.update_buttons_state("skills")
         self.clear_dynamic_buttons()
@@ -132,10 +137,20 @@ class FichaView(ui.View):
         for nome, dado, desc in skills[:20]:
             self.add_item(HabilidadeButton(nome, dado, desc))
 
+        return embed
+
+    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
+        embed = await self._update_view_with_skills()
+
+        # Se a interação já foi respondida (ex: vindo do Modal), usamos edit_original_response
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
         else:
             await interaction.response.edit_message(embed=embed, view=self)
+
+    async def update_message(self, message: discord.Message):
+        embed = await self._update_view_with_skills()
+        await message.edit(embed=embed, view=self)
 
     def clear_dynamic_buttons(self):
         items_to_keep = [item for item in self.children if getattr(item, 'row', 0) == 0]
