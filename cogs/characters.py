@@ -16,16 +16,19 @@ class Characters(commands.Cog):
 
     # --- AUTOCOMPLETES (Iguais) ---
     async def personagens_disponiveis_autocomplete(self, interaction: discord.Interaction, current: str):
+        # Optimized: Use shared connection
         async with self.bot.db.execute("SELECT nome FROM personagens WHERE user_id IS NULL AND nome LIKE ? LIMIT 25", (f'%{current}%',)) as cursor:
             rows = await cursor.fetchall()
             return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
 
     async def meus_personagens_autocomplete(self, interaction: discord.Interaction, current: str):
+        # Optimized: Use shared connection + Index
         async with self.bot.db.execute("SELECT nome FROM personagens WHERE user_id = ? AND nome LIKE ? LIMIT 25", (interaction.user.id, f'%{current}%')) as cursor:
             rows = await cursor.fetchall()
             return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
 
     async def todos_personagens_autocomplete(self, interaction: discord.Interaction, current: str):
+        # Optimized: Use shared connection
         async with self.bot.db.execute("SELECT nome FROM personagens WHERE nome LIKE ? LIMIT 25", (f'%{current}%',)) as cursor:
             rows = await cursor.fetchall()
             return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]

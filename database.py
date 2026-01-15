@@ -79,6 +79,10 @@ def init_db():
                 efeito TEXT
             )
         """)
+
+        # --- ÍNDICES ---
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_personagens_user_id ON personagens(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_inventario_user_id ON inventario(user_id)")
         
         # --- ÍNDICES DE PERFORMANCE ---
         # Adiciona índices para otimizar buscas frequentes por user_id e relacionamentos

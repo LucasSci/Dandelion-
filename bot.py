@@ -31,6 +31,8 @@ class DandelionBot(commands.Bot):
         self.db = None
 
     async def setup_hook(self):
+        # Conexão persistente com banco de dados (Performance)
+        self.db = await aiosqlite.connect(DB_NAME)
         self.db = await aiosqlite.connect(DB_NAME)
         await self.db.execute("PRAGMA foreign_keys = ON")
 
@@ -57,6 +59,7 @@ class DandelionBot(commands.Bot):
         print("✅ Bot pronto e comandos sincronizados.")
 
     async def close(self):
+        if hasattr(self, 'db') and self.db:
         if self.db:
             await self.db.close()
         await super().close()
