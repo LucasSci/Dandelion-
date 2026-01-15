@@ -1,3 +1,6 @@
+## 2024-05-22 - [Nav State Visuals]
+**Learning:** In Discord UI Views, disabling the button for the current "tab" or active view is a highly effective way to provide navigation state feedback. It visually grays out the button, preventing redundant clicks and clearly indicating "You are here".
+**Action:** Always implement a `_update_buttons(state)` helper in Views with multi-tab navigation to toggle `disabled` states on navigation buttons.
 ## 2026-01-14 - Active State & Optional Inputs
 **Learning:** Users in Discord interactions rely on the "Disabled" button state to understand which tab/view is currently active. Additionally, Discord TextInputs default to `required=True`, which causes friction when placeholder text instructs users they can leave fields empty.
 **Action:** Implement "Active Tab" logic by disabling the button for the current view. Verify `required=False` is set for any optional form fields.

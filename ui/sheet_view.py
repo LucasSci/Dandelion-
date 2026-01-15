@@ -63,6 +63,7 @@ class FichaView(ui.View):
         super().__init__(timeout=None)
         self.personagem_id = personagem_id
         self.dono_id = user_id_dono
+        self._update_buttons('info')
         # Inicia com "Info/Lore" ativo (botão desativado)
         self.btn_info.disabled = True
         self.update_buttons_state("info")
@@ -81,6 +82,15 @@ class FichaView(ui.View):
             return False
         return True
 
+    def _update_buttons(self, active_mode):
+        # active_mode: 'info' or 'skills'
+        for child in self.children:
+            if isinstance(child, ui.Button):
+                if child.label == "📜 Info/Lore":
+                    child.disabled = (active_mode == 'info')
+                elif child.label == "⚔️ Habilidades":
+                    child.disabled = (active_mode == 'skills')
+
     # --- NAVEGAÇÃO ---
     @ui.button(label="📜 Info/Lore", style=discord.ButtonStyle.primary, row=0)
     async def btn_info(self, interaction: discord.Interaction, button: ui.Button):
@@ -97,6 +107,7 @@ class FichaView(ui.View):
     # --- MÉTODOS DE EXIBIÇÃO ---
     
     async def mostrar_info_geral(self, interaction: discord.Interaction):
+        self._update_buttons('info')
         # Atualiza estado dos botões
         self.btn_info.disabled = True
         self.btn_skills.disabled = False
@@ -127,6 +138,7 @@ class FichaView(ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
+        self._update_buttons('skills')
         # Atualiza estado dos botões
         self.btn_skills.disabled = True
         self.btn_info.disabled = False
