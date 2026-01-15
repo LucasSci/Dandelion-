@@ -12,6 +12,7 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
         self.view_pai = view_pai
         self.message = message
 
+    nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo", max_length=50)
     nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
     # Mantido required=False pois o placeholder indica opcionalidade
     dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)", required=False)
