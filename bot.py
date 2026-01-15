@@ -1,10 +1,11 @@
 import os
 import discord
+import aiosqlite
 from discord.ext import commands
 from dotenv import load_dotenv
 from discord import app_commands
 
-from database import init_db
+from database import init_db, DB_NAME
 from cogs.characters import Characters
 from cogs.dice import Dice
 from cogs.inventory import Inventory
@@ -27,8 +28,12 @@ class DandelionBot(commands.Bot):
             command_prefix="!",
             intents=discord.Intents.all()
         )
+        self.db = None
 
     async def setup_hook(self):
+        self.db = await aiosqlite.connect(DB_NAME)
+        await self.db.execute("PRAGMA foreign_keys = ON")
+
         # Cogs carregadas diretamente (Classes importadas)
         await self.add_cog(Characters(self))
         await self.add_cog(Dice(self))
@@ -50,6 +55,11 @@ class DandelionBot(commands.Bot):
         # Sincroniza os slash commands
         await self.tree.sync()
         print("✅ Bot pronto e comandos sincronizados.")
+
+    async def close(self):
+        if self.db:
+            await self.db.close()
+        await super().close()
 
 bot = DandelionBot()
 

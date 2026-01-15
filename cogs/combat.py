@@ -20,9 +20,8 @@ class Combat(commands.Cog):
     @app_commands.command(name="combate_criar", description="Cria uma sala de batalha")
     async def combate_criar(self, interaction: discord.Interaction, monstro_nome: str):
         # (Código igual ao anterior para buscar monstro)
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute("SELECT nome, hp_max, imagem_url, iniciativa, dano_base FROM criaturas WHERE nome LIKE ?", (f'%{monstro_nome}%',)) as cursor:
-                monster_data = await cursor.fetchone()
+        async with self.bot.db.execute("SELECT nome, hp_max, imagem_url, iniciativa, dano_base FROM criaturas WHERE nome LIKE ?", (f'%{monstro_nome}%',)) as cursor:
+            monster_data = await cursor.fetchone()
         
         if not monster_data: return await interaction.response.send_message("❌ Monstro não encontrado.", ephemeral=True)
         nome, hp, img, ini, dano_base = monster_data
@@ -48,9 +47,8 @@ class Combat(commands.Cog):
         if not session or session['status'] != 'LOBBY': return await interaction.response.send_message("❌ Erro.", ephemeral=True)
         if any(p['user_id'] == interaction.user.id for p in session['jogadores']): return await interaction.response.send_message("Já está dentro!", ephemeral=True)
 
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute("SELECT id, hp_max, ataque FROM personagens WHERE user_id = ?", (interaction.user.id,)) as cursor:
-                dados = await cursor.fetchone()
+        async with self.bot.db.execute("SELECT id, hp_max, ataque FROM personagens WHERE user_id = ?", (interaction.user.id,)) as cursor:
+            dados = await cursor.fetchone()
         
         if not dados: return await interaction.response.send_message("❌ Sem ficha!", ephemeral=True)
         char_id, hp_max, atk = dados
@@ -155,9 +153,8 @@ class Combat(commands.Cog):
         else:
             skills_do_turno = []
             if atual['tipo'] == 'JOGADOR':
-                 async with aiosqlite.connect(DB_NAME) as db:
-                    async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (atual['personagem_id'],)) as cursor:
-                        skills_do_turno = await cursor.fetchall()
+                 async with self.bot.db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (atual['personagem_id'],)) as cursor:
+                    skills_do_turno = await cursor.fetchall()
 
             embed.set_footer(text=f"VEZ DE: {atual.get('nome', 'Alguém')}")
             view = CombateView(self, channel.id, habilidades_jogador=skills_do_turno)
