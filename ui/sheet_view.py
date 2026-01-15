@@ -63,6 +63,8 @@ class FichaView(ui.View):
         super().__init__(timeout=None)
         self.personagem_id = personagem_id
         self.dono_id = user_id_dono
+        # Inicia com "Info/Lore" ativo (botão desativado)
+        self.btn_info.disabled = True
         self.update_buttons_state("info")
 
     def update_buttons_state(self, mode: str):
@@ -95,6 +97,14 @@ class FichaView(ui.View):
     # --- MÉTODOS DE EXIBIÇÃO ---
     
     async def mostrar_info_geral(self, interaction: discord.Interaction):
+        # Atualiza estado dos botões
+        self.btn_info.disabled = True
+        self.btn_skills.disabled = False
+
+        # Busca dados atualizados do banco
+        async with aiosqlite.connect(DB_NAME) as db:
+            async with db.execute("SELECT nome, raca, classe, nivel, historia, imagem_url, ouro FROM personagens WHERE id = ?", (self.personagem_id,)) as cursor:
+                dados = await cursor.fetchone()
         self.update_buttons_state("info")
         
         # FIX: Usando connection pool compartilhado
@@ -115,6 +125,11 @@ class FichaView(ui.View):
         
         self.clear_dynamic_buttons()
         await interaction.response.edit_message(embed=embed, view=self)
+
+    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
+        # Atualiza estado dos botões
+        self.btn_skills.disabled = True
+        self.btn_info.disabled = False
 
     async def _update_view_with_skills(self):
         # 1. Limpa botões antigos de habilidade
