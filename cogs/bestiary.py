@@ -77,17 +77,15 @@ class Bestiary(commands.Cog):
     # --- COMANDOS ---
 
     async def criatura_autocomplete(self, interaction: discord.Interaction, current: str):
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute('SELECT nome FROM criaturas WHERE nome LIKE ? LIMIT 10', (f'%{current}%',)) as cursor:
-                rows = await cursor.fetchall()
-                return [app_commands.Choice(name=n[0], value=n[0]) for n in rows]
+        async with self.bot.db.execute('SELECT nome FROM criaturas WHERE nome LIKE ? LIMIT 10', (f'%{current}%',)) as cursor:
+            rows = await cursor.fetchall()
+            return [app_commands.Choice(name=n[0], value=n[0]) for n in rows]
 
     @app_commands.command(name="ver", description="Consulta rápida de uma criatura")
     @app_commands.autocomplete(nome=criatura_autocomplete)
     async def ver(self, interaction: discord.Interaction, nome: str):
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute('SELECT nome, descricao, fraquezas, imagem_url FROM criaturas WHERE nome = ?', (nome,)) as cursor:
-                res = await cursor.fetchone()
+        async with self.bot.db.execute('SELECT nome, descricao, fraquezas, imagem_url FROM criaturas WHERE nome = ?', (nome,)) as cursor:
+            res = await cursor.fetchone()
         
         if res:
             await interaction.response.send_message(embed=self._gerar_embed_grimorio(*res))
@@ -120,17 +118,16 @@ class Bestiary(commands.Cog):
 
     @app_commands.command(name="monstro_editar", description="Define atributos de combate de uma criatura")
     async def monstro_editar(self, interaction: discord.Interaction, nome: str, hp: int, iniciativa: int):
-        async with aiosqlite.connect(DB_NAME) as db:
-            cursor = await db.execute("""
-                UPDATE criaturas SET hp_max = ?, iniciativa = ?
-                WHERE nome = ?
-            """, (hp, iniciativa, nome))
-            await db.commit()
-            
-            if cursor.rowcount > 0:
-                await interaction.response.send_message(f"✅ **{nome}** atualizado: HP Máximo {hp} | Iniciativa {iniciativa}")
-            else:
-                await interaction.response.send_message(f"❌ O monstro **{nome}** não existe no bestiário! Use `/alimentar_bestiario` primeiro.", ephemeral=True)
+        cursor = await self.bot.db.execute("""
+            UPDATE criaturas SET hp_max = ?, iniciativa = ?
+            WHERE nome = ?
+        """, (hp, iniciativa, nome))
+        await self.bot.db.commit()
+
+        if cursor.rowcount > 0:
+            await interaction.response.send_message(f"✅ **{nome}** atualizado: HP Máximo {hp} | Iniciativa {iniciativa}")
+        else:
+            await interaction.response.send_message(f"❌ O monstro **{nome}** não existe no bestiário! Use `/alimentar_bestiario` primeiro.", ephemeral=True)
 
     # --- LÓGICA INTERNA DE EXTRAÇÃO ---
     async def _extrair_e_salvar(self, session, nome, url):
@@ -170,12 +167,11 @@ class Bestiary(commands.Cog):
             lore_pt = self._sanitizar_texto(lore_pt)
             detalhes_pt = self._sanitizar_texto(detalhes_pt)
 
-            async with aiosqlite.connect(DB_NAME) as db:
-                await db.execute('''
-                    INSERT OR REPLACE INTO criaturas (nome, descricao, fraquezas, imagem_url) 
-                    VALUES (?, ?, ?, ?)
-                ''', (nome, lore_pt, detalhes_pt, img_url))
-                await db.commit()
+            await self.bot.db.execute('''
+                INSERT OR REPLACE INTO criaturas (nome, descricao, fraquezas, imagem_url)
+                VALUES (?, ?, ?, ?)
+            ''', (nome, lore_pt, detalhes_pt, img_url))
+            await self.bot.db.commit()
             return True
 
 async def setup(bot):

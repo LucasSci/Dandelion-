@@ -1,19 +1,18 @@
-import aiosqlite
 import discord
 from discord import ui
 
-DB_NAME = "bestiario.db"
+# DB_NAME não é mais necessário aqui
 
 class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
     def __init__(self, target_user_id=None):
         super().__init__()
-        # Se target_user_id for None, a ficha é criada "sem dono" (Pool do Mestre)
-        # Se for preenchido com ID, já nasce vinculada
         self.target_user_id = target_user_id
 
     nome = ui.TextInput(label="Nome do Personagem", placeholder="Ex: Geralt de Rívia")
     raca = ui.TextInput(label="Raça", placeholder="Ex: Bruxo, Humano, Elfo")
     classe = ui.TextInput(label="Classe", placeholder="Ex: Guerreiro, Mago")
+    
+    # Conformidade verificada: required=False em campos opcionais
     historia = ui.TextInput(
         label="Breve História",
         style=discord.TextStyle.paragraph,
@@ -23,30 +22,31 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
     imagem = ui.TextInput(label="URL da Imagem (Avatar)", required=False)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Define quem será o dono inicial
         final_user_id = self.target_user_id
 
-        # Se self.target_user_id for 'proprio' (definido no comando), usa o ID de quem digitou
         if final_user_id == 'proprio':
             final_user_id = interaction.user.id
         
-        try:
-            async with aiosqlite.connect(DB_NAME) as conn:
-                await conn.execute("""
-                    INSERT INTO personagens
-                    (user_id, nome, raca, classe, historia, imagem_url, ouro)
-                    VALUES (?, ?, ?, ?, ?, ?, 0)
-                """, (
-                    final_user_id,
-                    self.nome.value.strip(),
-                    self.raca.value,
-                    self.classe.value,
-                    self.historia.value,
-                    self.imagem.value
-                ))
-                await conn.commit()
+        # FIX: Acessando DB via client, evitando abrir nova conexão (bolt.md)
+        db = interaction.client.db
 
-            # Feedback personalizado
+        try:
+            # Não usamos 'async with db' aqui, pois a conexão é persistente. 
+            # Usamos apenas o execute.
+            await db.execute("""
+                INSERT INTO personagens
+                (user_id, nome, raca, classe, historia, imagem_url, ouro)
+                VALUES (?, ?, ?, ?, ?, ?, 0)
+            """, (
+                final_user_id,
+                self.nome.value.strip(),
+                self.raca.value,
+                self.classe.value,
+                self.historia.value,
+                self.imagem.value
+            ))
+            await db.commit()
+
             if final_user_id:
                 msg = f"✅ **{self.nome.value}** nasceu! Use `/ficha` para ver."
             else:
@@ -54,8 +54,12 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
             
             await interaction.response.send_message(msg, ephemeral=True)
 
-        except aiosqlite.IntegrityError:
-            await interaction.response.send_message(
-                f"❌ O nome **{self.nome.value}** já existe! Por favor, escolha outro.",
-                ephemeral=True
-            )
+        except Exception as e:
+            # Capturando IntegrityError genericamente ou checando o tipo de erro específico do aiosqlite/sqlite3
+            if "UNIQUE constraint failed" in str(e) or "IntegrityError" in str(type(e)):
+                 await interaction.response.send_message(
+                    f"❌ O nome **{self.nome.value}** já existe! Por favor, escolha outro.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
