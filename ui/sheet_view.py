@@ -36,7 +36,16 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
 class HabilidadeButton(ui.Button):
     def __init__(self, nome, dado, descricao):
         label_btn = f"{nome} ({dado})" if dado else nome
-        super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, row=1)
+
+        # UX Improvement: Visual distinction for skill types
+        if dado:
+            style = discord.ButtonStyle.primary
+            emoji = "🎲"
+        else:
+            style = discord.ButtonStyle.secondary
+            emoji = "✨"
+
+        super().__init__(style=style, label=label_btn, emoji=emoji, row=1)
         self.nome_habilidade = nome
         self.dado_habilidade = dado
         self.desc_habilidade = descricao
