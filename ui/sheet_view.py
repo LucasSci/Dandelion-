@@ -44,6 +44,8 @@ class HabilidadeButton(ui.Button):
         emoji = "🎲" if dado else "✨"
         style = discord.ButtonStyle.primary if dado else discord.ButtonStyle.secondary
         label_btn = f"{nome} ({dado})" if dado else nome
+        # Fixed: Removed fixed row=1 to allow automatic layout
+        super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, row=None)
 
         if dado:
             emoji = "🎲"
@@ -151,7 +153,8 @@ class FichaView(ui.View):
         # FIX: Usando connection pool compartilhado
         db = interaction.client.db
 
-        async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (self.personagem_id,)) as cursor:
+        # Optimized: Added LIMIT 20 to reduce fetch size, matching the display limit
+        async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ? LIMIT 20", (self.personagem_id,)) as cursor:
             skills = await cursor.fetchall()
 
         embed = discord.Embed(title="⚔️ Grimório de Habilidades", color=0x992d22)
