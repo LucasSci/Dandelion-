@@ -17,9 +17,11 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
         label="Breve História",
         style=discord.TextStyle.paragraph,
         required=False,
-        max_length=500
+        max_length=500,
+        placeholder="Ex: Um caçador de monstros em busca..."
     )
-    imagem = ui.TextInput(label="URL da Imagem (Avatar)", required=False)
+    # Added placeholder for better UX
+    imagem = ui.TextInput(label="URL da Imagem (Avatar)", required=False, placeholder="Ex: https://imgur.com/avatar.png")
 
     async def on_submit(self, interaction: discord.Interaction):
         final_user_id = self.target_user_id
