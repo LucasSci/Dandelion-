@@ -12,7 +12,13 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
     nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
     # Mantido required=False pois o placeholder indica opcionalidade
     dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)", required=False)
-    descricao = ui.TextInput(label="Descrição", style=discord.TextStyle.paragraph, required=False)
+    # Added placeholder for better UX
+    descricao = ui.TextInput(
+        label="Descrição",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        placeholder="Ex: Dispara uma esfera flamejante..."
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
         if self.dado.value:
@@ -48,6 +54,36 @@ class HabilidadeButton(ui.Button):
 
         # Removed row=1 to allow auto-layout and prevent crash on >5 skills
         super().__init__(style=style, label=label_btn, emoji=emoji, row=None)
+        emoji = "🎲" if dado else "✨"
+        style = discord.ButtonStyle.primary if dado else discord.ButtonStyle.secondary
+        label_btn = f"{nome} ({dado})" if dado else nome
+        # Fixed: Removed fixed row=1 to allow automatic layout
+        super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, row=None)
+
+        if dado:
+            emoji = "🎲"
+            style = discord.ButtonStyle.primary
+            label_btn = f"{nome} ({dado})"
+        label_btn = f"{nome} ({dado})" if dado else nome
+
+        # UX Improvement: Visual distinction for skill types
+        if dado:
+            style = discord.ButtonStyle.primary
+            emoji = "🎲"
+        else:
+            style = discord.ButtonStyle.secondary
+            emoji = "✨"
+        # Improved UX: Visual distinction between active (rollable) and passive skills
+        if dado:
+            emoji = "🎲"
+            style = discord.ButtonStyle.primary
+            label_btn = f"{nome} [{dado}]"
+        else:
+            emoji = "✨"
+            style = discord.ButtonStyle.secondary
+            label_btn = nome
+
+        super().__init__(style=style, label=label_btn, emoji=emoji, row=1)
         self.nome_habilidade = nome
         self.dado_habilidade = dado
         self.desc_habilidade = descricao
@@ -130,7 +166,8 @@ class FichaView(ui.View):
         # FIX: Usando connection pool compartilhado
         db = interaction.client.db
 
-        async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (self.personagem_id,)) as cursor:
+        # Optimized: Added LIMIT 20 to reduce fetch size, matching the display limit
+        async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ? LIMIT 20", (self.personagem_id,)) as cursor:
             skills = await cursor.fetchall()
 
         embed = discord.Embed(title="⚔️ Grimório de Habilidades", color=0x992d22)

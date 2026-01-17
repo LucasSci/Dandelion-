@@ -1,178 +1,198 @@
 import asyncio
 import discord
-import re
-import aiosqlite
 import aiohttp
+import os
+import base64
 from discord import app_commands
 from discord.ext import commands
-from bs4 import BeautifulSoup
-from deep_translator import GoogleTranslator
+from dotenv import load_dotenv
+from openai import OpenAI
 
 # --- CONFIGURAÇÕES ---
 DB_NAME = 'bestiario.db'
-WITCHER_WIKI_URL = "https://witcher.fandom.com"
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/110.0.0.0'}
+WITCHER_API_URL = "https://witcher.fandom.com/api.php"
+WITCHER_THEME_COLOR = 0xC0A080 
+
+# Modelos
+OPENAI_TEXT_MODEL = "gpt-4o" 
+OPENAI_IMAGE_MODEL = "dall-e-3"
+
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 class Bestiary(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.translator = GoogleTranslator(source='en', target='pt')
 
-    # --- UTILITÁRIOS ---
-    def _sanitizar_texto(self, texto):
-        if not texto: return ""
-        texto = re.sub(r'\[\d+\]', '', texto)
-        texto = re.sub(r'\n\s*\n', '\n', texto)
-        texto = texto.replace('Editar', '').replace('\u200b', '')
-        return texto.strip()
+    # --- TRADUTOR INTELIGENTE ---
+    async def traduzir_nome(self, nome_usuario):
+        try:
+            response = await asyncio.to_thread(
+                client.chat.completions.create,
+                model=OPENAI_TEXT_MODEL,
+                messages=[{
+                    "role": "system", 
+                    "content": "You are a translator. Translate the user input to the OFFICIAL ENGLISH NAME of the monster in The Witcher 3. Return ONLY the name."
+                }, {
+                    "role": "user", "content": nome_usuario
+                }]
+            )
+            return response.choices[0].message.content.strip()
+        except:
+            return nome_usuario
 
-    def _processar_dados_tecnicos(self, texto_bruto):
-        curtos, longos = [], {}
-        chave_atual = None
-        listas_detectadas = ["Saque", "Loot", "Suscetibilidade", "Susceptibility", "Variações"]
+    # --- BUSCA NA WIKI ---
+    async def buscar_imagem_api(self, termo_busca):
+        async with aiohttp.ClientSession() as session:
+            try:
+                params_busca = {"action": "opensearch", "search": termo_busca, "limit": "1", "format": "json"}
+                async with session.get(WITCHER_API_URL, params=params_busca) as resp:
+                    if resp.status != 200: return None, None
+                    data = await resp.json()
+                    if not data[1]: return None, None
+                    titulo_oficial = data[1][0]
 
-        if not texto_bruto: return curtos, longos
+                params_img = {"action": "query", "titles": titulo_oficial, "prop": "pageimages", "pithumbsize": "1024", "format": "json"}
+                async with session.get(WITCHER_API_URL, params=params_img) as resp:
+                    if resp.status != 200: return None, None
+                    data = await resp.json()
+                    pages = data.get("query", {}).get("pages", {})
+                    for page_id in pages:
+                        if "thumbnail" in pages[page_id]:
+                            return pages[page_id]["thumbnail"]["source"], titulo_oficial
+                return None, titulo_oficial
+            except Exception as e:
+                print(f"Erro Wiki: {e}")
+                return None, None
 
-        for linha in texto_bruto.split('\n'):
-            linha = self._sanitizar_texto(linha)
-            if not linha: continue
+    # --- COMANDO PRINCIPAL ---
+    @app_commands.command(name="gerar_imagem", description="🎨 Cria arte estilo Witcher 3 Journal")
+    @app_commands.describe(nome_monstro="Nome da criatura (Português ou Inglês)")
+    async def gerar_imagem(self, interaction: discord.Interaction, nome_monstro: str):
+        await interaction.response.defer()
 
-            if ":" in linha:
-                label, valor = linha.split(":", 1)
-                label, valor = label.strip(), valor.strip()
-                if any(c in label for c in listas_detectadas):
-                    chave_atual = label
-                    longos[chave_atual] = [valor] if valor else []
-                else:
-                    chave_atual = None
-                    if valor and "Desconhecido" not in valor:
-                        curtos.append((label, valor))
-            elif chave_atual:
-                longos[chave_atual].append(linha)
-        return curtos, longos
+        if not client:
+            return await interaction.followup.send("❌ OpenAI API Key não configurada.")
 
-    def _gerar_embed_grimorio(self, nome, desc, fraquezas, img_url):
-        embed = discord.Embed(title=f"› {nome.upper()} ‹", color=0x1a1a1a)
-        if img_url: 
-            embed.set_thumbnail(url=img_url)
-
-        lore = self._sanitizar_texto(desc)
-        embed.add_field(name="📘 Entrada do Bestiário", value=f"{lore[:1200]}", inline=False)
-
-        curtos, longos = self._processar_dados_tecnicos(fraquezas)
+        # 1. TRADUÇÃO
+        nome_ingles = await self.traduzir_nome(nome_monstro)
         
-        if curtos:
-            embed.add_field(name="⠀", value="**▬▬ ɪɴғᴏʀᴍᴀçõᴇs ▬▬**", inline=False)
-            for l, v in curtos[:6]:
-                embed.add_field(name=f"◈ {l}", value=f"`{v}`", inline=True)
-
-        for l, itens in longos.items():
-            lista = "\n".join([f"• {i}" for i in itens if i])
-            if lista:
-                embed.add_field(name=f"🔸 {l}", value=f"```Is\n{lista[:500]}```", inline=False)
-
-        embed.set_footer(text="Registro Oficial • Zerrikania RPG")
-        return embed
-
-    # --- COMANDOS ---
-
-    async def criatura_autocomplete(self, interaction: discord.Interaction, current: str):
-        async with self.bot.db.execute('SELECT nome FROM criaturas WHERE nome LIKE ? LIMIT 10', (f'%{current}%',)) as cursor:
-            rows = await cursor.fetchall()
-            return [app_commands.Choice(name=n[0], value=n[0]) for n in rows]
-
-    @app_commands.command(name="ver", description="Consulta rápida de uma criatura")
-    @app_commands.autocomplete(nome=criatura_autocomplete)
-    async def ver(self, interaction: discord.Interaction, nome: str):
-        async with self.bot.db.execute('SELECT nome, descricao, fraquezas, imagem_url FROM criaturas WHERE nome = ?', (nome,)) as cursor:
-            res = await cursor.fetchone()
+        url_referencia = None
+        nome_oficial = nome_ingles
         
-        if res:
-            await interaction.response.send_message(embed=self._gerar_embed_grimorio(*res))
-        else:
-            await interaction.response.send_message("🔍 Criatura não encontrada.", ephemeral=True)
+        # 2. Busca Referência
+        async with self.bot.db.execute("SELECT imagem_url, nome FROM criaturas WHERE nome LIKE ?", (f'%{nome_ingles}%',)) as cursor:
+            row = await cursor.fetchone()
+            if row and row[0]:
+                url_referencia = row[0]
+                nome_oficial = row[1]
 
-    @app_commands.command(name="alimentar_bestiario", description="⚙️ Importação em massa da Wiki")
-    async def alimentar_bestiario(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🔍 Iniciando rastreamento...")
-        cat_url = f"{WITCHER_WIKI_URL}/wiki/Category:The_Witcher_3_bestiary"
-
-        async with aiohttp.ClientSession(headers=HEADERS) as session:
-            async with session.get(cat_url) as resp:
-                if resp.status != 200: 
-                    return await interaction.edit_original_response(content="❌ Falha na Wiki.")
-                
-                html = await resp.text()
-                # Processa HTML em thread separada
-                soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
-                links = [(a.text.strip(), WITCHER_WIKI_URL + a.get('href')) 
-                         for a in soup.select('.category-page__member-link')]
-
-                for i, (nome, url) in enumerate(links, 1):
-                    await self._extrair_e_salvar(session, nome, url)
-                    if i % 5 == 0: # Atualiza a cada 5 para não floodar
-                        await interaction.edit_original_response(content=f"🔄 Progresso: {i}/{len(links)} (Último: {nome})")
-                    await asyncio.sleep(1)
-
-        await interaction.edit_original_response(content="✅ Bestiário alimentado e traduzido!")
-
-    @app_commands.command(name="monstro_editar", description="Define atributos de combate de uma criatura")
-    async def monstro_editar(self, interaction: discord.Interaction, nome: str, hp: int, iniciativa: int):
-        cursor = await self.bot.db.execute("""
-            UPDATE criaturas SET hp_max = ?, iniciativa = ?
-            WHERE nome = ?
-        """, (hp, iniciativa, nome))
-        await self.bot.db.commit()
-
-        if cursor.rowcount > 0:
-            await interaction.response.send_message(f"✅ **{nome}** atualizado: HP Máximo {hp} | Iniciativa {iniciativa}")
-        else:
-            await interaction.response.send_message(f"❌ O monstro **{nome}** não existe no bestiário! Use `/alimentar_bestiario` primeiro.", ephemeral=True)
-
-    # --- LÓGICA INTERNA DE EXTRAÇÃO ---
-    async def _extrair_e_salvar(self, session, nome, url):
-        async with session.get(url) as resp:
-            if resp.status != 200: return False
-            
-            html = await resp.text()
-            soup = await asyncio.to_thread(BeautifulSoup, html, 'html.parser')
-            
-            content = soup.find('div', {'class': 'mw-parser-output'})
-            if not content: return False
-
-            lore_raw = ""
-            for el in content.find_all(['h2', 'p'], recursive=False)[:8]:
-                if len(el.text.strip()) > 30: lore_raw += el.text.strip() + "\n\n"
-
-            detalhes_raw = []
-            img_url = None
-            infobox = soup.find('aside', {'class': 'portable-infobox'})
-            if infobox:
-                img_tag = infobox.find('img', {'class': 'pi-image-thumbnail'})
-                if img_tag: img_url = img_tag.get('src')
-                for item in infobox.find_all('div', {'class': 'pi-item pi-data'}):
-                    h3 = item.find('h3')
-                    val = item.find('div', {'class': 'pi-data-value'})
-                    if h3 and val:
-                        detalhes_raw.append(f"{h3.text.strip()}: {val.text.strip()}")
-
-            # Tradução (Executa em thread para não bloquear)
-            lore_pt = await asyncio.to_thread(self.translator.translate, lore_raw[:1200])
-            detalhes_texto = "\n".join(detalhes_raw)
-            if detalhes_texto:
-                detalhes_pt = await asyncio.to_thread(self.translator.translate, detalhes_texto)
+        if not url_referencia:
+            url_api, titulo_api = await self.buscar_imagem_api(nome_ingles)
+            if url_api:
+                url_referencia = url_api
+                nome_oficial = titulo_api
             else:
-                detalhes_pt = ""
+                return await interaction.followup.send(f"❌ Não encontrei referência visual para **{nome_ingles}**.")
 
-            lore_pt = self._sanitizar_texto(lore_pt)
-            detalhes_pt = self._sanitizar_texto(detalhes_pt)
+        # 3. GPT-4o: CRIAÇÃO DO PROMPT "ESTILO WITCHER"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url_referencia) as resp:
+                    image_data = await resp.read()
+                    base64_image = base64.b64encode(image_data).decode('utf-8')
 
-            await self.bot.db.execute('''
-                INSERT OR REPLACE INTO criaturas (nome, descricao, fraquezas, imagem_url)
-                VALUES (?, ?, ?, ?)
-            ''', (nome, lore_pt, detalhes_pt, img_url))
-            await self.bot.db.commit()
-            return True
+            # --- AQUI ESTÁ A MÁGICA DO ESTILO ---
+            prompt_instruction = f"""
+            You are the artist illustrating Dandelion's Bestiary Journal in The Witcher 3.
+            Analyze this creature ('{nome_oficial}') and write a prompt for DALL-E 3.
+            
+            ART STYLE REQUIREMENTS (Strictly follow this):
+            1. MEDIUM: Rough ink sketch with watercolor wash.
+            2. TEXTURE: Dirty, aged parchment paper background (sepia tones).
+            3. LINEWORK: Expressive, messy, thick ink contours, heavy cross-hatching shadows.
+            4. VIBE: Grimdark fantasy, eerie, sketchy, not clean. Looks like a field journal drawing.
+            5. COLOR: Mostly monochromatic sepia/black with muted, desaturated colors.
+            
+            SAFETY:
+            - Keep the monster scary but avoid excessive gore to pass safety filters.
+            - Pose should be dynamic or menacing.
+            
+            Output ONLY the visual description prompt.
+            """
+            
+            response_gpt = await asyncio.to_thread(
+                client.chat.completions.create,
+                model=OPENAI_TEXT_MODEL,
+                messages=[
+                    {
+                        "role": "user", 
+                        "content": [
+                            {"type": "text", "text": prompt_instruction},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                        ]
+                    }
+                ],
+                max_tokens=250
+            )
+            final_prompt = response_gpt.choices[0].message.content
+            
+            # 4. DALL-E 3: GERAÇÃO
+            await interaction.followup.send(f"🎨 Desenhando **{nome_oficial}** no estilo do jogo... (Aguarde)")
+            
+            # Reforço de estilo hardcode no prompt final
+            dalle_prompt_final = f"Artstyle of The Witcher 3 Bestiary Journal UI. Rough ink sketch on dirty old parchment paper. Heavy cross-hatching shading. Sepia tones. Grimdark fantasy concept art. {final_prompt}"
+            
+            response_dalle = await asyncio.to_thread(
+                client.images.generate,
+                model=OPENAI_IMAGE_MODEL,
+                prompt=dalle_prompt_final,
+                size="1024x1024",
+                quality="standard",
+                n=1
+            )
+
+            image_url = response_dalle.data[0].url
+            
+            embed = discord.Embed(
+                title=f"📜 Bestiário: {nome_oficial}", 
+                description=f"*Ilustração encontrada nas anotações de Dandelion.*",
+                color=WITCHER_THEME_COLOR
+            )
+            embed.set_image(url=image_url)
+            embed.set_thumbnail(url=url_referencia) # Mostra a original pequena para comparar
+            embed.set_footer(text="Geração DALL-E 3 - Estilo Witcher Journal")
+
+            await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            error_msg = str(e)
+            if "content_policy" in error_msg:
+                await interaction.followup.send("⚠️ **Censura:** O DALL-E achou o monstro violento demais. Tente de novo, às vezes é aleatório.")
+            else:
+                await interaction.followup.send(f"❌ Erro: {error_msg}")
+
+    # --- COMANDO VER ---
+    @app_commands.command(name="ver", description="Consulta ficha do monstro")
+    async def ver(self, interaction: discord.Interaction, nome: str):
+        # Lógica de consulta ao banco (mantida igual)
+        async with self.bot.db.execute("SELECT * FROM criaturas WHERE nome LIKE ?", (f'%{nome}%',)) as cursor:
+            data = await cursor.fetchone()
+        
+        if not data: return await interaction.response.send_message("❌ Monstro não encontrado.", ephemeral=True)
+
+        try:
+            id_c, nome_real, desc, fraquezas, img_url, hp, ini, dano = data[:8]
+        except:
+             nome_real = data[1]
+             img_url = data[4] if len(data) > 4 else None
+             desc, fraquezas, hp, ini, dano = "Sem dados", "Nenhuma", 50, 10, "1d6"
+
+        embed = discord.Embed(title=f"📜 {nome_real.upper()}", description=f"_{desc}_", color=WITCHER_THEME_COLOR)
+        embed.add_field(name="⚔️ Status", value=f"HP: {hp} | Ini: {ini} | Dano: {dano}", inline=False)
+        if img_url: embed.set_image(url=img_url)
+        await interaction.response.send_message(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Bestiary(bot))

@@ -30,7 +30,8 @@ class SkillSelect(ui.Select):
             label = f"{nome}"
             desc_curta = f"Dano/Efeito: {dado}" if dado else "Efeito sem dano"
             value_str = f"{nome}|{dado}"
-            options.append(discord.SelectOption(label=label, description=desc_curta, value=value_str, emoji="✨"))
+            emoji = "🎲" if dado else "✨"
+            options.append(discord.SelectOption(label=label, description=desc_curta, value=value_str, emoji=emoji))
 
         super().__init__(placeholder="✨ Escolha uma habilidade...", min_values=1, max_values=1, options=options)
         self.cog = cog

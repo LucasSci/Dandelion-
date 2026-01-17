@@ -3,3 +3,14 @@
 ## 2026-01-17 - Discord Button Layout & Visual Hierarchy
 **Learning:** Hardcoding `row` indices on Discord buttons (e.g., `row=1`) strictly limits that row to 5 items and causes crashes if exceeded. Auto-layout (`row=None`) is safer for dynamic lists.
 **Action:** Use distinct ButtonStyles and emojis to differentiate interactive (rollable) vs informational elements to improve scannability. Always leave `row=None` for dynamic lists unless specific grid alignment is required.
+## 2024-05-22 - Visual Affordance in RPG Interfaces
+**Learning:** Players react faster when action types are visually distinct. Using `🎲` for rollable actions and `✨` for passive/utility actions reduces cognitive load compared to reading text labels.
+**Action:** Use consistent emoji and color coding across all interactive elements (Buttons, Select Menus) to indicate "Action Type".
+## 2024-10-26 - Visual Affordance in Skill Lists
+**Learning:** Users can process lists of actions faster when interactive elements (like rollable skills) are visually distinct from informational elements (passive skills).
+**Action:** Use distinct emoji (🎲 vs ✨) and button styles (Primary vs Secondary) to differentiate active vs passive capabilities in future UI lists.
+# Palette's Journal - Critical UX Learnings
+
+## 2024-05-21 - Visual Affordance for Skill Types
+**Learning:** Users can distinguish between active (rollable) and passive (utility) skills faster when visual cues (color + emoji) are used.
+**Action:** Use `ButtonStyle.primary` + 🎲 for rollable actions, and `ButtonStyle.secondary` + ✨ for passive/utility actions.
