@@ -36,7 +36,8 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
 class HabilidadeButton(ui.Button):
     def __init__(self, nome, dado, descricao):
         label_btn = f"{nome} ({dado})" if dado else nome
-        super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, row=1)
+        # Fixed: Removed fixed row=1 to allow automatic layout
+        super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, row=None)
         self.nome_habilidade = nome
         self.dado_habilidade = dado
         self.desc_habilidade = descricao
@@ -119,7 +120,8 @@ class FichaView(ui.View):
         # FIX: Usando connection pool compartilhado
         db = interaction.client.db
 
-        async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (self.personagem_id,)) as cursor:
+        # Optimized: Added LIMIT 20 to reduce fetch size, matching the display limit
+        async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ? LIMIT 20", (self.personagem_id,)) as cursor:
             skills = await cursor.fetchall()
 
         embed = discord.Embed(title="⚔️ Grimório de Habilidades", color=0x992d22)
