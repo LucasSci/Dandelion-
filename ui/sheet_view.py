@@ -12,7 +12,13 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
     nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
     # Mantido required=False pois o placeholder indica opcionalidade
     dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)", required=False)
-    descricao = ui.TextInput(label="Descrição", style=discord.TextStyle.paragraph, required=False)
+    # Added placeholder for better UX
+    descricao = ui.TextInput(
+        label="Descrição",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        placeholder="Ex: Dispara uma esfera flamejante..."
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
         if self.dado.value:
@@ -35,9 +41,36 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
 # --- BOTÃO DE HABILIDADE (REALIZA A ROLAGEM) ---
 class HabilidadeButton(ui.Button):
     def __init__(self, nome, dado, descricao):
+        emoji = "🎲" if dado else "✨"
+        style = discord.ButtonStyle.primary if dado else discord.ButtonStyle.secondary
         label_btn = f"{nome} ({dado})" if dado else nome
         # Fixed: Removed fixed row=1 to allow automatic layout
         super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, row=None)
+
+        if dado:
+            emoji = "🎲"
+            style = discord.ButtonStyle.primary
+            label_btn = f"{nome} ({dado})"
+        label_btn = f"{nome} ({dado})" if dado else nome
+
+        # UX Improvement: Visual distinction for skill types
+        if dado:
+            style = discord.ButtonStyle.primary
+            emoji = "🎲"
+        else:
+            style = discord.ButtonStyle.secondary
+            emoji = "✨"
+        # Improved UX: Visual distinction between active (rollable) and passive skills
+        if dado:
+            emoji = "🎲"
+            style = discord.ButtonStyle.primary
+            label_btn = f"{nome} [{dado}]"
+        else:
+            emoji = "✨"
+            style = discord.ButtonStyle.secondary
+            label_btn = nome
+
+        super().__init__(style=style, label=label_btn, emoji=emoji, row=1)
         self.nome_habilidade = nome
         self.dado_habilidade = dado
         self.desc_habilidade = descricao
