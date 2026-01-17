@@ -41,6 +41,10 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
 # --- BOTÃO DE HABILIDADE (REALIZA A ROLAGEM) ---
 class HabilidadeButton(ui.Button):
     def __init__(self, nome, dado, descricao):
+        emoji = "🎲" if dado else "✨"
+        style = discord.ButtonStyle.primary if dado else discord.ButtonStyle.secondary
+        label_btn = f"{nome} ({dado})" if dado else nome
+
         if dado:
             emoji = "🎲"
             style = discord.ButtonStyle.primary
