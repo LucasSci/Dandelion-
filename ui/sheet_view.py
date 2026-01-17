@@ -65,6 +65,7 @@ class HabilidadeButton(ui.Button):
             style = discord.ButtonStyle.primary
             label_btn = f"{nome} ({dado})"
         label_btn = f"{nome} ({dado})" if dado else nome
+        super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, row=None)
 
         # UX Improvement: Visual distinction for skill types
         if dado:
@@ -166,6 +167,7 @@ class FichaView(ui.View):
         # FIX: Usando connection pool compartilhado
         db = interaction.client.db
 
+        # Optimized: Added LIMIT 20 to prevent fetching excessive rows that won't be displayed
         # Optimized: Added LIMIT 20 to reduce fetch size, matching the display limit
         async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ? LIMIT 20", (self.personagem_id,)) as cursor:
             skills = await cursor.fetchall()
