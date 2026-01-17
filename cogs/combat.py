@@ -50,6 +50,20 @@ class Combat(commands.Cog):
         self.bot = bot
         self.sessions = {}
 
+    # Método movido para DENTRO da classe (Correção Importante)
+    def obter_resumo_combate(self, channel_id):
+        session = self.sessions.get(channel_id)
+        if not session: return "Nenhum combate ocorrendo."
+        
+        monstro = session['monstro']
+        jogadores_str = ", ".join([f"{p['nome']} (HP:{p['hp']})" for p in session['jogadores']])
+        
+        return f"""
+        CENÁRIO ATUAL:
+        Inimigo: {monstro['nome']} (HP: {monstro['hp_atual']}/{monstro['hp_max']}).
+        Heróis: {jogadores_str}.
+        """
+
     @app_commands.command(name="combate_criar", description="Cria uma sala de batalha")
     async def combate_criar(self, interaction: discord.Interaction, monstro_nome: str):
         async with self.bot.db.execute("SELECT nome, hp_max, imagem_url, iniciativa, dano_base FROM criaturas WHERE nome LIKE ?", (f'%{monstro_nome}%',)) as cursor:
@@ -61,6 +75,7 @@ class Combat(commands.Cog):
         self.sessions[interaction.channel_id] = {
             'status': 'LOBBY',
             'bloqueado': False,
+            'mensagem_id': None, # ID da mensagem para edição
             'monstro': {'nome': nome, 'hp_max': hp, 'hp_atual': hp, 'img': img, 'ini': ini, 'dano_base': dano_base},
             'jogadores': [],
             'ordem': [],
@@ -91,12 +106,7 @@ class Combat(commands.Cog):
         await interaction.response.send_message(f"⚔️ **{interaction.user.display_name}** entrou! (HP: {hp_max})", ephemeral=False)
 
     @app_commands.command(name="combate_iniciar", description="Rola inciativa e começa")
-
     async def combate_iniciar(self, interaction: discord.Interaction):
-        msg = await interaction.response.send_message("🎲 Iniciativas definidas!", ephemeral=True)
-        # Envie a mensagem inicial do painel e guarde o objeto message
-        painel_msg = await interaction.channel.send(embed=embed, view=view)
-        session['mensagem_id'] = painel_msg.id  # <--- Guarde isso
         session = self.sessions.get(interaction.channel_id)
         if not session or session['status'] != 'LOBBY': return
         
@@ -126,7 +136,9 @@ class Combat(commands.Cog):
         session['bloqueado'] = True 
         
         await interaction.response.send_message("🎲 Iniciativas definidas! O combate vai começar...", ephemeral=True)
-        await self.atualizar_interface(interaction.channel)
+        
+        # Gera a primeira interface e SALVA o ID
+        await self.atualizar_interface(interaction.channel, nova_mensagem=True)
 
     async def destravar_turno(self, interaction, channel_id):
         session = self.sessions.get(channel_id)
@@ -135,20 +147,21 @@ class Combat(commands.Cog):
         session['bloqueado'] = False
         atual = session['ordem'][session['turno_index']]
         
+        # Defer e deleta o botão do mestre para limpar o chat
+        await interaction.response.defer()
+        try: await interaction.message.delete()
+        except: pass
+        
         if atual['tipo'] == 'MONSTRO':
-            await interaction.response.defer()
-            await interaction.message.delete()
             await self.atualizar_interface(interaction.channel)
             await self.turno_ia_monstro(interaction.channel)
         else:
-            await interaction.response.defer()
-            await interaction.message.delete()
             await self.atualizar_interface(interaction.channel)
 
-    async def atualizar_interface(self, channel):
+    async def atualizar_interface(self, channel, nova_mensagem=False):
         session = self.sessions.get(channel.id)
         if not session: return
-        
+
         monstro = session['monstro']
         atual = session['ordem'][session['turno_index']]
         session['turno_monstro'] = (atual['tipo'] == 'MONSTRO')
@@ -163,15 +176,17 @@ class Combat(commands.Cog):
         embed = discord.Embed(title="⚔️ Campo de Batalha", description=desc, color=0x2b2d31)
         if monstro['img']: embed.set_thumbnail(url=monstro['img'])
 
+        view = None
         if session['bloqueado']:
             embed.set_footer(text="⏸️ Cena Pausada - Aguardando Narração do Mestre")
             embed.color = 0xFFD700
+            # A view do Mestre sempre é uma NOVA mensagem para garantir que ele veja no final do chat
             await channel.send(embed=embed, view=MestreView(self, channel.id))
             return
 
         if session['turno_monstro']:
             embed.set_footer(text=f"TURNO DO INIMIGO")
-            await channel.send(embed=embed, view=CombateView(self, channel.id))
+            view = CombateView(self, channel.id)
         else:
             skills_do_turno = []
             if atual['tipo'] == 'JOGADOR':
@@ -180,16 +195,19 @@ class Combat(commands.Cog):
 
             embed.set_footer(text=f"VEZ DE: {atual.get('nome', 'Alguém')}")
             view = CombateView(self, channel.id, habilidades_jogador=skills_do_turno)
-            content = f"<@{atual['user_id']}>" if 'user_id' in atual else ""
-            await channel.send(content=content, embed=embed, view=view)
+            
+        # Lógica de Edição vs Nova Mensagem
+        if nova_mensagem:
+            msg = await channel.send(embed=embed, view=view)
+            session['mensagem_id'] = msg.id
+        else:
             try:
                 msg = await channel.fetch_message(session['mensagem_id'])
-                await msg.edit(embed=embed, view=view) # <--- EDITA em vez de enviar
-            except (discord.NotFound, KeyError):
-                # Se a mensagem foi deletada manualmente, envia uma nova e atualiza o ID
-                nova_msg = await channel.send(embed=embed, view=view)
-                session['mensagem_id'] = nova_msg.id
-        
+                await msg.edit(embed=embed, view=view)
+            except:
+                # Se falhar (ex: msg deletada), cria uma nova
+                msg = await channel.send(embed=embed, view=view)
+                session['mensagem_id'] = msg.id
 
     async def processar_acao_jogador(self, interaction, channel_id, acao, detalhes_skill=None):
         session = self.sessions.get(channel_id)
@@ -214,24 +232,18 @@ class Combat(commands.Cog):
         session['log'].append(narrativa)
 
         await interaction.response.defer()
-        try: await interaction.message.delete()
-        except: pass
-
+        
         # --- FIM DE COMBATE COM XP ---
         if monstro['hp_atual'] <= 0:
-            # XP Base = HP do Monstro * 1.5
             xp_total = int(monstro['hp_max'] * 1.5)
             if xp_total < 10: xp_total = 10
 
             vivos = [p for p in session['jogadores'] if p['hp'] > 0]
-            
             msg_vitoria = f"🏆 **VITÓRIA!** O {monstro['nome']} foi derrotado!"
             
             if vivos:
                 xp_individual = xp_total // len(vivos)
                 msg_vitoria += f"\n🌟 O grupo recebeu **{xp_total} XP** ({xp_individual} p/ cada)."
-                
-                # Distribui XP e salva no banco
                 for p in vivos:
                     await aplicar_xp(self.bot.db, p['user_id'], xp_individual, interaction.channel)
             else:
@@ -268,7 +280,6 @@ class Combat(commands.Cog):
         await self.atualizar_interface(channel)
 
     def avancar_indice_turno(self, session):
-        start_index = session['turno_index']
         for _ in range(len(session['ordem'])):
             session['turno_index'] = (session['turno_index'] + 1) % len(session['ordem'])
             atual = session['ordem'][session['turno_index']]
@@ -280,16 +291,3 @@ class Combat(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Combat(bot))
-
-def obter_resumo_combate(self, channel_id):
-    session = self.sessions.get(channel_id)
-    if not session: return "Nenhum combate ocorrendo."
-    
-    monstro = session['monstro']
-    jogadores_str = ", ".join([f"{p['nome']} (HP:{p['hp']})" for p in session['jogadores']])
-    
-    return f"""
-    CENÁRIO ATUAL:
-    Inimigo: {monstro['nome']} (HP: {monstro['hp_atual']}/{monstro['hp_max']}).
-    Heróis: {jogadores_str}.
-    """
