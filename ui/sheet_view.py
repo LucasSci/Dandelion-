@@ -35,8 +35,19 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
 # --- BOTÃO DE HABILIDADE (REALIZA A ROLAGEM) ---
 class HabilidadeButton(ui.Button):
     def __init__(self, nome, dado, descricao):
-        label_btn = f"{nome} ({dado})" if dado else nome
-        super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, row=1)
+        if dado:
+            # Active skill (Rollable)
+            label_btn = f"{nome} ({dado})"
+            style = discord.ButtonStyle.primary
+            emoji = "🎲"
+        else:
+            # Passive skill (Info only)
+            label_btn = nome
+            style = discord.ButtonStyle.secondary
+            emoji = "✨"
+
+        # Removed row=1 to allow auto-layout and prevent crash on >5 skills
+        super().__init__(style=style, label=label_btn, emoji=emoji, row=None)
         self.nome_habilidade = nome
         self.dado_habilidade = dado
         self.desc_habilidade = descricao
