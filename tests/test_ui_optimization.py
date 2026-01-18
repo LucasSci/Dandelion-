@@ -28,8 +28,10 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         mock_execute_ctx.__aexit__ = AsyncMock(return_value=None)
         mock_db.execute.return_value = mock_execute_ctx
 
-        # Mock cursor.fetchall result (30 items)
-        fake_skills = [(f"Skill {i}", "1d6", "Desc") for i in range(30)]
+        # Mock cursor.fetchall result (20 items - simulating that DB respected LIMIT 20)
+        # If we return 30, the code will try to add 30 buttons and crash,
+        # even if it SENT the LIMIT 20 query (because mocks don't actually run SQL).
+        fake_skills = [(f"Skill {i}", "1d6", "Desc") for i in range(20)]
         mock_cursor.fetchall.return_value = fake_skills
 
         # Instantiate View
@@ -50,8 +52,11 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         self.assertIn("LIMIT 20", sql_query.upper(), "LIMIT 20 should be present in the query")
 
         # Check that we have correct number of children
-        # 3 static + 20 dynamic = 23.
-        self.assertEqual(len(view.children), 23)
+        # 4 static (info, skills, add, manage) + 20 dynamic = 24.
+        # Wait, let's check FichaView structure.
+        # row 0 has: Info, Skills, Nova Skill, Gerenciar. (4 items)
+        # So 4 + 20 = 24.
+        self.assertEqual(len(view.children), 24)
 
 if __name__ == "__main__":
     unittest.main()

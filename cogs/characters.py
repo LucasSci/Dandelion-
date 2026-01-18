@@ -240,10 +240,11 @@ class Characters(commands.Cog):
 
     @app_commands.command(name="listar_fichas", description="Lista todas as fichas")
     async def listar_fichas(self, interaction: discord.Interaction):
-         async with self.bot.db.execute("SELECT nome, user_id FROM personagens") as cursor:
+         # Otimização: LIMIT 20 para evitar carregar todas as fichas desnecessariamente
+         async with self.bot.db.execute("SELECT nome, user_id FROM personagens LIMIT 20") as cursor:
             rows = await cursor.fetchall()
          if not rows: return await interaction.response.send_message("📭 Nenhuma ficha.", ephemeral=True)
-         txt = "\n".join([f"• {r[0]} ({'Ocupado' if r[1] else 'Livre'})" for r in rows[:20]])
+         txt = "\n".join([f"• {r[0]} ({'Ocupado' if r[1] else 'Livre'})" for r in rows])
          await interaction.response.send_message(f"**Fichas:**\n{txt}")
 
 async def setup(bot):

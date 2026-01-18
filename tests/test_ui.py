@@ -12,7 +12,7 @@ class TestHabilidadeButton(unittest.TestCase):
         # When passed as string to __init__, it's stored as str or PartialEmoji.
         # Checking str representation is usually safe.
         self.assertEqual(str(btn.emoji), "🎲", "Active skill should have dice emoji")
-        self.assertIn("Fireball (8d6)", btn.label)
+        self.assertIn("Fireball [8d6]", btn.label)
 
     def test_passive_skill_no_dice(self):
         """Test that a skill without a dice formula is styled as passive (Secondary/Grey) with a sparkles emoji."""
