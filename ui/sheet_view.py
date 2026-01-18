@@ -1,6 +1,7 @@
 import discord
 from discord import ui
 from utils import rolar_dados
+from ui.views import ConfirmarExclusaoView
 
 # ==============================================================================
 # 1. MODAIS (CRIAR E EDITAR)
@@ -90,12 +91,22 @@ class AcoesHabilidadeView(ui.View):
 
     @ui.button(label="🗑️ Excluir", style=discord.ButtonStyle.danger)
     async def btn_excluir(self, interaction: discord.Interaction, button: ui.Button):
-        db = interaction.client.db
-        await db.execute("DELETE FROM habilidades_personagem WHERE id = ?", (self.skill_id,))
-        await db.commit()
-        
-        await interaction.response.send_message(f"🗑️ Habilidade **{self.nome}** removida.", ephemeral=True)
-        await self.view_ficha.atualizar_botoes_habilidade(interaction)
+        async def confirmar(itx: discord.Interaction):
+            db = itx.client.db
+            await db.execute("DELETE FROM habilidades_personagem WHERE id = ?", (self.skill_id,))
+            await db.commit()
+
+            await itx.response.edit_message(content=f"🗑️ Habilidade **{self.nome}** removida.", view=None)
+            await self.view_ficha.atualizar_botoes_habilidade(itx)
+
+        view_conf = ConfirmarExclusaoView(confirmar)
+        await interaction.response.edit_message(
+            content=f"⚠️ Tem certeza que deseja excluir a habilidade **{self.nome}**?",
+            view=view_conf
+        )
+        # Não chamamos self.stop() aqui porque queremos que esta view continue ativa
+        # caso o usuário cancele (embora neste caso a view seja substituída na mensagem)
+        # Como substituímos a mensagem, esta view (AcoesHabilidadeView) não receberá mais eventos daquela mensagem específica.
         self.stop()
 
 class SelecionarHabilidadeSelect(ui.Select):
