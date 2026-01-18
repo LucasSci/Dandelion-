@@ -28,8 +28,8 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         mock_execute_ctx.__aexit__ = AsyncMock(return_value=None)
         mock_db.execute.return_value = mock_execute_ctx
 
-        # Mock cursor.fetchall result (30 items)
-        fake_skills = [(f"Skill {i}", "1d6", "Desc") for i in range(30)]
+        # Mock cursor.fetchall result (20 items, simulating LIMIT 20)
+        fake_skills = [(f"Skill {i}", "1d6", "Desc") for i in range(20)]
         mock_cursor.fetchall.return_value = fake_skills
 
         # Instantiate View
@@ -50,8 +50,8 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         self.assertIn("LIMIT 20", sql_query.upper(), "LIMIT 20 should be present in the query")
 
         # Check that we have correct number of children
-        # 3 static + 20 dynamic = 23.
-        self.assertEqual(len(view.children), 23)
+        # 4 static + 20 dynamic = 24.
+        self.assertEqual(len(view.children), 24)
 
 if __name__ == "__main__":
     unittest.main()

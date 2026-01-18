@@ -73,6 +73,36 @@ class EditarHabilidadeModal(ui.Modal, title="✏️ Editar Habilidade"):
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)
 # ==============================================================================
 
+class ConfirmarExclusaoView(ui.View):
+    def __init__(self, skill_id, nome, dado, desc, view_ficha):
+        super().__init__(timeout=60)
+        self.skill_id = skill_id
+        self.nome = nome
+        self.dado = dado
+        self.desc = desc
+        self.view_ficha = view_ficha
+
+    @ui.button(label="✅ Sim, Excluir", style=discord.ButtonStyle.danger)
+    async def btn_confirmar(self, interaction: discord.Interaction, button: ui.Button):
+        db = interaction.client.db
+        await db.execute("DELETE FROM habilidades_personagem WHERE id = ?", (self.skill_id,))
+        await db.commit()
+
+        await interaction.response.send_message(f"🗑️ Habilidade **{self.nome}** apagada.", ephemeral=True)
+        await self.view_ficha.atualizar_botoes_habilidade(interaction)
+
+        # Remove a view de confirmação para evitar cliques duplicados
+        try:
+            await interaction.message.edit(content=f"🗑️ Habilidade **{self.nome}** apagada.", view=None)
+        except:
+            pass
+        self.stop()
+
+    @ui.button(label="❌ Cancelar", style=discord.ButtonStyle.secondary)
+    async def btn_cancelar(self, interaction: discord.Interaction, button: ui.Button):
+        view = AcoesHabilidadeView(self.skill_id, self.nome, self.dado, self.desc, self.view_ficha)
+        await interaction.response.edit_message(content=f"🛠️ Gerenciando: **{self.nome}**\nO que deseja fazer?", view=view)
+
 class AcoesHabilidadeView(ui.View):
     def __init__(self, skill_id, nome, dado, desc, view_ficha):
         super().__init__(timeout=60)
@@ -90,13 +120,8 @@ class AcoesHabilidadeView(ui.View):
 
     @ui.button(label="🗑️ Excluir", style=discord.ButtonStyle.danger)
     async def btn_excluir(self, interaction: discord.Interaction, button: ui.Button):
-        db = interaction.client.db
-        await db.execute("DELETE FROM habilidades_personagem WHERE id = ?", (self.skill_id,))
-        await db.commit()
-        
-        await interaction.response.send_message(f"🗑️ Habilidade **{self.nome}** removida.", ephemeral=True)
-        await self.view_ficha.atualizar_botoes_habilidade(interaction)
-        self.stop()
+        view = ConfirmarExclusaoView(self.skill_id, self.nome, self.dado, self.desc, self.view_ficha)
+        await interaction.response.edit_message(content=f"⚠️ Tem certeza que deseja excluir a habilidade **{self.nome}**?", view=view)
 
 class SelecionarHabilidadeSelect(ui.Select):
     def __init__(self, skills, view_ficha):
