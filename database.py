@@ -4,7 +4,6 @@ from typing import Iterable, Tuple, Optional
 
 DB_NAME = "bestiario.db"
 
-
 # =========================
 # CONEXAO / UTIL
 # =========================
@@ -14,39 +13,29 @@ def get_connection(db_path: str = DB_NAME) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
-
 def _column_exists(cursor: sqlite3.Cursor, table: str, column: str) -> bool:
     cursor.execute(f"PRAGMA table_info({table});")
     return any(row[1] == column for row in cursor.fetchall())
 
-
-def _add_columns_if_missing(
-    cursor: sqlite3.Cursor,
-    table: str,
-    columns: Iterable[Tuple[str, str]],
-) -> None:
+def _add_columns_if_missing(cursor: sqlite3.Cursor, table: str, columns: Iterable[Tuple[str, str]]) -> None:
     for col, col_type in columns:
         if not _column_exists(cursor, table, col):
-            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type};")
-
+            try:
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type};")
+                print(f"🔧 Coluna '{col}' adicionada em '{table}'.")
+            except Exception as e:
+                print(f"⚠️ Erro ao adicionar coluna {col}: {e}")
 
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
-    cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
-        (table,),
-    )
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table,))
     return cursor.fetchone() is not None
 
-
 # =========================
-# SCHEMA (TABELAS)
+# SCHEMA (TODAS AS TABELAS)
 # =========================
 
 SCHEMA_SQL = """
--- =========================
--- TABELAS RPG (LEGADO)
--- =========================
-
+-- CORE RPG --
 CREATE TABLE IF NOT EXISTS personagens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
@@ -59,22 +48,39 @@ CREATE TABLE IF NOT EXISTS personagens (
     imagem_url TEXT,
     ouro INTEGER DEFAULT 0,
     hp_max INTEGER DEFAULT 30,
+    hp_atual INTEGER DEFAULT 30,
     mp_max INTEGER DEFAULT 10,
     ataque INTEGER DEFAULT 2,
     defesa INTEGER DEFAULT 10
 );
-
-CREATE TABLE IF NOT EXISTS criaturas (
+-- QUESTS ATUALIZADA --
+CREATE TABLE IF NOT EXISTS quests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT UNIQUE,
+    titulo TEXT,
     descricao TEXT,
-    fraquezas TEXT,
-    imagem_url TEXT,
-    hp_max INTEGER DEFAULT 50,
-    iniciativa INTEGER DEFAULT 10,
-    dano_base TEXT DEFAULT '1d6'
+    recompensa_ouro INTEGER DEFAULT 0,
+    recompensa_xp INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'Disponivel',
+    regiao TEXT DEFAULT 'Desconhecida',
+    max_jogadores INTEGER DEFAULT 1,
+    thread_id INTEGER,
+    
+    -- Novos Campos --
+    classes_req TEXT DEFAULT 'Todas',
+    criatura_id INTEGER, -- Link com tabela monsters
+    alvo_monstro_nome TEXT, -- Nome texto caso não tenha link
+    imagem_url TEXT -- URL da imagem gerada pelo DALL-E
 );
 
+CREATE TABLE IF NOT EXISTS quest_participantes (quest_id INTEGER, user_id INTEGER, PRIMARY KEY(quest_id, user_id));
+
+-- NOVA TABELA: MEMÓRIA DA CAMPANHA --
+CREATE TABLE IF NOT EXISTS memoria_campanha (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT, -- 'Quest', 'Evento', 'Resumo'
+    conteudo TEXT,
+    data_registro TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS habilidades_personagem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     personagem_id INTEGER,
@@ -93,8 +99,66 @@ CREATE TABLE IF NOT EXISTS inventario (
     efeito TEXT
 );
 
+CREATE TABLE IF NOT EXISTS session_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id INTEGER,
+    user_name TEXT,
+    content TEXT,
+    is_bot BOOLEAN,
+    timestamp TEXT DEFAULT (datetime('now'))
+);
+
+-- ECONOMIA (LOJA) --
+CREATE TABLE IF NOT EXISTS loja_itens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    tipo TEXT,
+    preco INTEGER DEFAULT 0,
+    estoque INTEGER DEFAULT 1,
+    efeito TEXT,
+    descricao TEXT
+);
+
+-- QUESTS E MISSÕES --
+
+CREATE TABLE IF NOT EXISTS quests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    titulo TEXT,
+    descricao TEXT,
+    recompensa_ouro INTEGER DEFAULT 0,
+    recompensa_xp INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'Disponivel',
+    classes_req TEXT DEFAULT 'Todas',
+    
+    -- Novos Campos --
+    regiao TEXT DEFAULT 'Desconhecida',
+    max_jogadores INTEGER DEFAULT 1,
+    alvo_monstro TEXT, -- Nome do monstro ou "Nenhum"
+    thread_id INTEGER
+);
+
+-- Tabela para suportar múltiplos jogadores na mesma quest
+CREATE TABLE IF NOT EXISTS quest_participantes (
+    quest_id INTEGER,
+    user_id INTEGER,
+    FOREIGN KEY(quest_id) REFERENCES quests(id) ON DELETE CASCADE,
+    PRIMARY KEY(quest_id, user_id)
+);
+
+-- BESTIÁRIO (SIMPLIFICADO) --
+CREATE TABLE IF NOT EXISTS criaturas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT UNIQUE,
+    descricao TEXT,
+    fraquezas TEXT,
+    imagem_url TEXT,
+    hp_max INTEGER DEFAULT 50,
+    iniciativa INTEGER DEFAULT 10,
+    dano_base TEXT DEFAULT '1d6'
+);
+
 -- =========================
--- BESTIARIO (NORMALIZADO)
+-- BESTIÁRIO (NORMALIZADO)
 -- =========================
 
 CREATE TABLE IF NOT EXISTS monsters (
@@ -108,8 +172,8 @@ CREATE TABLE IF NOT EXISTS monsters (
   habitat TEXT,
   signs TEXT,
   notes TEXT,
-  origin TEXT,                      -- ex: books, tw1, tw2, tw3, hos, baw, gwent, thronebreaker, comics, original
-  canon_tier TEXT DEFAULT 'core',    -- core/extended/apocrypha
+  origin TEXT,                      
+  canon_tier TEXT DEFAULT 'core',    
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -179,15 +243,11 @@ CREATE TABLE IF NOT EXISTS images (
   FOREIGN KEY (monster_id) REFERENCES monsters(id) ON DELETE CASCADE
 );
 
--- =========================
--- SOURCES (ECOSSISTEMA)
--- =========================
-
 CREATE TABLE IF NOT EXISTS sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  key TEXT UNIQUE NOT NULL,     -- books, tw1, tw2, tw3, hos, baw, gwent, thronebreaker, comics, original
+  key TEXT UNIQUE NOT NULL,
   label TEXT NOT NULL,
-  canon_tier TEXT NOT NULL      -- core/extended/apocrypha
+  canon_tier TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS monster_sources (
@@ -215,35 +275,8 @@ CREATE INDEX IF NOT EXISTS idx_loot_items_key ON loot_items(key);
 CREATE INDEX IF NOT EXISTS idx_sources_key ON sources(key);
 """
 
-
 # =========================
-# MIGRACOES
-# =========================
-
-def migrate_legacy_personagens(cursor: sqlite3.Cursor) -> None:
-    columns_extras = [
-        ("hp_max", "INTEGER DEFAULT 30"),
-        ("mp_max", "INTEGER DEFAULT 10"),
-        ("ataque", "INTEGER DEFAULT 2"),
-        ("defesa", "INTEGER DEFAULT 10"),
-        ("xp_atual", "INTEGER DEFAULT 0"),
-    ]
-    if _table_exists(cursor, "personagens"):
-        _add_columns_if_missing(cursor, "personagens", columns_extras)
-
-
-def migrate_monsters_columns(cursor: sqlite3.Cursor) -> None:
-    # caso alguém já tenha um DB antigo onde monsters existe sem origin/canon_tier
-    columns_extras = [
-        ("origin", "TEXT"),
-        ("canon_tier", "TEXT DEFAULT 'core'"),
-    ]
-    if _table_exists(cursor, "monsters"):
-        _add_columns_if_missing(cursor, "monsters", columns_extras)
-
-
-# =========================
-# SEEDS
+# SEEDS (DADOS INICIAIS)
 # =========================
 
 SEED_LOOKUPS_SQL = """
@@ -282,7 +315,7 @@ INSERT OR IGNORE INTO traits (key, label) VALUES
 ('disease_risk','Risco de praga/doença'),
 ('territorial','Territorial');
 
--- Loot (genérico, você ajusta depois)
+-- Loot
 INSERT OR IGNORE INTO loot_items (key, label) VALUES
 ('monster_claw','Garra de monstro'),
 ('monster_tooth','Dente de monstro'),
@@ -291,7 +324,7 @@ INSERT OR IGNORE INTO loot_items (key, label) VALUES
 ('mutagen_minor','Mutágeno menor'),
 ('essence_necrophage','Essência de necrófago');
 
--- Sources (ecossistema)
+-- Sources
 INSERT OR IGNORE INTO sources (key,label,canon_tier) VALUES
 ('books','Livros (Sapkowski)','core'),
 ('tw1','The Witcher 1','core'),
@@ -305,104 +338,110 @@ INSERT OR IGNORE INTO sources (key,label,canon_tier) VALUES
 ('original','Originais (Witcher-like)','apocrypha');
 """
 
-# Importante: aqui só vai "base canônica mínima" para validar pipeline.
-# Você vai ampliar isso em lotes por arquivo SQL, ou por script de import depois.
 SEED_MONSTERS_SQL = """
--- ================
--- NECROPHAGE (TW3) - mínimo
--- ================
 INSERT OR IGNORE INTO monsters (slug, name, category, threat_level, origin, canon_tier)
 VALUES
 ('drowner','Drowner','Necrophage',2,'tw3','core'),
 ('water_hag','Water Hag','Necrophage',3,'tw3','core'),
 ('ghoul','Ghoul','Necrophage',2,'tw3','core'),
 ('alghoul','Alghoul','Necrophage',4,'tw3','core'),
-('rotfiend','Rotfiend','Necrophage',3,'tw3','core');
-
--- ================
--- SPECTER (TW3) - mínimo
--- ================
-INSERT OR IGNORE INTO monsters (slug, name, category, threat_level, origin, canon_tier)
-VALUES
+('rotfiend','Rotfiend','Necrophage',3,'tw3','core'),
 ('wraith','Wraith','Specter',3,'tw3','core'),
 ('nightwraith','Nightwraith','Specter',3,'tw3','core'),
 ('noonwraith','Noonwraith','Specter',3,'tw3','core');
 """
 
 SEED_RELATIONS_SQL = """
--- Liga monsters (que já têm origin preenchido) ao sources equivalentes
 INSERT OR IGNORE INTO monster_sources (monster_id, source_id)
-SELECT m.id, s.id
-FROM monsters m
-JOIN sources s ON s.key = m.origin
+SELECT m.id, s.id FROM monsters m JOIN sources s ON s.key = m.origin
 WHERE m.origin IS NOT NULL AND m.origin <> '';
 
--- Fraquezas padrão para Specters (ajuste depois se quiser granularidade)
 INSERT OR IGNORE INTO monster_weaknesses (monster_id, weakness_id, priority, note)
-SELECT m.id, w.id, 1, 'Resposta padrão para espectros.'
+SELECT m.id, w.id, 1, 'Resposta padrão.'
 FROM monsters m, weaknesses w
 WHERE m.category='Specter' AND w.key IN ('specter_oil','yrden','moon_dust');
 
--- Fraquezas padrão para Necrophages
 INSERT OR IGNORE INTO monster_weaknesses (monster_id, weakness_id, priority, note)
-SELECT m.id, w.id, 1, 'Resposta padrão para necrófagos.'
+SELECT m.id, w.id, 1, 'Resposta padrão.'
 FROM monsters m, weaknesses w
 WHERE m.category='Necrophage' AND w.key IN ('necrophage_oil','igni','aard','quen','silver');
-
-
 """
-from pathlib import Path
 
+# =========================
+# MIGRACOES
+# =========================
+
+def migrate_db(cursor: sqlite3.Cursor) -> None:
+    """Centraliza todas as migrações"""
+    
+    # 1. Migração Personagens (HP Atual, MP, etc)
+    personagens_extras = [
+        ("hp_max", "INTEGER DEFAULT 30"),
+        ("mp_max", "INTEGER DEFAULT 10"),
+        ("ataque", "INTEGER DEFAULT 2"),
+        ("defesa", "INTEGER DEFAULT 10"),
+        ("xp_atual", "INTEGER DEFAULT 0"),
+        ("hp_atual", "INTEGER DEFAULT 30")
+    ]
+    if _table_exists(cursor, "personagens"):
+        _add_columns_if_missing(cursor, "personagens", personagens_extras)
+
+    # 2. Migração Monstros (Origin/Canon Tier)
+    monsters_extras = [
+        ("origin", "TEXT"),
+        ("canon_tier", "TEXT DEFAULT 'core'"),
+    ]
+    if _table_exists(cursor, "monsters"):
+        _add_columns_if_missing(cursor, "monsters", monsters_extras)
+
+    # 3. Migração Quests (Restrição de Classe)
+    quests_extras = [
+        ("classes_req", "TEXT DEFAULT 'Todas'"),
+        ("thread_id", "INTEGER"),
+        ("regiao", "TEXT DEFAULT 'Desconhecida'"),
+        ("max_jogadores", "INTEGER DEFAULT 1"),
+        ("alvo_monstro", "TEXT"),
+        ("nota_mestre", "TEXT")
+    ]
+    if _table_exists(cursor, "quests"):
+        _add_columns_if_missing(cursor, "quests", quests_extras)
 
 def seed_bestiary(conn: sqlite3.Connection) -> None:
+    """Aplica seeds de arquivos externos e strings internas de forma segura."""
+    cur = conn.cursor()
     
-    from pathlib import Path
-    for file in [
+    # 1. Tenta carregar arquivos externos se existirem
+    seed_files = [
         "seed_bestiary_ecosystem.sql",
         "seed_tw3_full_by_category.sql",
         "seed_books_core.sql",
         "seed_books_core_lote2.sql",
         "seed_tw2_full.sql",
-        "seed_dlcs_hos_baw.sql"
-    ]:
-        conn.executescript(Path(file).read_text(encoding="utf-8"))
+        "seed_dlcs_hos_baw.sql",
+        "seed_named_monsters_core.sql"
+    ]
+    
+    for filename in seed_files:
+        p = Path(filename)
+        if p.exists():
+            try:
+                print(f"📄 Aplicando seed externo: {filename}")
+                script = p.read_text(encoding="utf-8")
+                conn.executescript(script)
+                conn.commit()
+            except Exception as e:
+                print(f"❌ Erro ao aplicar {filename}: {e}")
+        else:
+            pass
 
-    conn.commit()
-    sql = Path("seed_bestiary_ecosystem.sql").read_text(encoding="utf-8")
-    conn.executescript(sql)
-    conn.commit()
-    cur = conn.cursor()
-    cur.executescript(SEED_LOOKUPS_SQL)
-    cur.executescript(SEED_MONSTERS_SQL)
-    cur.executescript(SEED_RELATIONS_SQL)
-    conn.commit()
-
-
-# =========================
-# LIMPEZA OPCIONAL (SE VOCE JÁ TINHA DADOS "AUTORAIS")
-# =========================
-
-def mark_unknown_slugs_as_apocrypha(conn: sqlite3.Connection, known_slugs: Iterable[str]) -> int:
-    """
-    Se você rodou seeds anteriores com slugs autorais, use isso para marcar o que NÃO estiver
-    na sua lista canônica atual como apocrypha/original (sem deletar).
-    """
-    known = set(known_slugs)
-    cur = conn.cursor()
-    cur.execute("SELECT slug FROM monsters;")
-    all_slugs = [r[0] for r in cur.fetchall()]
-
-    to_mark = [s for s in all_slugs if s not in known]
-    if not to_mark:
-        return 0
-
-    cur.executemany(
-        "UPDATE monsters SET canon_tier='apocrypha', origin='original' WHERE slug=?;",
-        [(s,) for s in to_mark],
-    )
-    conn.commit()
-    return len(to_mark)
-
+    # 2. Aplica seeds internos de garantia (Lookups, Monstros básicos)
+    try:
+        cur.executescript(SEED_LOOKUPS_SQL)
+        cur.executescript(SEED_MONSTERS_SQL)
+        cur.executescript(SEED_RELATIONS_SQL)
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ Erro nos seeds internos: {e}")
 
 # =========================
 # INIT
@@ -414,19 +453,17 @@ def init_db(db_path: str = DB_NAME) -> None:
     with get_connection(db_path) as conn:
         cur = conn.cursor()
 
-        # 1) schema
+        # 1) Schema (Cria todas as tabelas)
         cur.executescript(SCHEMA_SQL)
-
-        # 2) migrações idempotentes
-        migrate_legacy_personagens(cur)
-        migrate_monsters_columns(cur)
-
+        
+        # 2) Migrações (Atualiza tabelas antigas se necessário)
+        migrate_db(cur)
+        
         conn.commit()
 
-        # 3) seeds idempotentes
+        # 3) Seeds (Popula dados iniciais)
         seed_bestiary(conn)
-
 
 if __name__ == "__main__":
     init_db(DB_NAME)
-    print(f"✅ Banco inicializado e seeds aplicados: {DB_NAME}")
+    print(f"✅ Banco inicializado e verificado: {DB_NAME}")

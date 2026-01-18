@@ -48,9 +48,16 @@ class DandelionBot(commands.Bot):
         await self.add_cog(Dice(self))
         await self.add_cog(Inventory(self))
         await self.add_cog(Skills(self))
+        try:
+             await self.load_extension("cogs.shop")
+             print("✅ Extensão carregada: cogs.shop")
+        except Exception as e:
+             print(f"❌ Falha ao carregar cogs.shop: {e}")
 
         # Carregamento seguro de extensões
-        extensoes = ["cogs.ai_handler", "cogs.bestiary", "cogs.combat"]
+       # Em bot.py, dentro de setup_hook:
+
+        extensoes = ["cogs.ai_handler", "cogs.bestiary", "cogs.combat", "cogs.scribe","cogs.quests", "cogs.campaign"] # <--- Adicione cogs.scribe
         for ext in extensoes:
             try:
                 await self.load_extension(ext)
