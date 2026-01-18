@@ -1,0 +1,32 @@
+2026-01-18 10:54:06,430 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2026-01-18 10:54:06,434 [INFO] logging in using static token
+2026-01-18 10:54:06,978 [INFO] 💾 Banco de dados conectado.
+2026-01-18 10:54:06,984 [INFO] ✅ Extensão carregada: cogs.shop
+2026-01-18 10:54:08,294 [INFO] ✅ Extensão carregada: cogs.ai_handler
+2026-01-18 10:54:08,656 [INFO] ✅ Extensão carregada: cogs.bestiary
+2026-01-18 10:54:08,683 [INFO] ✅ Extensão carregada: cogs.combat
+2026-01-18 10:54:09,026 [INFO] ✅ Extensão carregada: cogs.scribe
+2026-01-18 10:54:09,029 [INFO] ✅ Extensão carregada: cogs.quests
+2026-01-18 10:54:09,032 [INFO] ✅ Extensão carregada: cogs.campaign
+2026-01-18 10:54:09,593 [INFO] ✅ Bot pronto e comandos sincronizados.
+2026-01-18 10:54:10,030 [INFO] Shard ID None has connected to Gateway (Session ID: ac9ef7d587e0d1f6db84b00be16564b5).
+2026-01-18 10:54:12,043 [INFO] 🚀 Dandelion online como Dandelion#2108
+2026-01-18 10:55:00,541 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-18 10:55:11,534 [INFO] HTTP Request: POST https://api.openai.com/v1/images/generations "HTTP/1.1 200 OK"
+2026-01-18 11:05:23,678 [INFO] 💾 Conexão com banco fechada.
+2026-01-18 11:33:13,383 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2026-01-18 11:33:13,386 [INFO] logging in using static token
+2026-01-18 11:33:13,918 [INFO] 💾 Banco de dados conectado.
+2026-01-18 11:33:13,922 [INFO] ✅ Extensão carregada: cogs.shop
+2026-01-18 11:33:15,043 [INFO] ✅ Extensão carregada: cogs.ai_handler
+2026-01-18 11:33:15,372 [INFO] ✅ Extensão carregada: cogs.bestiary
+2026-01-18 11:33:15,376 [INFO] ✅ Extensão carregada: cogs.combat
+2026-01-18 11:33:15,703 [INFO] ✅ Extensão carregada: cogs.scribe
+2026-01-18 11:33:15,705 [INFO] ✅ Extensão carregada: cogs.quests
+2026-01-18 11:33:15,708 [INFO] ✅ Extensão carregada: cogs.campaign
+2026-01-18 11:33:16,039 [INFO] ✅ Bot pronto e comandos sincronizados.
+2026-01-18 11:33:16,539 [INFO] Shard ID None has connected to Gateway (Session ID: e1c61ff5992d513403010f202c50dac1).
+2026-01-18 11:33:18,567 [INFO] 🚀 Dandelion online como Dandelion#2108
+2026-01-18 11:34:08,256 [ERROR] Erro no comando: Command 'quest_gerar' raised an exception: AttributeError: 'AIHandler' object has no attribute 'gerar_quest_cronologica'
+2026-01-18 11:35:07,862 [ERROR] Erro no comando: Command 'quest_gerar' raised an exception: AttributeError: 'AIHandler' object has no attribute 'gerar_quest_cronologica'
+2026-01-18 11:35:16,204 [INFO] 💾 Conexão com banco fechada.

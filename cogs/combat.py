@@ -2,12 +2,13 @@ import discord
 import aiosqlite
 import random
 import asyncio
+import logging
 from discord.ext import commands
 from discord import app_commands
 from ui.combat_view import CombateView, MestreView, gerar_barra
 from utils import rolar_dados
 
-DB_NAME = "bestiario.db"
+log = logging.getLogger(__name__)
 
 # --- HELPER: SISTEMA DE XP ---
 async def aplicar_xp(db, user_id, xp_ganho, channel):
@@ -18,7 +19,6 @@ async def aplicar_xp(db, user_id, xp_ganho, channel):
     if not dados: return
     nivel, xp, hp, atk = dados
     
-    # Fórmula: Nível * 1000 de XP necessário para o próximo
     xp_prox_nivel = nivel * 1000 
     novo_xp = xp + xp_ganho
     msg = ""
@@ -26,10 +26,8 @@ async def aplicar_xp(db, user_id, xp_ganho, channel):
     if novo_xp >= xp_prox_nivel:
         novo_nivel = nivel + 1
         novo_xp = novo_xp - xp_prox_nivel
-        
-        # Bônus de Level Up
-        novo_hp = hp + 5   # +5 de Vida
-        novo_atk = atk + 1 # +1 de Ataque
+        novo_hp = hp + 5   
+        novo_atk = atk + 1 
         
         await db.execute("""
             UPDATE personagens 
@@ -50,19 +48,12 @@ class Combat(commands.Cog):
         self.bot = bot
         self.sessions = {}
 
-    # Método movido para DENTRO da classe (Correção Importante)
     def obter_resumo_combate(self, channel_id):
         session = self.sessions.get(channel_id)
         if not session: return "Nenhum combate ocorrendo."
-        
         monstro = session['monstro']
         jogadores_str = ", ".join([f"{p['nome']} (HP:{p['hp']})" for p in session['jogadores']])
-        
-        return f"""
-        CENÁRIO ATUAL:
-        Inimigo: {monstro['nome']} (HP: {monstro['hp_atual']}/{monstro['hp_max']}).
-        Heróis: {jogadores_str}.
-        """
+        return f"Inimigo: {monstro['nome']} ({monstro['hp_atual']}/{monstro['hp_max']}). Heróis: {jogadores_str}."
 
     @app_commands.command(name="combate_criar", description="Cria uma sala de batalha")
     async def combate_criar(self, interaction: discord.Interaction, monstro_nome: str):
@@ -75,7 +66,7 @@ class Combat(commands.Cog):
         self.sessions[interaction.channel_id] = {
             'status': 'LOBBY',
             'bloqueado': False,
-            'mensagem_id': None, # ID da mensagem para edição
+            'mensagem_id': None, 
             'monstro': {'nome': nome, 'hp_max': hp, 'hp_atual': hp, 'img': img, 'ini': ini, 'dano_base': dano_base},
             'jogadores': [],
             'ordem': [],
@@ -90,7 +81,7 @@ class Combat(commands.Cog):
     @app_commands.command(name="combate_entrar", description="Entra no combate atual")
     async def combate_entrar(self, interaction: discord.Interaction):
         session = self.sessions.get(interaction.channel_id)
-        if not session or session['status'] != 'LOBBY': return await interaction.response.send_message("❌ Erro.", ephemeral=True)
+        if not session or session['status'] != 'LOBBY': return await interaction.response.send_message("❌ Nenhuma batalha em preparação.", ephemeral=True)
         if any(p['user_id'] == interaction.user.id for p in session['jogadores']): return await interaction.response.send_message("Já está dentro!", ephemeral=True)
 
         async with self.bot.db.execute("SELECT id, hp_max, ataque FROM personagens WHERE user_id = ?", (interaction.user.id,)) as cursor:
@@ -112,10 +103,9 @@ class Combat(commands.Cog):
         
         session['status'] = 'RODANDO'
         
-        # Rola Iniciativa
+        # Iniciativa
         ordem = []
         log_iniciativa = []
-        
         for p in session['jogadores']:
             roll = random.randint(1, 20)
             ordem.append({**p, 'tipo': 'JOGADOR', 'roll': roll})
@@ -131,14 +121,12 @@ class Combat(commands.Cog):
         
         session['log'].append("--- 🎲 INICIATIVAS ---")
         session['log'].extend(log_iniciativa)
-        
-        # Trava inicial
         session['bloqueado'] = True 
         
-        await interaction.response.send_message("🎲 Iniciativas definidas! O combate vai começar...", ephemeral=True)
+        await interaction.response.send_message("🎲 Iniciativas definidas! Preparando o campo...", ephemeral=True)
         
-        # Gera a primeira interface e SALVA o ID
-        await self.atualizar_interface(interaction.channel, nova_mensagem=True)
+        # Envia a PRIMEIRA mensagem do painel e salva o ID
+        await self.atualizar_interface(interaction.channel, force_new=True)
 
     async def destravar_turno(self, interaction, channel_id):
         session = self.sessions.get(channel_id)
@@ -147,18 +135,18 @@ class Combat(commands.Cog):
         session['bloqueado'] = False
         atual = session['ordem'][session['turno_index']]
         
-        # Defer e deleta o botão do mestre para limpar o chat
+        # Deleta a mensagem do mestre para limpar o chat
         await interaction.response.defer()
         try: await interaction.message.delete()
         except: pass
         
+        await self.atualizar_interface(interaction.channel)
+        
         if atual['tipo'] == 'MONSTRO':
-            await self.atualizar_interface(interaction.channel)
             await self.turno_ia_monstro(interaction.channel)
-        else:
-            await self.atualizar_interface(interaction.channel)
 
-    async def atualizar_interface(self, channel, nova_mensagem=False):
+    async def atualizar_interface(self, channel, force_new=False):
+        """Atualiza a mensagem principal do combate. Usa EDIT preferencialmente."""
         session = self.sessions.get(channel.id)
         if not session: return
 
@@ -180,9 +168,8 @@ class Combat(commands.Cog):
         if session['bloqueado']:
             embed.set_footer(text="⏸️ Cena Pausada - Aguardando Narração do Mestre")
             embed.color = 0xFFD700
-            # A view do Mestre sempre é uma NOVA mensagem para garantir que ele veja no final do chat
-            await channel.send(embed=embed, view=MestreView(self, channel.id))
-            return
+            # Mestre View é sempre nova para aparecer no fundo
+            return await channel.send(embed=embed, view=MestreView(self, channel.id))
 
         if session['turno_monstro']:
             embed.set_footer(text=f"TURNO DO INIMIGO")
@@ -192,22 +179,23 @@ class Combat(commands.Cog):
             if atual['tipo'] == 'JOGADOR':
                  async with self.bot.db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (atual['personagem_id'],)) as cursor:
                     skills_do_turno = await cursor.fetchall()
-
             embed.set_footer(text=f"VEZ DE: {atual.get('nome', 'Alguém')}")
             view = CombateView(self, channel.id, habilidades_jogador=skills_do_turno)
             
-        # Lógica de Edição vs Nova Mensagem
-        if nova_mensagem:
+        if force_new:
             msg = await channel.send(embed=embed, view=view)
             session['mensagem_id'] = msg.id
-        else:
+        elif session.get('mensagem_id'):
             try:
                 msg = await channel.fetch_message(session['mensagem_id'])
                 await msg.edit(embed=embed, view=view)
-            except:
-                # Se falhar (ex: msg deletada), cria uma nova
+            except discord.NotFound:
+                # Se deletaram a mensagem, cria outra
                 msg = await channel.send(embed=embed, view=view)
                 session['mensagem_id'] = msg.id
+        else:
+            msg = await channel.send(embed=embed, view=view)
+            session['mensagem_id'] = msg.id
 
     async def processar_acao_jogador(self, interaction, channel_id, acao, detalhes_skill=None):
         session = self.sessions.get(channel_id)
@@ -225,18 +213,18 @@ class Combat(commands.Cog):
             narrativa = f"🛡️ {jogador['nome']} preparou defesa!"
         elif acao == "Habilidade" and detalhes_skill:
             detalhes_rolagem, total = rolar_dados(detalhes_skill['formula'])
-            dano = total if detalhes_skill['formula'] else 0
-            narrativa = f"✨ {jogador['nome']} usou **{detalhes_skill['nome']}**! ({detalhes_rolagem or 'Efeito'}) -> **{dano} dano**"
+            dano = total if total else 0
+            narrativa = f"✨ {jogador['nome']} usou **{detalhes_skill['nome']}**! -> **{dano} dano**"
 
         monstro['hp_atual'] -= dano
         session['log'].append(narrativa)
 
         await interaction.response.defer()
         
-        # --- FIM DE COMBATE COM XP ---
+        # Check Fim de Combate
         if monstro['hp_atual'] <= 0:
             xp_total = int(monstro['hp_max'] * 1.5)
-            if xp_total < 10: xp_total = 10
+            xp_total = max(10, xp_total)
 
             vivos = [p for p in session['jogadores'] if p['hp'] > 0]
             msg_vitoria = f"🏆 **VITÓRIA!** O {monstro['nome']} foi derrotado!"
@@ -260,6 +248,8 @@ class Combat(commands.Cog):
     async def turno_ia_monstro(self, channel):
         await asyncio.sleep(2)
         session = self.sessions.get(channel.id)
+        if not session: return # Combate pode ter acabado nesse tempo
+        
         monstro = session['monstro']
         
         alvos = [p for p in session['jogadores'] if p['hp'] > 0]
@@ -272,6 +262,7 @@ class Combat(commands.Cog):
         alvo['hp'] -= dano
         session['log'].append(f"🔥 {monstro['nome']} atacou {alvo['nome']}! ({detalhes}) -> **{dano} dano**")
         
+        # Sincroniza HP na ordem
         for p in session['ordem']:
             if p.get('user_id') == alvo['user_id']: p['hp'] = alvo['hp']
 

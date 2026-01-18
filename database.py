@@ -1,6 +1,11 @@
 import sqlite3
 from pathlib import Path
 from typing import Iterable, Tuple, Optional
+import logging
+
+# Configuração básica de log para ver o que está acontecendo no console
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 DB_NAME = "bestiario.db"
 
@@ -14,27 +19,47 @@ def get_connection(db_path: str = DB_NAME) -> sqlite3.Connection:
     return conn
 
 def _column_exists(cursor: sqlite3.Cursor, table: str, column: str) -> bool:
-    cursor.execute(f"PRAGMA table_info({table});")
-    return any(row[1] == column for row in cursor.fetchall())
+    try:
+        cursor.execute(f"PRAGMA table_info({table});")
+        return any(row[1] == column for row in cursor.fetchall())
+    except Exception:
+        return False
 
 def _add_columns_if_missing(cursor: sqlite3.Cursor, table: str, columns: Iterable[Tuple[str, str]]) -> None:
+    if not _table_exists(cursor, table):
+        return
+
     for col, col_type in columns:
         if not _column_exists(cursor, table, col):
             try:
                 cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type};")
-                print(f"🔧 Coluna '{col}' adicionada em '{table}'.")
+                logger.info(f"🔧 Coluna '{col}' adicionada em '{table}'.")
             except Exception as e:
-                print(f"⚠️ Erro ao adicionar coluna {col}: {e}")
+                logger.error(f"⚠️ Erro ao adicionar coluna {col} em {table}: {e}")
 
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table,))
     return cursor.fetchone() is not None
 
 # =========================
-# SCHEMA (TODAS AS TABELAS)
+# SCHEMA (APENAS CRIAÇÃO)
 # =========================
+# Removi os ALTER TABLE daqui. Eles vão para a migração.
+# Consolidei a tabela quests.
 
 SCHEMA_SQL = """
+-- NOVA TABELA: Pontos de Interesse (Cidades, Ruínas, etc)
+CREATE TABLE IF NOT EXISTS locais_mundo (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT UNIQUE,
+    regiao TEXT,
+    descricao_lore TEXT,
+    lendas_locais TEXT,
+    coord_x INTEGER,
+    coord_y INTEGER,
+    nivel_perigo INTEGER DEFAULT 1
+);
+
 -- CORE RPG --
 CREATE TABLE IF NOT EXISTS personagens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,9 +76,14 @@ CREATE TABLE IF NOT EXISTS personagens (
     hp_atual INTEGER DEFAULT 30,
     mp_max INTEGER DEFAULT 10,
     ataque INTEGER DEFAULT 2,
-    defesa INTEGER DEFAULT 10
+    defesa INTEGER DEFAULT 10,
+    -- Campos de Localização (Já incluídos na criação para novos bancos)
+    localizacao_atual TEXT DEFAULT 'Deserto de Korath',
+    coord_x INTEGER DEFAULT 0,
+    coord_y INTEGER DEFAULT 0
 );
--- QUESTS ATUALIZADA --
+
+-- QUESTS UNIFICADA --
 CREATE TABLE IF NOT EXISTS quests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     titulo TEXT,
@@ -64,23 +94,31 @@ CREATE TABLE IF NOT EXISTS quests (
     regiao TEXT DEFAULT 'Desconhecida',
     max_jogadores INTEGER DEFAULT 1,
     thread_id INTEGER,
-    
-    -- Novos Campos --
     classes_req TEXT DEFAULT 'Todas',
-    criatura_id INTEGER, -- Link com tabela monsters
-    alvo_monstro_nome TEXT, -- Nome texto caso não tenha link
-    imagem_url TEXT -- URL da imagem gerada pelo DALL-E
+    criatura_id INTEGER,
+    alvo_monstro_nome TEXT,
+    imagem_url TEXT,
+    alvo_monstro TEXT, 
+    -- Novos Campos de Mapa
+    coord_x INTEGER DEFAULT 0,
+    coord_y INTEGER DEFAULT 0,
+    local_nome TEXT DEFAULT 'Desconhecido'
 );
 
-CREATE TABLE IF NOT EXISTS quest_participantes (quest_id INTEGER, user_id INTEGER, PRIMARY KEY(quest_id, user_id));
+CREATE TABLE IF NOT EXISTS quest_participantes (
+    quest_id INTEGER, 
+    user_id INTEGER, 
+    FOREIGN KEY(quest_id) REFERENCES quests(id) ON DELETE CASCADE,
+    PRIMARY KEY(quest_id, user_id)
+);
 
--- NOVA TABELA: MEMÓRIA DA CAMPANHA --
 CREATE TABLE IF NOT EXISTS memoria_campanha (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT, -- 'Quest', 'Evento', 'Resumo'
+    tipo TEXT,
     conteudo TEXT,
     data_registro TEXT DEFAULT (datetime('now'))
 );
+
 CREATE TABLE IF NOT EXISTS habilidades_personagem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     personagem_id INTEGER,
@@ -108,7 +146,6 @@ CREATE TABLE IF NOT EXISTS session_logs (
     timestamp TEXT DEFAULT (datetime('now'))
 );
 
--- ECONOMIA (LOJA) --
 CREATE TABLE IF NOT EXISTS loja_itens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
@@ -119,33 +156,7 @@ CREATE TABLE IF NOT EXISTS loja_itens (
     descricao TEXT
 );
 
--- QUESTS E MISSÕES --
-
-CREATE TABLE IF NOT EXISTS quests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    titulo TEXT,
-    descricao TEXT,
-    recompensa_ouro INTEGER DEFAULT 0,
-    recompensa_xp INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'Disponivel',
-    classes_req TEXT DEFAULT 'Todas',
-    
-    -- Novos Campos --
-    regiao TEXT DEFAULT 'Desconhecida',
-    max_jogadores INTEGER DEFAULT 1,
-    alvo_monstro TEXT, -- Nome do monstro ou "Nenhum"
-    thread_id INTEGER
-);
-
--- Tabela para suportar múltiplos jogadores na mesma quest
-CREATE TABLE IF NOT EXISTS quest_participantes (
-    quest_id INTEGER,
-    user_id INTEGER,
-    FOREIGN KEY(quest_id) REFERENCES quests(id) ON DELETE CASCADE,
-    PRIMARY KEY(quest_id, user_id)
-);
-
--- BESTIÁRIO (SIMPLIFICADO) --
+-- BESTIÁRIO (SIMPLIFICADO - Mantido para compatibilidade legado se necessário)
 CREATE TABLE IF NOT EXISTS criaturas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT UNIQUE,
@@ -157,10 +168,7 @@ CREATE TABLE IF NOT EXISTS criaturas (
     dano_base TEXT DEFAULT '1d6'
 );
 
--- =========================
--- BESTIÁRIO (NORMALIZADO)
--- =========================
-
+-- BESTIÁRIO NORMALIZADO --
 CREATE TABLE IF NOT EXISTS monsters (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   slug TEXT UNIQUE NOT NULL,
@@ -258,113 +266,56 @@ CREATE TABLE IF NOT EXISTS monster_sources (
   FOREIGN KEY(source_id) REFERENCES sources(id) ON DELETE CASCADE
 );
 
--- =========================
 -- INDICES
--- =========================
-
 CREATE INDEX IF NOT EXISTS idx_personagens_user_id ON personagens(user_id);
 CREATE INDEX IF NOT EXISTS idx_inventario_user_id ON inventario(user_id);
 CREATE INDEX IF NOT EXISTS idx_habilidades_personagem_id ON habilidades_personagem(personagem_id);
 CREATE INDEX IF NOT EXISTS idx_criaturas_nome ON criaturas(nome);
-
 CREATE INDEX IF NOT EXISTS idx_monsters_category ON monsters(category);
-CREATE INDEX IF NOT EXISTS idx_monsters_name ON monsters(name);
-CREATE INDEX IF NOT EXISTS idx_weaknesses_type ON weaknesses(type);
-CREATE INDEX IF NOT EXISTS idx_traits_key ON traits(key);
-CREATE INDEX IF NOT EXISTS idx_loot_items_key ON loot_items(key);
-CREATE INDEX IF NOT EXISTS idx_sources_key ON sources(key);
 """
 
 # =========================
-# SEEDS (DADOS INICIAIS)
+# SEEDS
 # =========================
 
 SEED_LOOKUPS_SQL = """
--- Weaknesses
 INSERT OR IGNORE INTO weaknesses (type, key, label) VALUES
 ('oil','necrophage_oil','Óleo contra Necrófagos'),
 ('oil','specter_oil','Óleo contra Espectros'),
 ('oil','hanged_mans_venom','Veneno do Enforcado'),
-
 ('bomb','samum','Samum'),
 ('bomb','grapeshot','Bomba de Pólvora'),
-('bomb','dancing_star','Estrela Dançante'),
-('bomb','devils_puffball','Sopro do Diabo'),
 ('bomb','moon_dust','Pó da Lua'),
-('bomb','northern_wind','Vento do Norte'),
-
 ('sign','igni','Igni'),
 ('sign','yrden','Yrden'),
 ('sign','aard','Aard'),
 ('sign','quen','Quen'),
 ('sign','axii','Axii'),
+('misc','silver','Prata');
 
-('misc','fire','Fogo'),
-('misc','silver','Prata'),
-('misc','keep_distance','Manter distância / controlar alcance');
-
--- Traits
 INSERT OR IGNORE INTO traits (key, label) VALUES
 ('pack_hunter','Caça em bando'),
 ('nocturnal','Noturno'),
-('carrion_feeder','Alimenta-se de carniça'),
-('ambusher','Emboscador'),
-('regenerative','Regenerativo'),
-('poisonous','Venenoso'),
-('waterbound','Vinculado à água'),
-('disease_risk','Risco de praga/doença'),
-('territorial','Territorial');
+('regenerative','Regenerativo');
 
--- Loot
-INSERT OR IGNORE INTO loot_items (key, label) VALUES
-('monster_claw','Garra de monstro'),
-('monster_tooth','Dente de monstro'),
-('rotting_flesh','Carne putrefata'),
-('monster_blood','Sangue de monstro'),
-('mutagen_minor','Mutágeno menor'),
-('essence_necrophage','Essência de necrófago');
-
--- Sources
 INSERT OR IGNORE INTO sources (key,label,canon_tier) VALUES
-('books','Livros (Sapkowski)','core'),
-('tw1','The Witcher 1','core'),
-('tw2','The Witcher 2','core'),
 ('tw3','The Witcher 3','core'),
-('hos','Hearts of Stone','core'),
-('baw','Blood and Wine','core'),
-('thronebreaker','Thronebreaker','extended'),
-('gwent','Gwent','extended'),
-('comics','Quadrinhos licenciados','extended'),
-('original','Originais (Witcher-like)','apocrypha');
+('books','Livros','core');
 """
 
 SEED_MONSTERS_SQL = """
 INSERT OR IGNORE INTO monsters (slug, name, category, threat_level, origin, canon_tier)
 VALUES
 ('drowner','Drowner','Necrophage',2,'tw3','core'),
-('water_hag','Water Hag','Necrophage',3,'tw3','core'),
 ('ghoul','Ghoul','Necrophage',2,'tw3','core'),
-('alghoul','Alghoul','Necrophage',4,'tw3','core'),
-('rotfiend','Rotfiend','Necrophage',3,'tw3','core'),
-('wraith','Wraith','Specter',3,'tw3','core'),
-('nightwraith','Nightwraith','Specter',3,'tw3','core'),
-('noonwraith','Noonwraith','Specter',3,'tw3','core');
+('wraith','Wraith','Specter',3,'tw3','core');
 """
 
 SEED_RELATIONS_SQL = """
+-- Relacionar monstros com sources e fraquezas de forma segura
 INSERT OR IGNORE INTO monster_sources (monster_id, source_id)
 SELECT m.id, s.id FROM monsters m JOIN sources s ON s.key = m.origin
-WHERE m.origin IS NOT NULL AND m.origin <> '';
-
-INSERT OR IGNORE INTO monster_weaknesses (monster_id, weakness_id, priority, note)
-SELECT m.id, w.id, 1, 'Resposta padrão.'
-FROM monsters m, weaknesses w
-WHERE m.category='Specter' AND w.key IN ('specter_oil','yrden','moon_dust');
-
-INSERT OR IGNORE INTO monster_weaknesses (monster_id, weakness_id, priority, note)
-SELECT m.id, w.id, 1, 'Resposta padrão.'
-FROM monsters m, weaknesses w
-WHERE m.category='Necrophage' AND w.key IN ('necrophage_oil','igni','aard','quen','silver');
+WHERE m.origin IS NOT NULL;
 """
 
 # =========================
@@ -372,21 +323,43 @@ WHERE m.category='Necrophage' AND w.key IN ('necrophage_oil','igni','aard','quen
 # =========================
 
 def migrate_db(cursor: sqlite3.Cursor) -> None:
-    """Centraliza todas as migrações"""
+    """Centraliza todas as migrações (ALTER TABLES seguros)."""
     
-    # 1. Migração Personagens (HP Atual, MP, etc)
+    # 1. Personagens: Atualizações de RPG e MAPA
     personagens_extras = [
         ("hp_max", "INTEGER DEFAULT 30"),
         ("mp_max", "INTEGER DEFAULT 10"),
         ("ataque", "INTEGER DEFAULT 2"),
         ("defesa", "INTEGER DEFAULT 10"),
         ("xp_atual", "INTEGER DEFAULT 0"),
-        ("hp_atual", "INTEGER DEFAULT 30")
+        ("hp_atual", "INTEGER DEFAULT 30"),
+        # Mapa
+        ("localizacao_atual", "TEXT DEFAULT 'Deserto de Korath'"),
+        ("coord_x", "INTEGER DEFAULT 0"),
+        ("coord_y", "INTEGER DEFAULT 0")
     ]
     if _table_exists(cursor, "personagens"):
         _add_columns_if_missing(cursor, "personagens", personagens_extras)
 
-    # 2. Migração Monstros (Origin/Canon Tier)
+    # 2. Quests: Atualizações de Mapa e Lógica
+    quests_extras = [
+        ("classes_req", "TEXT DEFAULT 'Todas'"),
+        ("thread_id", "INTEGER"),
+        ("regiao", "TEXT DEFAULT 'Desconhecida'"),
+        ("max_jogadores", "INTEGER DEFAULT 1"),
+        ("alvo_monstro", "TEXT"),
+        ("criatura_id", "INTEGER"),
+        ("alvo_monstro_nome", "TEXT"),
+        ("imagem_url", "TEXT"),
+        # Mapa
+        ("coord_x", "INTEGER DEFAULT 0"),
+        ("coord_y", "INTEGER DEFAULT 0"),
+        ("local_nome", "TEXT DEFAULT 'Desconhecido'")
+    ]
+    if _table_exists(cursor, "quests"):
+        _add_columns_if_missing(cursor, "quests", quests_extras)
+
+    # 3. Monstros
     monsters_extras = [
         ("origin", "TEXT"),
         ("canon_tier", "TEXT DEFAULT 'core'"),
@@ -394,54 +367,35 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     if _table_exists(cursor, "monsters"):
         _add_columns_if_missing(cursor, "monsters", monsters_extras)
 
-    # 3. Migração Quests (Restrição de Classe)
-    quests_extras = [
-        ("classes_req", "TEXT DEFAULT 'Todas'"),
-        ("thread_id", "INTEGER"),
-        ("regiao", "TEXT DEFAULT 'Desconhecida'"),
-        ("max_jogadores", "INTEGER DEFAULT 1"),
-        ("alvo_monstro", "TEXT"),
-        ("nota_mestre", "TEXT")
-    ]
-    if _table_exists(cursor, "quests"):
-        _add_columns_if_missing(cursor, "quests", quests_extras)
-
 def seed_bestiary(conn: sqlite3.Connection) -> None:
-    """Aplica seeds de arquivos externos e strings internas de forma segura."""
     cur = conn.cursor()
     
-    # 1. Tenta carregar arquivos externos se existirem
+    # 1. Carregar arquivos SQL externos se existirem
     seed_files = [
         "seed_bestiary_ecosystem.sql",
         "seed_tw3_full_by_category.sql",
-        "seed_books_core.sql",
-        "seed_books_core_lote2.sql",
-        "seed_tw2_full.sql",
-        "seed_dlcs_hos_baw.sql",
-        "seed_named_monsters_core.sql"
+        "seed_books_core.sql"
     ]
     
     for filename in seed_files:
         p = Path(filename)
         if p.exists():
             try:
-                print(f"📄 Aplicando seed externo: {filename}")
+                logger.info(f"📄 Aplicando seed externo: {filename}")
                 script = p.read_text(encoding="utf-8")
                 conn.executescript(script)
                 conn.commit()
             except Exception as e:
-                print(f"❌ Erro ao aplicar {filename}: {e}")
-        else:
-            pass
+                logger.error(f"❌ Erro ao aplicar {filename}: {e}")
 
-    # 2. Aplica seeds internos de garantia (Lookups, Monstros básicos)
+    # 2. Seeds internos de garantia
     try:
         cur.executescript(SEED_LOOKUPS_SQL)
         cur.executescript(SEED_MONSTERS_SQL)
         cur.executescript(SEED_RELATIONS_SQL)
         conn.commit()
     except Exception as e:
-        print(f"⚠️ Erro nos seeds internos: {e}")
+        logger.error(f"⚠️ Erro nos seeds internos: {e}")
 
 # =========================
 # INIT
@@ -453,12 +407,12 @@ def init_db(db_path: str = DB_NAME) -> None:
     with get_connection(db_path) as conn:
         cur = conn.cursor()
 
-        # 1) Schema (Cria todas as tabelas)
+        # 1) Schema (Cria todas as tabelas SE NÃO existirem)
         cur.executescript(SCHEMA_SQL)
+        conn.commit()
         
-        # 2) Migrações (Atualiza tabelas antigas se necessário)
+        # 2) Migrações (Adiciona colunas novas em tabelas velhas)
         migrate_db(cur)
-        
         conn.commit()
 
         # 3) Seeds (Popula dados iniciais)
