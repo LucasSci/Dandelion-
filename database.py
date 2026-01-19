@@ -406,6 +406,16 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     if _table_exists(cursor, "quests"):
         _add_columns_if_missing(cursor, "quests", quests_extras)
 
+    # 4. Migração de Índices de Performance
+    try:
+        if _table_exists(cursor, "session_logs"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_logs_channel_id ON session_logs(channel_id);")
+        if _table_exists(cursor, "quests"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_quests_thread_id ON quests(thread_id);")
+        print("⚡ Índices de performance aplicados.")
+    except Exception as e:
+        print(f"⚠️ Erro ao aplicar índices: {e}")
+
 def seed_bestiary(conn: sqlite3.Connection) -> None:
     """Aplica seeds de arquivos externos e strings internas de forma segura."""
     cur = conn.cursor()
