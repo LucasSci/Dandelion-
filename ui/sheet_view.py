@@ -189,11 +189,11 @@ class FichaView(ui.View):
     def update_buttons_state(self, mode: str):
         for item in self.children:
             if isinstance(item, ui.Button) and item.label:
-                if item.label == "📜 Info/Lore":
+                if item.label == "Info/Lore":
                     is_active = (mode == "info")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "⚔️ Habilidades":
+                elif item.label == "Habilidades":
                     is_active = (mode == "skills")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
@@ -212,19 +212,19 @@ class FichaView(ui.View):
         return False
 
     # --- NAVEGAÇÃO (ROW 0) ---
-    @ui.button(label="📜 Info/Lore", style=discord.ButtonStyle.secondary, row=0)
+    @ui.button(label="Info/Lore", emoji="📜", style=discord.ButtonStyle.secondary, row=0)
     async def btn_info(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_info_geral(interaction)
 
-    @ui.button(label="⚔️ Habilidades", style=discord.ButtonStyle.secondary, row=0)
+    @ui.button(label="Habilidades", emoji="⚔️", style=discord.ButtonStyle.secondary, row=0)
     async def btn_skills(self, interaction: discord.Interaction, button: ui.Button):
         await self.atualizar_botoes_habilidade(interaction)
 
-    @ui.button(label="➕ Nova Skill", style=discord.ButtonStyle.success, row=0)
+    @ui.button(label="Nova Skill", emoji="➕", style=discord.ButtonStyle.success, row=0)
     async def btn_add_skill(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self))
 
-    @ui.button(label="⚙️ Gerenciar", style=discord.ButtonStyle.secondary, row=0)
+    @ui.button(label="Gerenciar", emoji="⚙️", style=discord.ButtonStyle.secondary, row=0)
     async def btn_gerenciar(self, interaction: discord.Interaction, button: ui.Button):
         db = interaction.client.db
         async with db.execute("SELECT id, nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (self.personagem_id,)) as cursor:
