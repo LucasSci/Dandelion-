@@ -17,3 +17,7 @@
 ## 2024-05-21 - Visual Affordance for Skill Types
 **Learning:** Users can distinguish between active (rollable) and passive (utility) skills faster when visual cues (color + emoji) are used.
 **Action:** Use `ButtonStyle.primary` + 🎲 for rollable actions, and `ButtonStyle.secondary` + ✨ for passive/utility actions.
+
+## 2026-01-20 - Destructive Action Confirmation Pattern
+**Learning:** Users often click buttons accidentally on mobile. Immediate destruction without confirmation leads to frustration and data loss.
+**Action:** Implement `ConfirmarExclusaoView` (or similar confirmation dialog) for all delete/destructive actions. Replace the current view with the confirmation view, offering "Confirm" (Danger) and "Cancel" (Secondary) options.
