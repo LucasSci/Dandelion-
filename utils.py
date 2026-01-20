@@ -11,7 +11,7 @@ def rolar_dados(formula: str):
         
     formula = formula.lower().replace(" ", "")
     # Tenta encontrar padrão XdY+Z
-    match = re.match(r'(\d+)d(\d+)(?:([+-])(\d+))?', formula)
+    match = re.fullmatch(r'(\d+)d(\d+)(?:([+-])(\d+))?', formula)
     
     if not match:
         # Se for apenas um número fixo (ex: "5")
@@ -21,6 +21,8 @@ def rolar_dados(formula: str):
     
     qtd, lados, sinal, bonus = match.groups()
     qtd, lados = int(qtd), int(lados)
+    if qtd <= 0 or lados <= 0:
+        return None, 0
     bonus = int(bonus) if bonus else 0
     
     rolls = [random.randint(1, lados) for _ in range(qtd)]
