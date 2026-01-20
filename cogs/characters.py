@@ -471,14 +471,54 @@ class Characters(commands.Cog):
             itens = await cursor.fetchall()
 
         ficha = {
-            "nome": personagem[1],
-            "raca": personagem[2],
-            "classe": personagem[3],
-            "nivel": personagem[4],
-            "xp_atual": personagem[5],
-            "historia": personagem[6],
-            "imagem_url": personagem[7],
-            "ouro": personagem[8],
+            "metadata": {
+                "nome": personagem[1],
+                "raca": personagem[2],
+                "classe": personagem[3],
+                "nivel": personagem[4],
+                "xp_atual": personagem[5],
+                "historia": personagem[6],
+                "imagem_url": personagem[7],
+                "ouro": personagem[8],
+            },
+            "core_stats": {
+                "INT": 0,
+                "REF": 0,
+                "DEX": 0,
+                "BODY": 0,
+                "SPD": 0,
+                "EMP": 0,
+                "CRA": 0,
+                "WILL": 0,
+                "LUCK": 0,
+            },
+            "derived_stats": {
+                "Stun": 0,
+                "Run": 0,
+                "Leap": 0,
+                "HP": personagem[9],
+                "Stamina": 0,
+                "Vigor": 0,
+                "Recovery": 0,
+            },
+            "skills_tree": [
+                {
+                    "nome": h[0],
+                    "stat_base": None,
+                    "pontos_investidos": 0,
+                    "modificadores": [],
+                }
+                for h in habilidades
+            ],
+            "witcher_specifics": {
+                "toxicity": {"atual": 0, "max": 0},
+                "focus": 0,
+            },
+            "armor_layers": {
+                "cabeca": {"sp": 0, "reliability": 100},
+                "tronco": {"sp": 0, "reliability": 100},
+                "pernas": {"sp": 0, "reliability": 100},
+            },
             "atributos": {
                 "hp_max": personagem[9],
                 "hp_atual": personagem[10],
