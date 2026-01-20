@@ -9,6 +9,13 @@ class Campaign(commands.Cog):
         self.bot = bot
 
     @staticmethod
+    def _split_text(texto: str, limite: int = 3900) -> list[str]:
+        texto = (texto or "").strip()
+        if not texto:
+            return [""]
+        return [texto[i : i + limite] for i in range(0, len(texto), limite)]
+
+    @staticmethod
     def _resumir_texto(texto: str, limite: int = 200) -> str:
         texto = (texto or "").strip()
         if len(texto) <= limite:
@@ -121,15 +128,23 @@ class Campaign(commands.Cog):
                 ephemeral=True,
             )
 
-        texto = ""
+        embeds = []
         for entry_id, titulo, resumo, conteudo in rows:
-            base = resumo or conteudo or ""
-            base = self._resumir_texto(base, 150)
-            texto += f"**[{entry_id}]** {titulo}: {base}\n"
+            partes = self._split_text(conteudo or resumo or "", 3900)
+            total = len(partes)
+            for index, parte in enumerate(partes, start=1):
+                sufixo = f" (parte {index}/{total})" if total > 1 else ""
+                embed = discord.Embed(
+                    title=f"📚 [{entry_id}] {titulo}{sufixo}",
+                    description=parte or "—",
+                    color=0x2E7D32,
+                )
+                embed.set_footer(text="A IA usa este lore como verdade adicional para criar missões.")
+                embeds.append(embed)
 
-        embed = discord.Embed(title="📚 Banco de Conhecimento do Mundo", description=texto, color=0x2E7D32)
-        embed.set_footer(text="A IA usa este lore como verdade adicional para criar missões.")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embeds[0], ephemeral=True)
+        for embed in embeds[1:]:
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="lore_adicionar", description="➕ Registra um fato do mundo para a IA usar")
     @app_commands.describe(titulo="Título curto do lore", conteudo="Texto completo do conhecimento")

@@ -30,6 +30,7 @@ def load_settings() -> Settings:
             "cogs.rumors",
             "cogs.npcs",
             "cogs.progress",
+            "cogs.gwent",
         ),
         optional_extensions=("cogs.shop",),
     )
