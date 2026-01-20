@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel
 
 from vtt_engine.grid_system import GridMap
+from witcher_rules import rolar_pericia
 from witcher_rules import rolar_d10_explosivo
 
 
@@ -26,6 +27,8 @@ class RollSkillResponse(BaseModel):
 
 @router.post("/roll_skill", response_model=None)
 def roll_skill(payload: RollSkillRequest) -> RollSkillResponse:
+    result = rolar_pericia(stat=payload.stat, skill=payload.skill)
+    return RollSkillResponse(total=result.total, rolls=result.rolls)
     roll_total, rolls = rolar_d10_explosivo()
     total = roll_total + payload.stat + payload.skill
     return RollSkillResponse(total=total, rolls=rolls)
