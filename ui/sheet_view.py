@@ -4,6 +4,140 @@ from utils import rolar_dados, rolar_pericia_explosiva
 from ui.views import ConfirmarExclusaoView
 
 # ==============================================================================
+# 0. HELPERS (LAYOUT)
+# ==============================================================================
+
+def _format_dual_column(items, name_width=12, value_width=5):
+    if not items:
+        return "_Nenhum registrado._"
+
+    lines = []
+    for idx in range(0, len(items), 2):
+        left_name, left_value = items[idx]
+        left_value = "—" if left_value is None or left_value == "" else left_value
+        left = f"{str(left_name)[:name_width]:<{name_width}} {str(left_value)[:value_width]:>{value_width}}"
+
+        right = ""
+        if idx + 1 < len(items):
+            right_name, right_value = items[idx + 1]
+            right_value = "—" if right_value is None or right_value == "" else right_value
+            right = f"{str(right_name)[:name_width]:<{name_width}} {str(right_value)[:value_width]:>{value_width}}"
+
+        line = f"{left}   {right}".rstrip()
+        lines.append(line)
+
+    return "```\n" + "\n".join(lines) + "\n```"
+
+
+def _format_list(items, prefix="• "):
+    if not items:
+        return "_Nenhum registrado._"
+    return "\n".join([f"{prefix}{item}" for item in items])
+
+
+def _barra_progresso(atual, maximo, simbolo, tamanho=10):
+    if maximo <= 0:
+        return simbolo * tamanho
+    pct = max(min(atual / maximo, 1), 0)
+    return simbolo * int(pct * tamanho) + "⬛" * (tamanho - int(pct * tamanho))
+
+
+async def construir_embed_ficha(db, personagem_id, user_id):
+    async with db.execute("""
+        SELECT p.nome, p.raca, p.classe, p.nivel, p.historia, p.imagem_url, p.ouro,
+               p.hp_atual, p.hp_max, p.mp_max, p.ataque, p.defesa, p.xp_atual,
+               p.vigor_atual, p.vigor_max, p.toxicidade_atual, p.toxicidade_max, w.nome
+        FROM personagens p
+        LEFT JOIN world_locations w ON w.id = p.localizacao_id
+        WHERE p.id = ?
+    """, (personagem_id,)) as cursor:
+        dados = await cursor.fetchone()
+
+    if not dados:
+        return None
+
+    (
+        nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max, mp_max,
+        ataque, defesa, xp_atual, vigor_atual, vigor_max, toxicidade_atual, toxicidade_max, local
+    ) = dados
+    if hp_atual is None:
+        hp_atual = hp_max
+    if vigor_atual is None:
+        vigor_atual = vigor_max
+    if toxicidade_atual is None:
+        toxicidade_atual = 0
+
+    async with db.execute(
+        "SELECT nome, valor FROM atributos_personagem WHERE personagem_id = ? ORDER BY nome LIMIT 12",
+        (personagem_id,)
+    ) as cursor:
+        atributos = await cursor.fetchall()
+
+    async with db.execute(
+        "SELECT nome, dado FROM habilidades_personagem WHERE personagem_id = ? ORDER BY nome LIMIT 10",
+        (personagem_id,)
+    ) as cursor:
+        pericias = await cursor.fetchall()
+
+    async with db.execute(
+        "SELECT nome, tipo FROM inventario WHERE user_id = ? ORDER BY id DESC LIMIT 8",
+        (user_id,)
+    ) as cursor:
+        itens = await cursor.fetchall()
+
+    pericias_formatadas = [(nome, dado or "—") for nome, dado in pericias]
+    itens_formatados = [
+        f"**{nome}** ({tipo})" if tipo else f"**{nome}**"
+        for nome, tipo in itens
+    ]
+
+    embed = discord.Embed(
+        title=f"📜 {nome}",
+        description=(
+            f"*{classe}* • **{raca}** • Nível **{nivel}**\n"
+            f"{historia or '_Sem registro._'}"
+        ),
+        color=0xE8D6B3
+    )
+    embed.add_field(name="📍 Localização", value=local or "Desconhecida", inline=True)
+    embed.add_field(name="💰 Ouro", value=str(ouro), inline=True)
+    embed.add_field(name="🧭 XP Atual", value=str(xp_atual), inline=True)
+
+    barra_hp = _barra_progresso(hp_atual, hp_max, "🟥")
+    barra_vigor = _barra_progresso(vigor_atual, vigor_max, "🟨")
+    recursos = (
+        f"❤️ HP {hp_atual}/{hp_max}\n`{barra_hp}`\n"
+        f"⚡ Vigor {vigor_atual}/{vigor_max}\n`{barra_vigor}`\n"
+        f"☠️ Toxicidade {toxicidade_atual}/{toxicidade_max}"
+    )
+    embed.add_field(name="Recursos", value=recursos, inline=False)
+    embed.add_field(
+        name="⚔️ Combate & Magia",
+        value=f"Ataque **{ataque}** • Defesa **{defesa}** • MP **{mp_max}**",
+        inline=False
+    )
+    embed.add_field(
+        name="🧠 Atributos",
+        value=_format_dual_column(atributos, name_width=10, value_width=3),
+        inline=True
+    )
+    embed.add_field(
+        name="✨ Perícias & Sinais",
+        value=_format_dual_column(pericias_formatadas, name_width=12, value_width=6),
+        inline=True
+    )
+    embed.add_field(
+        name="🎒 Equipamentos em Destaque",
+        value=_format_list(itens_formatados),
+        inline=False
+    )
+
+    if img:
+        embed.set_thumbnail(url=img)
+    embed.set_footer(text="Ficha estilo pergaminho • Visual inspirado em crônicas de bruxos")
+    return embed
+
+# ==============================================================================
 # 1. MODAIS (CRIAR E EDITAR)
 # ==============================================================================
 
@@ -535,62 +669,10 @@ class FichaView(ui.View):
         self.update_buttons_state("geral")
         
         db = interaction.client.db
-        async with db.execute("""
-            SELECT p.nome, p.raca, p.classe, p.nivel, p.historia, p.imagem_url, p.ouro,
-                   p.hp_atual, p.hp_max, p.mp_max, p.ataque, p.defesa, p.xp_atual,
-                   p.vigor_atual, p.vigor_max, p.toxicidade_atual, p.toxicidade_max, w.nome
-            FROM personagens p
-            LEFT JOIN world_locations w ON w.id = p.localizacao_id
-            WHERE p.id = ?
-        """, (self.personagem_id,)) as cursor:
-            dados = await cursor.fetchone()
-        
-        if not dados: return
-        (
-            nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max, mp_max,
-            ataque, defesa, xp_atual, vigor_atual, vigor_max, toxicidade_atual, toxicidade_max, local
-        ) = dados
-        if hp_atual is None: hp_atual = hp_max
-        if vigor_atual is None: vigor_atual = vigor_max
+        embed = await construir_embed_ficha(db, self.personagem_id, interaction.user.id)
+        if not embed:
+            return
 
-        async with db.execute(
-            "SELECT nome FROM habilidades_personagem WHERE personagem_id = ? ORDER BY nome ASC LIMIT 5",
-            (self.personagem_id,)
-        ) as cursor:
-            pericias = await cursor.fetchall()
-        async with db.execute(
-            "SELECT COUNT(*) FROM habilidades_personagem WHERE personagem_id = ?",
-            (self.personagem_id,)
-        ) as cursor:
-            total_pericias = (await cursor.fetchone())[0]
-
-        pericias_txt = ", ".join([p[0] for p in pericias]) if pericias else "Nenhuma registrada."
-        if total_pericias > 5:
-            pericias_txt += f" (+{total_pericias - 5} outras)"
-
-        embed = discord.Embed(
-            title=f"📜 {nome}",
-            description=historia or "Sem registro.",
-            color=0xE8D6B3
-        )
-        embed.add_field(name="Raça", value=raca, inline=True)
-        embed.add_field(name="Classe", value=classe, inline=True)
-        embed.add_field(name="Nível", value=str(nivel), inline=True)
-        embed.add_field(name="📍 Localização", value=local or "Desconhecida", inline=False)
-        
-        barra = "🟩" * int((hp_atual/hp_max)*10) if hp_max > 0 else "🟩"*10
-        embed.add_field(name="❤️ Vida", value=f"{hp_atual}/{hp_max}\n`{barra}`", inline=True)
-
-        barra_vigor = "🟨" * int((vigor_atual/vigor_max)*10) if vigor_max > 0 else "🟨"*10
-        embed.add_field(name="⚡ Vigor", value=f"{vigor_atual}/{vigor_max}\n`{barra_vigor}`", inline=True)
-        embed.add_field(name="☠️ Toxicidade", value=f"{toxicidade_atual}/{toxicidade_max}", inline=True)
-        
-        embed.add_field(name="Ouro", value=f"💰 {ouro}", inline=True)
-        embed.add_field(name="XP Atual", value=str(xp_atual), inline=True)
-        embed.add_field(name="Atributos", value=f"Ataque {ataque} • Defesa {defesa} • MP {mp_max}", inline=False)
-        embed.add_field(name="Perícias (Busca rápida disponível)", value=pericias_txt, inline=False)
-        if img: embed.set_thumbnail(url=img)
-        
         self.clear_dynamic_buttons()
         await interaction.response.edit_message(embed=embed, view=self)
 
