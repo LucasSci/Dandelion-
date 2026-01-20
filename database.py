@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS world_locations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT UNIQUE NOT NULL,
     descricao TEXT,
+    biome TEXT,
+    clima TEXT,
     parent_id INTEGER,
     x INTEGER,
     y INTEGER,
@@ -130,6 +132,69 @@ CREATE TABLE IF NOT EXISTS session_logs (
     content TEXT,
     is_bot BOOLEAN,
     timestamp TEXT DEFAULT (datetime('now'))
+);
+
+-- RUMORES / GANCHOS --
+CREATE TABLE IF NOT EXISTS rumores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    titulo TEXT NOT NULL,
+    descricao TEXT NOT NULL,
+    fonte TEXT,
+    status TEXT DEFAULT 'Ativo',
+    criado_em TEXT DEFAULT (datetime('now'))
+);
+
+-- NPCs COM PERSONALIDADE --
+CREATE TABLE IF NOT EXISTS npc_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT UNIQUE NOT NULL,
+    personalidade TEXT NOT NULL,
+    humor TEXT NOT NULL,
+    habitos TEXT NOT NULL,
+    voz TEXT,
+    observacoes TEXT,
+    criado_em TEXT DEFAULT (datetime('now'))
+);
+
+-- FACÇÕES E REPUTAÇÃO --
+CREATE TABLE IF NOT EXISTS faccoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT UNIQUE NOT NULL,
+    descricao TEXT
+);
+
+CREATE TABLE IF NOT EXISTS reputacoes (
+    user_id INTEGER NOT NULL,
+    faccao_id INTEGER NOT NULL,
+    reputacao INTEGER DEFAULT 0,
+    atualizado_em TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, faccao_id),
+    FOREIGN KEY (faccao_id) REFERENCES faccoes(id) ON DELETE CASCADE
+);
+
+-- CONQUISTAS --
+CREATE TABLE IF NOT EXISTS conquistas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT UNIQUE NOT NULL,
+    descricao TEXT,
+    categoria TEXT
+);
+
+CREATE TABLE IF NOT EXISTS usuario_conquistas (
+    user_id INTEGER NOT NULL,
+    conquista_id INTEGER NOT NULL,
+    obtido_em TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, conquista_id),
+    FOREIGN KEY (conquista_id) REFERENCES conquistas(id) ON DELETE CASCADE
+);
+
+-- LEGADO --
+CREATE TABLE IF NOT EXISTS legado_beneficios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    titulo TEXT NOT NULL,
+    descricao TEXT,
+    concedido_em TEXT DEFAULT (datetime('now'))
 );
 
 -- ECONOMIA (LOJA) --
@@ -457,6 +522,13 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     ]
     if _table_exists(cursor, "personagens"):
         _add_columns_if_missing(cursor, "personagens", personagens_extras)
+
+    world_location_extras = [
+        ("biome", "TEXT"),
+        ("clima", "TEXT"),
+    ]
+    if _table_exists(cursor, "world_locations"):
+        _add_columns_if_missing(cursor, "world_locations", world_location_extras)
 
     # 2. Migração Monstros (Origin/Canon Tier)
     monsters_extras = [
