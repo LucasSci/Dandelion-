@@ -52,11 +52,11 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         self.assertIn("LIMIT 20", sql_query.upper(), "LIMIT 20 should be present in the query")
 
         # Check that we have correct number of children
-        # 4 static (info, skills, add, manage) + 20 dynamic = 24.
+        # 5 static (info, skills, atributos, add, manage) + 20 dynamic = 25.
         # Wait, let's check FichaView structure.
-        # row 0 has: Info, Skills, Nova Skill, Gerenciar. (4 items)
-        # So 4 + 20 = 24.
-        self.assertEqual(len(view.children), 24)
+        # row 0 has: Info, Skills, Atributos, Nova Skill, Gerenciar. (5 items)
+        # So 5 + 20 = 25.
+        self.assertEqual(len(view.children), 25)
 
 if __name__ == "__main__":
     unittest.main()

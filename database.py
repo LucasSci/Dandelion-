@@ -116,6 +116,33 @@ CREATE TABLE IF NOT EXISTS habilidades_personagem (
     FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS atributos_personagem (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    personagem_id INTEGER NOT NULL,
+    nome TEXT NOT NULL,
+    valor INTEGER DEFAULT 0,
+    UNIQUE(personagem_id, nome),
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS armaduras_personagem (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    personagem_id INTEGER NOT NULL,
+    localizacao TEXT NOT NULL,
+    sp INTEGER DEFAULT 0,
+    UNIQUE(personagem_id, localizacao),
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS armadura_modificadores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    armadura_id INTEGER NOT NULL,
+    tipo_dano TEXT NOT NULL,
+    multiplicador REAL DEFAULT 1.0,
+    UNIQUE(armadura_id, tipo_dano),
+    FOREIGN KEY(armadura_id) REFERENCES armaduras_personagem(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS inventario (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,

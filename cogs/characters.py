@@ -2,12 +2,23 @@ import aiosqlite
 import discord
 import io
 import json
+from typing import Optional
 from discord.ext import commands
 from discord import app_commands
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView
 
 DB_NAME = "bestiario.db"
+LOCALIZACOES_ARMADURA = {
+    "Cabeça": "cabeca",
+    "Torso": "torso",
+    "Braços": "bracos",
+    "Pernas": "pernas",
+}
+LOCALIZACOES_ARMADURA_CHOICES = [
+    app_commands.Choice(name=nome, value=valor)
+    for nome, valor in LOCALIZACOES_ARMADURA.items()
+]
 
 def is_mestre(interaction: discord.Interaction) -> bool:
     return interaction.user.guild_permissions.administrator
@@ -39,6 +50,16 @@ class Characters(commands.Cog):
         ) as cursor:
             rows = await cursor.fetchall()
             return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
+
+    async def _buscar_personagem(self, user_id: int):
+        async with self.bot.db.execute(
+            "SELECT id, nome, hp_atual, hp_max FROM personagens WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            return await cursor.fetchone()
+
+    def _permitir_alvo(self, interaction: discord.Interaction, usuario: Optional[discord.Member]) -> bool:
+        return usuario is None or usuario.id == interaction.user.id or is_mestre(interaction)
 
     # --- COMANDOS DE MESTRE (XP, NÍVEL E OURO) ---
 
@@ -210,6 +231,210 @@ class Characters(commands.Cog):
             await interaction.response.send_message(f"🧭 Você viajou para **{destino}**.")
         else:
             await interaction.response.send_message(f"🧭 {target.display_name} foi movido para **{destino}**.")
+
+    # --- ATRIBUTOS / PERÍCIAS ---
+    @app_commands.command(name="atributo_definir", description="Define o valor de um atributo.")
+    async def atributo_definir(
+        self,
+        interaction: discord.Interaction,
+        nome: str,
+        valor: int,
+        usuario: Optional[discord.Member] = None
+    ):
+        if not self._permitir_alvo(interaction, usuario):
+            return await interaction.response.send_message("❌ Apenas o Mestre pode ajustar outros jogadores.", ephemeral=True)
+
+        target = usuario or interaction.user
+        personagem = await self._buscar_personagem(target.id)
+        if not personagem:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, personagem_nome, _, _ = personagem
+        await self.bot.db.execute(
+            """
+            INSERT INTO atributos_personagem (personagem_id, nome, valor)
+            VALUES (?, ?, ?)
+            ON CONFLICT(personagem_id, nome) DO UPDATE SET valor = excluded.valor
+            """,
+            (personagem_id, nome.strip(), valor)
+        )
+        await self.bot.db.commit()
+
+        await interaction.response.send_message(
+            f"✅ Atributo **{nome}** atualizado para **{valor}** em {personagem_nome}."
+        )
+
+    @app_commands.command(name="atributo_listar", description="Lista os atributos cadastrados.")
+    async def atributo_listar(
+        self,
+        interaction: discord.Interaction,
+        usuario: Optional[discord.Member] = None
+    ):
+        if not self._permitir_alvo(interaction, usuario):
+            return await interaction.response.send_message("❌ Apenas o Mestre pode ver atributos de outros jogadores.", ephemeral=True)
+
+        target = usuario or interaction.user
+        personagem = await self._buscar_personagem(target.id)
+        if not personagem:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, personagem_nome, _, _ = personagem
+        async with self.bot.db.execute(
+            "SELECT nome, valor FROM atributos_personagem WHERE personagem_id = ? ORDER BY nome",
+            (personagem_id,)
+        ) as cursor:
+            atributos = await cursor.fetchall()
+
+        if not atributos:
+            return await interaction.response.send_message("📭 Nenhum atributo cadastrado.")
+
+        linhas = "\n".join([f"• **{nome}**: {valor}" for nome, valor in atributos])
+        await interaction.response.send_message(f"📋 Atributos de **{personagem_nome}**:\n{linhas}")
+
+    # --- ARMADURA / DANO ---
+    @app_commands.command(name="armadura_definir", description="Define o SP da armadura por localização.")
+    @app_commands.choices(localizacao=LOCALIZACOES_ARMADURA_CHOICES)
+    async def armadura_definir(
+        self,
+        interaction: discord.Interaction,
+        localizacao: str,
+        sp: int,
+        usuario: Optional[discord.Member] = None
+    ):
+        if not self._permitir_alvo(interaction, usuario):
+            return await interaction.response.send_message("❌ Apenas o Mestre pode ajustar outros jogadores.", ephemeral=True)
+
+        target = usuario or interaction.user
+        personagem = await self._buscar_personagem(target.id)
+        if not personagem:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, personagem_nome, _, _ = personagem
+        await self.bot.db.execute(
+            """
+            INSERT INTO armaduras_personagem (personagem_id, localizacao, sp)
+            VALUES (?, ?, ?)
+            ON CONFLICT(personagem_id, localizacao) DO UPDATE SET sp = excluded.sp
+            """,
+            (personagem_id, localizacao, sp)
+        )
+        await self.bot.db.commit()
+
+        await interaction.response.send_message(
+            f"🛡️ SP de **{personagem_nome}** em **{localizacao}** definido para **{sp}**."
+        )
+
+    @app_commands.command(name="armadura_modificador", description="Define modificador de tipo de dano por localização.")
+    @app_commands.choices(localizacao=LOCALIZACOES_ARMADURA_CHOICES)
+    async def armadura_modificador(
+        self,
+        interaction: discord.Interaction,
+        localizacao: str,
+        tipo_dano: str,
+        multiplicador: float,
+        usuario: Optional[discord.Member] = None
+    ):
+        if not self._permitir_alvo(interaction, usuario):
+            return await interaction.response.send_message("❌ Apenas o Mestre pode ajustar outros jogadores.", ephemeral=True)
+
+        target = usuario or interaction.user
+        personagem = await self._buscar_personagem(target.id)
+        if not personagem:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, personagem_nome, _, _ = personagem
+        async with self.bot.db.execute(
+            "SELECT id FROM armaduras_personagem WHERE personagem_id = ? AND localizacao = ?",
+            (personagem_id, localizacao)
+        ) as cursor:
+            armadura = await cursor.fetchone()
+
+        if armadura:
+            armadura_id = armadura[0]
+        else:
+            cursor = await self.bot.db.execute(
+                "INSERT INTO armaduras_personagem (personagem_id, localizacao, sp) VALUES (?, ?, 0)",
+                (personagem_id, localizacao)
+            )
+            armadura_id = cursor.lastrowid
+
+        await self.bot.db.execute(
+            """
+            INSERT INTO armadura_modificadores (armadura_id, tipo_dano, multiplicador)
+            VALUES (?, ?, ?)
+            ON CONFLICT(armadura_id, tipo_dano) DO UPDATE SET multiplicador = excluded.multiplicador
+            """,
+            (armadura_id, tipo_dano.strip().lower(), multiplicador)
+        )
+        await self.bot.db.commit()
+
+        await interaction.response.send_message(
+            f"🧪 Modificador **{multiplicador}x** para **{tipo_dano}** em **{localizacao}** de {personagem_nome}."
+        )
+
+    @app_commands.command(name="receber_dano", description="Aplica dano com SP e modificadores de armadura.")
+    @app_commands.choices(localizacao=LOCALIZACOES_ARMADURA_CHOICES)
+    async def receber_dano(
+        self,
+        interaction: discord.Interaction,
+        dano: int,
+        localizacao: str,
+        tipo_dano: Optional[str] = None,
+        usuario: Optional[discord.Member] = None
+    ):
+        if dano < 0:
+            return await interaction.response.send_message("❌ O dano deve ser positivo.", ephemeral=True)
+        if not self._permitir_alvo(interaction, usuario):
+            return await interaction.response.send_message("❌ Apenas o Mestre pode aplicar dano em outros jogadores.", ephemeral=True)
+
+        target = usuario or interaction.user
+        personagem = await self._buscar_personagem(target.id)
+        if not personagem:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, personagem_nome, hp_atual, hp_max = personagem
+        if hp_atual is None:
+            hp_atual = hp_max
+
+        async with self.bot.db.execute(
+            "SELECT id, sp FROM armaduras_personagem WHERE personagem_id = ? AND localizacao = ?",
+            (personagem_id, localizacao)
+        ) as cursor:
+            armadura = await cursor.fetchone()
+
+        sp = armadura[1] if armadura else 0
+        multiplicador = 1.0
+        if tipo_dano and armadura:
+            async with self.bot.db.execute(
+                "SELECT multiplicador FROM armadura_modificadores WHERE armadura_id = ? AND tipo_dano = ?",
+                (armadura[0], tipo_dano.strip().lower())
+            ) as cursor:
+                mod_row = await cursor.fetchone()
+            if mod_row:
+                multiplicador = mod_row[0]
+
+        dano_reduzido = max(0, dano - sp)
+        dano_final = max(0, int(round(dano_reduzido * multiplicador)))
+        novo_hp = max(0, hp_atual - dano_final)
+
+        await self.bot.db.execute(
+            "UPDATE personagens SET hp_atual = ? WHERE id = ?",
+            (novo_hp, personagem_id)
+        )
+        await self.bot.db.commit()
+
+        tipo_txt = f" ({tipo_dano})" if tipo_dano else ""
+        resposta = (
+            f"💥 **{personagem_nome}** recebeu **{dano}** de dano{tipo_txt} em **{localizacao}**.\n"
+            f"🛡️ SP: {sp} | 🔻 Dano após SP: {dano_reduzido}\n"
+        )
+        if multiplicador != 1.0:
+            resposta += f"🧪 Multiplicador: {multiplicador}x | Dano final: {dano_final}\n"
+        else:
+            resposta += f"✅ Dano final: {dano_final}\n"
+        resposta += f"❤️ HP: {hp_atual} → {novo_hp}"
+
+        await interaction.response.send_message(resposta)
 
     @app_commands.command(name="ficha_exportar", description="📤 Exporta a ficha em JSON.")
     async def ficha_exportar(
