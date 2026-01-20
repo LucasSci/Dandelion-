@@ -14,6 +14,19 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 
 ---
 
+## 🧠 Integração (O “Cérebro” do Sistema)
+
+**Fluxo de dados macro:**
+
+1. O mestre digita no Discord: `/combate_iniciar` → o bot gera um link para o VTT.
+2. No VTT, o jogador move o token.
+3. O VTT envia via WebSocket a nova posição.
+4. O jogador clica em **Atacar** na ficha web.
+5. O sistema calcula o acerto vs. Defesa do alvo.
+6. O bot no Discord anuncia: **“Geralt acertou o Ghoul por 15 de dano (Prata)!”** e atualiza o HP do monstro no VTT.
+
+---
+
 ## 🧭 Roadmap de Ideias (Em Estudo)
 
 ### 🎭 Narrativa IA e Experiência de Jogo
