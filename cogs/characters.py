@@ -580,6 +580,13 @@ class Characters(commands.Cog):
                 for h in habilidades
             ],
             "witcher_specifics": {
+                "toxicity": {"current": 0, "max": 0},
+                "focus": 0,
+            },
+            "armor_layers": {
+                "head": {"sp": 0, "reliability": 100},
+                "torso": {"sp": 0, "reliability": 100},
+                "legs": {"sp": 0, "reliability": 100},
                 "toxicity": {
                     "current": personagem[17] if personagem[17] is not None else 0,
                     "max": personagem[16] if personagem[16] is not None else 0,

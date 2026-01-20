@@ -25,6 +25,7 @@
     "core_stats": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["INT", "REF", "DEX", "BODY", "SPD", "EMP", "CRA", "WILL", "LUCK"],
       "required": [
         "INT",
         "REF",
@@ -51,6 +52,7 @@
     "derived_stats": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["Stun", "Run", "Leap", "HP", "Stamina", "Vigor", "Recovery"],
       "required": [
         "Stun",
         "Run",
@@ -78,11 +80,13 @@
         "additionalProperties": false,
         "required": ["nome", "stat_base", "pontos_investidos", "modificadores"],
         "properties": {
+          "nome": { "type": "string" },
           "nome": {"type": "string"},
           "stat_base": {
             "type": "string",
             "enum": ["INT", "REF", "DEX", "BODY", "SPD", "EMP", "CRA", "WILL", "LUCK"]
           },
+          "pontos_investidos": { "type": "integer", "minimum": 0 },
           "pontos_investidos": {"type": "integer", "minimum": 0},
           "modificadores": { "type": "integer" }
         }
