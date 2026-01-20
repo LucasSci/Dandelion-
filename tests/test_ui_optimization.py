@@ -28,38 +28,54 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         mock_execute_ctx.__aexit__ = AsyncMock(return_value=None)
         mock_db.execute.return_value = mock_execute_ctx
 
-        # Mock cursor.fetchall result (20 items - simulating that DB respected LIMIT 20)
-        # If we return 30, the code will try to add 30 buttons and crash,
-        # even if it SENT the LIMIT 20 query (because mocks don't actually run SQL).
+        # Mock query results
+        # The code executes multiple queries.
+        # 1. Recursos (fetchOne)
+        # 2. Skills (fetchAll)
+        # 3. Items (fetchAll)
+
+        # We need side_effect for fetchone/fetchall to handle sequence
+        mock_cursor.fetchone.side_effect = [
+            (10, 10, 0, 100), # Recursos: vigor_atual, vigor_max, tox_atual, tox_max
+        ]
+
+        # Skills (20 items)
         fake_skills = [(f"Skill {i}", "1d6", "Desc") for i in range(20)]
-        mock_cursor.fetchall.return_value = fake_skills
+        # Items (empty)
+        fake_items = []
+
+        mock_cursor.fetchall.side_effect = [
+            fake_skills,
+            fake_items
+        ]
 
         # Instantiate View
         view = FichaView(personagem_id=1, user_id_dono=123)
 
         # Call the method WITHOUT patching add_item.
-        # This verifies the crash fix (row=None) because if row=1 was still there, it would crash here.
         await view.atualizar_botoes_habilidade(mock_interaction)
 
-        # Get the sql query passed to execute
-        args, _ = mock_db.execute.call_args
-        sql_query = args[0]
+        # Get the sql query passed to execute. Since multiple calls happen, we check call_args_list
+        # We look for the one querying skills
+        found_limit = False
+        for call in mock_db.execute.call_args_list:
+            args, _ = call
+            if "SELECT nome, dado, descricao FROM habilidades_personagem" in args[0]:
+                if "LIMIT 20" in args[0].upper():
+                    found_limit = True
 
-        print(f"Executed SQL: {sql_query}")
-
-        # Assertions for AFTER optimization
-        # We expect LIMIT 20 to be present
-        self.assertIn("LIMIT 20", sql_query.upper(), "LIMIT 20 should be present in the query")
+        self.assertTrue(found_limit, "LIMIT 20 should be present in the skills query")
 
         # Check that we have correct number of children
-        # 5 static (info, skills, atributos, add, manage) + 20 dynamic = 25.
-        # Wait, let's check FichaView structure.
-        # row 0 has: Info, Skills, Atributos, Nova Skill, Gerenciar. (5 items)
-        # So 5 + 20 = 25.
-        self.assertEqual(len(view.children), 25)
-        # 7 static (Geral, Combate, Magia/Alquimia, Inventário, Buscar, Nova Skill, Gerenciar)
-        # + 20 dynamic = 27.
-        self.assertEqual(len(view.children), 27)
+        # FichaView static buttons:
+        # Row 0: Geral, Combate, Magia, Atributos, Inventário (5 buttons)
+        # Row 1: Buscar, Nova Skill, Gerenciar (3 buttons)
+        # Total static = 8
+
+        # Added dynamic: 20 skills.
+        # Total = 28.
+
+        self.assertEqual(len(view.children), 28)
 
 if __name__ == "__main__":
     unittest.main()

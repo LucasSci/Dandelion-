@@ -69,6 +69,10 @@ class CombateView(ui.View):
             return False
 
         jogador_atual = session['ordem'][session['turno_index']]
+        if jogador_atual['tipo'] == 'MONSTRO':
+            await interaction.response.send_message("⏳ Aguarde o turno do inimigo.", ephemeral=True)
+            return False
+
         if interaction.user.id != jogador_atual['user_id']:
             await interaction.response.send_message(f"⏳ Espere sua vez! Agora é o turno de **{jogador_atual['nome']}**.", ephemeral=True)
             return False
