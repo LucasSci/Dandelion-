@@ -32,6 +32,9 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 
 * Sistema de iniciativa avançado com alertas visuais e sons.
 * Combate em grid com mapas e tokens interativos.
+* Grid com alternância entre hexagonal (viagens) e quadrado (combate), com escala de 1 quadrado = 2m (regra oficial).
+* Tokens vinculados à ficha do jogador, com barra de HP e Stamina flutuante sobre o token.
+* Fog of War dinâmica: mestre vê tudo; jogadores veem apenas raio de visão e fontes de luz (tochas).
 * Integração com mapas externos (Roll20/Foundry) via API.
 * Ferramentas de efeitos de status e condições automatizadas.
 * Voz de mestre de combate automatizada (descrições sonoras).
@@ -40,6 +43,8 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 * Estatísticas detalhadas por jogador/monstro.
 * Regras customizadas baseadas no sistema específico de RPG.
 * Ferramentas de balanceamento de encontros e sugestões de ajustes.
+* Hazards de terreno difícil (lama, fogo) que reduzem o movimento automaticamente.
+* Line of Sight (LoS): paredes bloqueiam visão e movimento.
 
 ### 📇 Personagens e Progressão
 
