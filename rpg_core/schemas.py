@@ -76,6 +76,12 @@ class SkillTree:
 class ArmorLayer:
     local: str
     sp_base: int
+    reliability: float = 100.0
+    sp_current: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.reliability = max(0.0, min(100.0, self.reliability))
+        self.sp_current = max(0, int(self.sp_base * (self.reliability / 100)))
     reliability: int = 100
     sp_current: int = field(init=False)
 
@@ -92,6 +98,11 @@ class ArmorLayer:
         if damage <= 0:
             return
         reduction = max(1, damage // 5)
+        self.sp_current = max(0, self.sp_current - reduction)
+        if self.sp_base > 0:
+            self.reliability = max(0.0, min(100.0, (self.sp_current / self.sp_base) * 100))
+        else:
+            self.reliability = 0.0
         self.reliability = max(0, self.reliability - reduction)
         self.sp_current = self._calculate_sp_current()
 

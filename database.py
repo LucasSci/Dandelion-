@@ -601,6 +601,8 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
 
     # 4. Migração de Índices de Performance
     try:
+        if _table_exists(cursor, "armaduras_personagem"):
+            _add_columns_if_missing(cursor, "armaduras_personagem", [("reliability", "INTEGER DEFAULT 100")])
         if _table_exists(cursor, "session_logs"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_logs_channel_id ON session_logs(channel_id);")
         if _table_exists(cursor, "quests"):
