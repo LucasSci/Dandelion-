@@ -1,8 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Ficha de Personagem (Digital Character Sheet)",
+  "$id": "https://dandelion.bot/schemas/character_sheet.schema.json",
+  "title": "Dandelion Witcher Character Sheet",
   "type": "object",
+  "additionalProperties": false,
   "required": [
+    "schema_version",
     "core_stats",
     "derived_stats",
     "skills_tree",
@@ -10,60 +13,18 @@
     "armor_layers"
   ],
   "properties": {
-    "metadata": {
-      "type": "object",
-      "properties": {
-        "nome": {"type": "string"},
-        "raca": {"type": "string"},
-        "classe": {"type": "string"},
-        "nivel": {"type": "integer", "minimum": 0},
-        "xp_atual": {"type": "integer", "minimum": 0},
-        "historia": {"type": "string"},
-        "imagem_url": {"type": ["string", "null"], "format": "uri"},
-        "ouro": {"type": "integer", "minimum": 0}
-      },
-      "additionalProperties": false
+    "schema_version": {
+      "type": "string",
+      "description": "Versão do schema para migrações futuras.",
+      "pattern": "^v\\d+\\.\\d+\\.\\d+$"
     },
-    "atributos": {
-      "type": "object",
-      "properties": {
-        "hp_max": {"type": "integer", "minimum": 0},
-        "hp_atual": {"type": "integer", "minimum": 0},
-        "mp_max": {"type": "integer", "minimum": 0},
-        "ataque": {"type": "integer", "minimum": 0},
-        "defesa": {"type": "integer", "minimum": 0}
-      },
-      "additionalProperties": false
-    },
-    "habilidades": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["nome", "descricao", "dado"],
-        "properties": {
-          "nome": {"type": "string"},
-          "descricao": {"type": "string"},
-          "dado": {"type": "string"}
-        },
-        "additionalProperties": false
-      }
-    },
-    "inventario": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["nome", "tipo", "valor", "efeito"],
-        "properties": {
-          "nome": {"type": "string"},
-          "tipo": {"type": "string"},
-          "valor": {"type": "integer"},
-          "efeito": {"type": "string"}
-        },
-        "additionalProperties": false
-      }
+    "character_name": {
+      "type": "string",
+      "description": "Nome do personagem na ficha."
     },
     "core_stats": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "INT",
         "REF",
@@ -76,20 +37,20 @@
         "LUCK"
       ],
       "properties": {
-        "INT": {"type": "integer", "minimum": 0},
-        "REF": {"type": "integer", "minimum": 0},
-        "DEX": {"type": "integer", "minimum": 0},
-        "BODY": {"type": "integer", "minimum": 0},
-        "SPD": {"type": "integer", "minimum": 0},
-        "EMP": {"type": "integer", "minimum": 0},
-        "CRA": {"type": "integer", "minimum": 0},
-        "WILL": {"type": "integer", "minimum": 0},
-        "LUCK": {"type": "integer", "minimum": 0}
-      },
-      "additionalProperties": false
+        "INT": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "REF": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "DEX": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "BODY": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "SPD": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "EMP": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "CRA": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "WILL": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "LUCK": { "type": "integer", "minimum": 1, "maximum": 10 }
+      }
     },
     "derived_stats": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "Stun",
         "Run",
@@ -100,92 +61,75 @@
         "Recovery"
       ],
       "properties": {
-        "Stun": {"type": "integer", "minimum": 0},
-        "Run": {"type": "integer", "minimum": 0},
-        "Leap": {"type": "integer", "minimum": 0},
-        "HP": {"type": "integer", "minimum": 0},
-        "Stamina": {"type": "integer", "minimum": 0},
-        "Vigor": {"type": "integer", "minimum": 0},
-        "Recovery": {"type": "integer", "minimum": 0}
-      },
-      "additionalProperties": false
+        "Stun": { "type": "integer", "minimum": 0 },
+        "Run": { "type": "integer", "minimum": 0 },
+        "Leap": { "type": "integer", "minimum": 0 },
+        "HP": { "type": "integer", "minimum": 0 },
+        "Stamina": { "type": "integer", "minimum": 0 },
+        "Vigor": { "type": "integer", "minimum": 0 },
+        "Recovery": { "type": "integer", "minimum": 0 }
+      }
     },
     "skills_tree": {
       "type": "array",
+      "description": "Lista de perícias e seus investimentos.",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["nome", "stat_base", "pontos_investidos", "modificadores"],
         "properties": {
           "nome": {"type": "string"},
-          "stat_base": {"type": ["string", "null"]},
+          "stat_base": {
+            "type": "string",
+            "enum": ["INT", "REF", "DEX", "BODY", "SPD", "EMP", "CRA", "WILL", "LUCK"]
+          },
           "pontos_investidos": {"type": "integer", "minimum": 0},
-          "modificadores": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["fonte", "valor"],
-              "properties": {
-                "fonte": {"type": "string"},
-                "valor": {"type": "integer"}
-              },
-              "additionalProperties": false
-            }
-          }
-        },
-        "additionalProperties": false
+          "modificadores": { "type": "integer" }
+        }
       }
     },
     "witcher_specifics": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["toxicity", "focus"],
       "properties": {
         "toxicity": {
           "type": "object",
-          "required": ["atual", "max"],
+          "additionalProperties": false,
+          "required": ["current", "max"],
           "properties": {
-            "atual": {"type": "integer", "minimum": 0},
-            "max": {"type": "integer", "minimum": 0}
-          },
-          "additionalProperties": false
+            "current": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 0 }
+          }
         },
-        "focus": {"type": "integer", "minimum": 0}
-      },
-      "additionalProperties": false
+        "focus": { "type": "integer", "minimum": 0 }
+      }
     },
     "armor_layers": {
       "type": "object",
-      "required": ["cabeca", "tronco", "pernas"],
+      "additionalProperties": false,
+      "required": ["head", "torso", "legs"],
       "properties": {
-        "cabeca": {
-          "type": "object",
-          "required": ["sp", "reliability"],
-          "properties": {
-            "sp": {"type": "integer", "minimum": 0},
-            "reliability": {"type": "integer", "minimum": 0, "maximum": 100}
-          },
-          "additionalProperties": false
-        },
-        "tronco": {
-          "type": "object",
-          "required": ["sp", "reliability"],
-          "properties": {
-            "sp": {"type": "integer", "minimum": 0},
-            "reliability": {"type": "integer", "minimum": 0, "maximum": 100}
-          },
-          "additionalProperties": false
-        },
-        "pernas": {
-          "type": "object",
-          "required": ["sp", "reliability"],
-          "properties": {
-            "sp": {"type": "integer", "minimum": 0},
-            "reliability": {"type": "integer", "minimum": 0, "maximum": 100}
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
+        "head": { "$ref": "#/$defs/armorLayer" },
+        "torso": { "$ref": "#/$defs/armorLayer" },
+        "legs": { "$ref": "#/$defs/armorLayer" }
+      }
     }
   },
-  "additionalProperties": false
+  "$defs": {
+    "armorLayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sp", "reliability"],
+      "properties": {
+        "sp": { "type": "integer", "minimum": 0 },
+        "reliability": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Condição da armadura (0-100)."
+        }
+      }
+    }
+  }
 }

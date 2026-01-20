@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-import random
 from typing import List, Tuple
 
 from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel
 
 from vtt_engine.grid_system import GridMap
+from witcher_rules import rolar_pericia
+from witcher_rules import rolar_d10_explosivo
 
 
 router = APIRouter()
 app = FastAPI(title="Witcher TTRPG Integration")
+MAP_SCALE_METERS_PER_SQUARE = 2
 
 
 class RollSkillRequest(BaseModel):
@@ -23,27 +25,11 @@ class RollSkillResponse(BaseModel):
     rolls: List[int]
 
 
-def roll_exploding_d10() -> Tuple[int, List[int]]:
-    total = 0
-    rolls: List[int] = []
-    rolling = True
-    while rolling:
-        roll = random.randint(1, 10)
-        rolls.append(roll)
-        if roll == 10:
-            total += roll
-            continue
-        if roll == 1:
-            total -= roll
-            continue
-        total += roll
-        rolling = False
-    return total, rolls
-
-
 @router.post("/roll_skill", response_model=None)
 def roll_skill(payload: RollSkillRequest) -> RollSkillResponse:
-    roll_total, rolls = roll_exploding_d10()
+    result = rolar_pericia(stat=payload.stat, skill=payload.skill)
+    return RollSkillResponse(total=result.total, rolls=result.rolls)
+    roll_total, rolls = rolar_d10_explosivo()
     total = roll_total + payload.stat + payload.skill
     return RollSkillResponse(total=total, rolls=rolls)
 
@@ -52,22 +38,111 @@ class CombatUpdateRequest(BaseModel):
     token_id: str
     position: Tuple[int, int]
     grid: List[List[int]]
+    grid_type: str = "square"
+    scale_meters: float = 2.0
 
 
 class CombatUpdateResponse(BaseModel):
     token_id: str
     position: Tuple[int, int]
     terrain_cost: int
+    grid_type: str
+    scale_meters: float
+
+
+class GenerateMapRequest(BaseModel):
+    width: int
+    height: int
+    biome: str
+    clima: str | None = None
+    seed: int | None = None
+    grid_mode: str = "square"
+
+
+class GenerateMapResponse(BaseModel):
+    grid: List[List[int]]
+    metadata: dict
 
 
 @router.post("/combat_update", response_model=None)
 def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
     width = len(payload.grid[0]) if payload.grid else 0
     height = len(payload.grid)
-    grid_map = GridMap(width=width, height=height, grid=payload.grid)
+    grid_map = GridMap(
+        width=width,
+        height=height,
+        grid=payload.grid,
+        grid_type=payload.grid_type,
+        scale_meters=payload.scale_meters,
+    )
     x, y = payload.position
     cost = grid_map.terrain_cost(x, y) if grid_map.in_bounds(x, y) else 9999
-    return CombatUpdateResponse(token_id=payload.token_id, position=payload.position, terrain_cost=cost)
+    return CombatUpdateResponse(
+        token_id=payload.token_id,
+        position=payload.position,
+        terrain_cost=cost,
+        grid_type=grid_map.grid_type,
+        scale_meters=grid_map.scale_meters,
+    )
+
+
+class MapGenerateRequest(BaseModel):
+    width: int
+    height: int
+    biome: str
+    clima: str | None = None
+    grid_type: str = "square"
+    scale_meters: float = 2.0
+    seed: int | None = None
+
+
+class MapGenerateResponse(BaseModel):
+    grid: List[List[int]]
+    biome: str
+    clima: str | None
+    grid_type: str
+    scale_meters: float
+
+
+@router.post("/generate_map", response_model=None)
+def generate_map(payload: MapGenerateRequest) -> MapGenerateResponse:
+    grid_map = GridMap(
+        width=payload.width,
+        height=payload.height,
+        grid_type=payload.grid_type,
+        scale_meters=payload.scale_meters,
+    )
+    grid_map.generate(
+        biome=payload.biome,
+        seed=payload.seed,
+        clima=payload.clima,
+        grid_type=payload.grid_type,
+    )
+    return MapGenerateResponse(
+        grid=grid_map.grid,
+        biome=payload.biome,
+        clima=payload.clima,
+        grid_type=grid_map.grid_type,
+        scale_meters=grid_map.scale_meters,
+    )
+
+
+@router.post("/generate_map", response_model=None)
+def generate_map(payload: GenerateMapRequest) -> GenerateMapResponse:
+    grid_map = GridMap(
+        width=payload.width,
+        height=payload.height,
+        scale_meters_per_square=MAP_SCALE_METERS_PER_SQUARE,
+        grid_mode=payload.grid_mode,
+    )
+    grid_map.generate(biome=payload.biome, clima=payload.clima, seed=payload.seed)
+    metadata = {
+        "biome": grid_map.biome,
+        "clima": grid_map.clima,
+        "scale_meters_per_square": grid_map.scale_meters_per_square,
+        "grid_mode": grid_map.grid_mode,
+    }
+    return GenerateMapResponse(grid=grid_map.grid, metadata=metadata)
 
 
 app.include_router(router)

@@ -1,6 +1,8 @@
 import re
 import random
 
+from witcher_rules import rolar_d10_explosivo
+
 def rolar_dados(formula: str):
     """
     Rola dados baseados em string ex: '1d20+5' ou '2d6'.
@@ -11,7 +13,7 @@ def rolar_dados(formula: str):
         
     formula = formula.lower().replace(" ", "")
     # Tenta encontrar padrão XdY+Z
-    match = re.match(r'(\d+)d(\d+)(?:([+-])(\d+))?', formula)
+    match = re.fullmatch(r'(\d+)d(\d+)(?:([+-])(\d+))?', formula)
     
     if not match:
         # Se for apenas um número fixo (ex: "5")
@@ -21,6 +23,8 @@ def rolar_dados(formula: str):
     
     qtd, lados, sinal, bonus = match.groups()
     qtd, lados = int(qtd), int(lados)
+    if qtd <= 0 or lados <= 0:
+        return None, 0
     bonus = int(bonus) if bonus else 0
     
     rolls = [random.randint(1, lados) for _ in range(qtd)]
@@ -37,28 +41,16 @@ def rolar_pericia_explosiva(stat: int, skill: int):
     Retorna (lista_de_rolagens, total, direcao_explosao).
     direcao_explosao: 1 (cima), -1 (baixo) ou 0 (sem explosão).
     """
-    rolagens = []
-    primeira = random.randint(1, 10)
-    rolagens.append(primeira)
-    total = primeira
-
+    total_d10, rolagens = rolar_d10_explosivo(roller=random.randint)
     direcao = 0
-    gatilho = None
-    if primeira == 10:
-        direcao = 1
-        gatilho = 10
-    elif primeira == 1:
-        direcao = -1
-        gatilho = 1
+    if rolagens:
+        if rolagens[0] == 10:
+            direcao = 1
+        elif rolagens[0] == 1:
+            direcao = -1
 
-    while direcao != 0 and rolagens[-1] == gatilho:
-        extra = random.randint(1, 10)
-        rolagens.append(extra)
-        total += direcao * extra
-        if extra != gatilho:
-            break
-
-    total += stat + skill
+    direcao = 1 if rolagens and rolagens[0] == 10 else -1 if rolagens and rolagens[0] == 1 else 0
+    total = total_d10 + stat + skill
     return rolagens, total, direcao
 
 def calcular_xp_necessario(nivel_atual):

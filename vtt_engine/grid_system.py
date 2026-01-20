@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 
 TerrainGrid = List[List[int]]
+GridMode = str
 
 
 @dataclass
@@ -40,10 +41,32 @@ class GridMap:
     width: int
     height: int
     grid: TerrainGrid = field(default_factory=list)
+    biome: str | None = None
+    clima: str | None = None
+    scale_meters_per_square: int = 2
+    grid_mode: GridMode = "square"
 
-    def generate(self, biome: str, seed: int | None = None) -> None:
+    def generate(self, biome: str, clima: str | None = None, seed: int | None = None) -> None:
+    grid_type: str = "square"
+    scale_meters: float = 2.0
+    biome: str | None = None
+    clima: str | None = None
+
+    def generate(
+        self,
+        biome: str,
+        seed: int | None = None,
+        clima: str | None = None,
+        grid_type: str | None = None,
+    ) -> None:
+        self.biome = biome
+        self.clima = clima
+        if grid_type:
+            self.grid_type = grid_type
         generator = NoiseGenerator(biome=biome, seed=seed)
         self.grid = generator.generate(self.width, self.height)
+        self.biome = biome
+        self.clima = clima
 
     def in_bounds(self, x: int, y: int) -> bool:
         return 0 <= x < self.width and 0 <= y < self.height
@@ -55,6 +78,45 @@ class GridMap:
         if terrain == 2:
             return 2
         return 1
+
+    def neighbors(self, x: int, y: int) -> List[Tuple[int, int]]:
+        if self.grid_mode == "hex":
+            return self._hex_neighbors(x, y)
+        return self._square_neighbors(x, y)
+
+    def _square_neighbors(self, x: int, y: int) -> List[Tuple[int, int]]:
+        candidates = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+        return [(nx, ny) for nx, ny in candidates if self.in_bounds(nx, ny)]
+
+    def _hex_neighbors(self, x: int, y: int) -> List[Tuple[int, int]]:
+        # odd-r offset coordinates
+        if y % 2 == 0:
+            candidates = [
+                (x - 1, y - 1),
+                (x, y - 1),
+                (x - 1, y),
+                (x + 1, y),
+                (x - 1, y + 1),
+                (x, y + 1),
+            ]
+        else:
+            candidates = [
+                (x, y - 1),
+                (x + 1, y - 1),
+                (x - 1, y),
+                (x + 1, y),
+                (x, y + 1),
+                (x + 1, y + 1),
+            ]
+        if self.grid_type == "hex":
+            if y % 2 == 0:
+                deltas = [(-1, 0), (1, 0), (-1, -1), (0, -1), (-1, 1), (0, 1)]
+            else:
+                deltas = [(-1, 0), (1, 0), (0, -1), (1, -1), (0, 1), (1, 1)]
+        else:
+            deltas = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        candidates = [(x + dx, y + dy) for dx, dy in deltas]
+        return [(nx, ny) for nx, ny in candidates if self.in_bounds(nx, ny)]
 
 
 @dataclass
@@ -87,12 +149,24 @@ class Pathfinding:
 
     def _neighbors(self, node: Tuple[int, int]) -> List[Tuple[int, int]]:
         x, y = node
-        candidates = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-        return [(nx, ny) for nx, ny in candidates if self.grid_map.in_bounds(nx, ny)]
+        return self.grid_map.neighbors(x, y)
+
+    def _heuristic(self, a: Tuple[int, int], b: Tuple[int, int]) -> int:
+        if self.grid_map.grid_mode == "hex":
+            return self._hex_distance(a, b)
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
     @staticmethod
-    def _heuristic(a: Tuple[int, int], b: Tuple[int, int]) -> int:
-        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+    def _hex_distance(a: Tuple[int, int], b: Tuple[int, int]) -> int:
+        ax, ay = Pathfinding._offset_to_axial(a[0], a[1])
+        bx, by = Pathfinding._offset_to_axial(b[0], b[1])
+        return int((abs(ax - bx) + abs(ay - by) + abs((ax + ay) - (bx + by))) / 2)
+
+    @staticmethod
+    def _offset_to_axial(x: int, y: int) -> Tuple[int, int]:
+        q = x - (y - (y & 1)) // 2
+        r = y
+        return q, r
 
     @staticmethod
     def _reconstruct_path(
