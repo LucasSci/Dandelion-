@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 from openai import AsyncOpenAI
 import os
@@ -188,6 +189,30 @@ class AIHandler(commands.Cog):
         raw = await self.get_response(f"Gere um item {raridade} formato: NOME|TIPO|EFEITO")
         p = raw.split('|')
         return {"nome": p[0], "tipo": p[1], "efeito": p[2]} if len(p)>=3 else None
+
+    @app_commands.command(
+        name="dandelion",
+        description="🧠 Pede ao narrador IA para descrever uma cena ou consequência.",
+    )
+    @app_commands.describe(solicitacao="O que aconteceu ou o que você quer narrar?")
+    async def dandelion(self, interaction: discord.Interaction, solicitacao: str):
+        await interaction.response.defer()
+        if not self.client:
+            return await interaction.followup.send("❌ IA não configurada no momento.")
+
+        cronologia = await self.ler_cronologia_estrita()
+        lore = await self.ler_lore_mundo()
+        prompt = (
+            "Você é Dandelion, o bardo narrador de The Witcher.\n"
+            "Use a cronologia e o lore abaixo como contexto real.\n\n"
+            f"CRONOLOGIA:\n{cronologia}\n\n"
+            f"LORE:\n{lore}\n\n"
+            f"SOLICITAÇÃO DO MESTRE/JOGADOR:\n{solicitacao}\n\n"
+            "Responda em português brasileiro, com narrativa evocativa e objetiva."
+        )
+
+        resposta = await self.get_response(prompt)
+        await interaction.followup.send(resposta)
 
 async def setup(bot):
     await bot.add_cog(AIHandler(bot))

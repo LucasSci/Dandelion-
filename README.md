@@ -1,16 +1,22 @@
 # 🪕 Dandelion - Bot de RPG para Discord
 
-O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG de mesa, com temática baseada no universo de *The Witcher*. Ele oferece sistemas de fichas de personagem, bestiário automatizado (via web scraping), rolagem de dados, inventário, combate por turnos e um narrador auxiliado por Inteligência Artificial (Google Gemini).
+O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG de mesa, com temática baseada no universo de *The Witcher*. Ele oferece sistemas de fichas de personagem, bestiário automatizado (seeds/importações), rolagem de dados, inventário, combate por turnos e um narrador auxiliado por Inteligência Artificial (OpenAI/Gemini).
 
 ## 🚀 Funcionalidades
 
 * **📜 Sistema de Personagens:** Criação, armazenamento e visualização de fichas de personagens com atributos, história e imagens.
 * **⚔️ Sistema de Combate:** Gerenciamento de batalha com iniciativa, turnos travados, barras de vida e log de combate.
-* **🧠 Narrador IA (Dandelion):** Integração com Google Gemini para narrar cenas e resultados de ações complexas.
-* **📚 Bestiário Automático:** Importação de monstros diretamente da Wiki do The Witcher, incluindo fraquezas e lore traduzida.
+* **🧠 Narrador IA (Dandelion):** Integração com OpenAI para narrar cenas, NPCs e resultados de ações complexas.
+* **📚 Bestiário Automático:** Importação de monstros via seeds e geração de artes em estilo Witcher.
 * **🗺️ Banco de Lore Autoral:** Estrutura dedicada para registrar lore do seu universo com fontes em textos, arquivos e imagens.
 * **🎲 Rolagem de Dados:** Suporte a fórmulas de dados (ex: `1d20+5`, `2d6`).
 * **🎒 Inventário & Habilidades:** Gerenciamento de itens e skills equipáveis.
+* **📜 Quests & Contratos:** Criação manual/IA, publicação em fórum e progressão com recompensas.
+* **🧠 Memória de Campanha:** Registro de eventos, consequências e resumos para IA.
+* **🧑‍🤝‍🧑 NPCs e Rumores:** Perfis com personalidade dinâmica e ganchos narrativos.
+* **🏪 Economia & Loja:** Itens com estoque, preços e geração por IA.
+* **🏅 Progressão Social:** Facções, reputação, conquistas e legados.
+* **📝 Escriba de Sessão:** Registro automático do chat e resumo narrativo da sessão.
 
 ---
 
@@ -28,6 +34,8 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 ---
 
 ## 🧭 Roadmap de Ideias (Em Estudo)
+
+> Estes itens representam o **futuro desejado** do projeto. O progresso pode ser acompanhado pelo comando `/roadmap`.
 
 ### 🎭 Narrativa IA e Experiência de Jogo
 
@@ -131,7 +139,8 @@ Antes de iniciar, certifique-se de ter instalado em sua máquina:
 Você também precisará de:
 
 * Um **Token de Bot do Discord** (obtido no [Discord Developer Portal](https://www.google.com/search?q=https://discord.com/developers/applications)).
-* Uma **Chave de API do Google Gemini** (obtida no [Google AI Studio](https://aistudio.google.com/)).
+* Uma **Chave de API da OpenAI** (para narrador, NPCs, quests e arte).
+* (Opcional) **Chave de API do Google Gemini** (para comandos de teste/visão).
 
 ---
 
@@ -187,6 +196,9 @@ Crie um arquivo chamado `.env` na raiz do projeto (mesma pasta do `bot.py`). Abr
 
 # Seu token do Discord (Privado)
 DISCORD_TOKEN=seu_token_do_discord_aqui
+
+# Sua chave da API da OpenAI (Privado)
+OPENAI_API_KEY=sua_chave_api_openai_aqui
 
 # Sua chave da API do Google Gemini (Privado)
 GEMINI_API_KEY=sua_chave_api_gemini_aqui
@@ -254,8 +266,9 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 ### 📚 Bestiário & IA
 
 * `/ver [nome]`: Exibe a ficha técnica e lore de uma criatura.
-* `/alimentar_bestiario`: **(Atenção)** Inicia o web scraping da Wiki para popular o banco de dados (pode demorar).
-* `/monstro_editar`: Ajusta HP e Iniciativa de um monstro importado.
+* `/alimentar_bestiario`: Reaplica seeds e atualiza tabelas base do bestiário.
+* `/monstro_editar`: Ajusta HP, iniciativa e dano de um monstro importado.
+* `/gerar_imagem`: Gera arte estilo *Witcher 3 Journal*.
 * `/dandelion [solicitacao]`: Pede ao Mestre IA para narrar uma cena ou resultado.
 
 ### 🎲 Utilitários
@@ -263,6 +276,65 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 * `/rolar [formula]`: Rola dados (ex: `1d20+3`).
 * `/inventario`: Abre seu inventário para visualização ou venda de itens.
 * `/usar_habilidade [slot]`: Usa uma habilidade equipada em um slot específico.
+
+### 🗺️ Campanha, Lore & Memória
+
+* `/diario_ver`: Exibe a linha do tempo atual.
+* `/diario_adicionar`: Registra um evento no diário.
+* `/diario_consequencia`: Registra consequência persistente.
+* `/diario_importar_txt`: Importa um resumo longo via `.txt`.
+* `/diario_editar`: Corrige um evento salvo.
+* `/diario_apagar`: Remove um evento.
+* `/diario_limpar_tudo`: Reseta toda a memória.
+* `/lore_ver`: Lista fatos de mundo salvos.
+* `/lore_adicionar`: Registra um novo fato para a IA.
+* `/lore_importar_txt`: Importa lore via `.txt`.
+* `/lore_editar`: Corrige um lore.
+* `/lore_apagar`: Remove um lore.
+* `/lore_limpar_tudo`: Apaga todo o banco de lore.
+* `/ambientacao_gerar`: Gera ambientação por bioma/clima.
+
+### 📜 Quests & Contratos
+
+* `/quest_criar`: Cria missão manualmente com fórum e recompensas.
+* `/quest_gerar`: IA cria missão cronológica (rascunho ou publicação).
+* `/quest_gerar_auto`: IA escolhe dificuldade pela média do grupo.
+* `/quest_publicar`: Publica um rascunho no fórum.
+* `/quest_atribuir`: Força a entrada de um jogador.
+* `/quest_concluir`: Finaliza missão e distribui recompensas.
+
+### 🧑‍🤝‍🧑 NPCs, Rumores & Sessões
+
+* `/npc_criar`: Cria NPC com personalidade dinâmica.
+* `/npc_ver`: Exibe ficha do NPC.
+* `/npc_falar`: Interage com NPC via IA.
+* `/rumor_adicionar`: Adiciona rumor/gancho.
+* `/rumor_listar`: Lista rumores.
+* `/rumor_sortear`: Sorteia um rumor ativo.
+* `/rumor_usar`: Marca rumor como usado.
+* `/sessao_iniciar`: Inicia gravação do chat.
+* `/sessao_pausar`: Pausa as anotações.
+* `/sessao_finalizar`: Gera o diário narrativo da sessão.
+
+### 🏪 Economia, Progresso & Extras
+
+* `/loja`: Abre a loja de itens.
+* `/loja_adicionar`: Adiciona item à loja.
+* `/loja_gerar`: Gera item via IA.
+* `/loja_estoque`: Lista estoque da loja.
+* `/loja_remover`: Remove item do estoque.
+* `/faccao_criar`: Cria facção.
+* `/faccao_listar`: Lista facções.
+* `/reputacao_definir`: Define reputação com uma facção.
+* `/reputacao_ver`: Exibe reputações.
+* `/conquista_criar`: Registra conquista.
+* `/conquista_dar`: Concede conquista.
+* `/conquistas_ver`: Lista conquistas de um jogador.
+* `/legado_adicionar`: Registra legado de campanha.
+* `/legado_ver`: Exibe legados.
+* `/comparar_builds`: Compara atributos entre personagens.
+* `/atributos_sugerir`: Sugere pesos de atributos por papel.
+* `/gwent`: Minijogo de Gwent para ouro.
 
 ---
 
@@ -280,11 +352,20 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 │   └── seeds/            # Seeds SQL para popular o bestiário
 ├── cogs/                 # Módulos de comandos
 │   ├── ai_handler.py     # Integração Google Gemini
-│   ├── bestiary.py       # Scraper e Bestiário
+│   ├── bestiary.py       # Bestiário, seeds e arte
+│   ├── campaign.py       # Linha do tempo e lore do mundo
 │   ├── characters.py     # Sistema de Fichas
 │   ├── combat.py         # Lógica de Combate
 │   ├── dice.py           # Dados
+│   ├── gwent.py          # Minijogo de Gwent
 │   ├── inventory.py      # Inventário
+│   ├── npcs.py           # NPCs com personalidade
+│   ├── progress.py       # Facções, reputação e conquistas
+│   ├── quests.py         # Quests e contratos
+│   ├── roadmap.py        # Roadmap do projeto
+│   ├── rumors.py         # Rumores e ganchos
+│   ├── scribe.py         # Escriba da sessão
+│   ├── shop.py           # Economia/loja
 │   └── skills.py         # Habilidades rápidas
 └── ui/                   # Interfaces Visuais (Botões/Modais)
     ├── combat_view.py    # Interface da batalha
