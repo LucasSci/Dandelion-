@@ -17,12 +17,22 @@ from database import (
     SEED_RELATIONS_SQL,
     SEEDS_DIR,
 )
+from utils import rolar_pericia_explosiva
 from witcher_rules import rolar_pericia
 
 # --- CONFIGURAÇÕES ---
 DB_NAME = 'bestiario.db'
 WITCHER_API_URL = "https://witcher.fandom.com/api.php"
 WITCHER_THEME_COLOR = 0xC0A080 
+DEFAULT_MONSTER_LORE_CD = 14
+MONSTER_LORE_STAT_KEYS = ("int", "inteligencia", "inteligência", "intelligence")
+MONSTER_LORE_SKILL_KEYS = (
+    "monster lore",
+    "lore de monstros",
+    "conhecimento de monstros",
+    "conhecimento de monstro",
+    "lore de monstro",
+)
 
 # Modelos
 OPENAI_TEXT_MODEL = "gpt-4o" 
@@ -111,6 +121,74 @@ class Bestiary(commands.Cog):
             except Exception as e:
                 print(f"Erro Wiki: {e}")
                 return None, None
+
+    async def _buscar_personagem(self, user_id: int):
+        async with self.bot.db.execute(
+            "SELECT id, nome FROM personagens WHERE user_id = ?",
+            (user_id,),
+        ) as cursor:
+            return await cursor.fetchone()
+
+    async def _buscar_atributos(self, personagem_id: int) -> dict[str, int]:
+        async with self.bot.db.execute(
+            "SELECT nome, valor FROM atributos_personagem WHERE personagem_id = ?",
+            (personagem_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return {nome.strip().lower(): valor for nome, valor in rows}
+
+    def _obter_valor_atributo(self, atributos: dict[str, int], chaves: tuple[str, ...]) -> int | None:
+        for chave in chaves:
+            valor = atributos.get(chave)
+            if valor is not None:
+                return valor
+        return None
+
+    def _formatar_rolagens(self, rolagens: list[int], direcao: int) -> str:
+        texto = ", ".join(str(r) for r in rolagens)
+        if direcao == 1:
+            return f"{texto} (explosão ↑)"
+        if direcao == -1:
+            return f"{texto} (explosão ↓)"
+        return texto
+
+    async def _rolar_monster_lore(self, user_id: int, cd: int) -> dict[str, str | bool]:
+        personagem = await self._buscar_personagem(user_id)
+        if not personagem:
+            return {
+                "sucesso": False,
+                "mensagem": "❌ Você precisa de uma ficha para testar Monster Lore.",
+            }
+
+        personagem_id, personagem_nome = personagem
+        atributos = await self._buscar_atributos(personagem_id)
+        stat = self._obter_valor_atributo(atributos, MONSTER_LORE_STAT_KEYS)
+        skill = self._obter_valor_atributo(atributos, MONSTER_LORE_SKILL_KEYS)
+
+        faltando = []
+        if stat is None:
+            faltando.append("stat INT")
+        if skill is None:
+            faltando.append("perícia Monster Lore")
+        if faltando:
+            return {
+                "sucesso": False,
+                "mensagem": (
+                    "⚠️ Falta configurar "
+                    + " e ".join(faltando)
+                    + f" na ficha de **{personagem_nome}**."
+                ),
+            }
+
+        rolagens, total, direcao = rolar_pericia_explosiva(stat, skill)
+        rolagens_txt = self._formatar_rolagens(rolagens, direcao)
+        sucesso = total >= cd
+        mensagem = (
+            f"🎲 Rolagens: {rolagens_txt}\n"
+            f"📌 INT {stat} + Monster Lore {skill} = **{total}** vs CD **{cd}**\n"
+            f"{'✅ Sucesso!' if sucesso else '❌ Falhou.'}"
+        )
+        return {"sucesso": sucesso, "mensagem": mensagem}
 
     # --- COMANDO PRINCIPAL ---
     @app_commands.command(name="gerar_imagem", description="🎨 Cria arte estilo Witcher 3 Journal")
@@ -221,6 +299,11 @@ class Bestiary(commands.Cog):
 
     # --- COMANDO VER ---
     @app_commands.command(name="ver", description="Consulta ficha do monstro")
+    @app_commands.describe(
+        nome="Nome (ou parte) da criatura",
+        cd="CD opcional para Monster Lore (sobrescreve o valor do monstro)",
+    )
+    async def ver(self, interaction: discord.Interaction, nome: str, cd: int | None = None):
     @app_commands.describe(cd="CD de Monster Lore para revelar fraquezas (padrão: 15)")
     async def ver(self, interaction: discord.Interaction, nome: str, cd: int = 15):
         # Lógica de consulta ao banco (mantida igual)
@@ -229,12 +312,14 @@ class Bestiary(commands.Cog):
         
         if not data: return await interaction.response.send_message("❌ Monstro não encontrado.", ephemeral=True)
 
-        try:
-            id_c, nome_real, desc, fraquezas, img_url, hp, ini, dano = data[:8]
-        except:
-             nome_real = data[1]
-             img_url = data[4] if len(data) > 4 else None
-             desc, fraquezas, hp, ini, dano = "Sem dados", "Nenhuma", 50, 10, "1d6"
+        dados = list(data) + [None] * (9 - len(data))
+        id_c, nome_real, desc, fraquezas, img_url, hp, ini, dano, lore_cd = dados[:9]
+        desc = desc or "Sem dados"
+        fraquezas = fraquezas or "Nenhuma"
+        hp = hp or 50
+        ini = ini or 10
+        dano = dano or "1d6"
+        cd_final = cd if cd is not None else (lore_cd if lore_cd is not None else DEFAULT_MONSTER_LORE_CD)
 
         show_weaknesses = is_mestre(interaction) or cd <= 0
         roll_detail = None
@@ -278,6 +363,16 @@ class Bestiary(commands.Cog):
 
         embed = discord.Embed(title=f"📜 {nome_real.upper()}", description=f"_{desc}_", color=WITCHER_THEME_COLOR)
         embed.add_field(name="⚔️ Status", value=f"HP: {hp} | Ini: {ini} | Dano: {dano}", inline=False)
+        resultado_lore = await self._rolar_monster_lore(interaction.user.id, cd_final)
+        if resultado_lore["sucesso"]:
+            fraquezas_visiveis = fraquezas
+        else:
+            fraquezas_visiveis = "🔒 Fraquezas ocultas. Passe no teste de Monster Lore."
+
+        embed.add_field(name="🧠 Monster Lore", value=resultado_lore["mensagem"], inline=False)
+        embed.add_field(name="☠️ Fraquezas", value=fraquezas_visiveis, inline=False)
+        if img_url:
+            embed.set_image(url=img_url)
         if show_weaknesses:
             embed.add_field(name="🧪 Fraquezas", value=fraquezas or "Nenhuma", inline=False)
         else:
@@ -319,6 +414,7 @@ class Bestiary(commands.Cog):
         hp_max="Novo HP máximo",
         iniciativa="Nova iniciativa",
         dano_base="Nova fórmula de dano (ex: 2d6+3)",
+        lore_cd="CD de Monster Lore (deixe vazio para padrão)",
     )
     @app_commands.check(is_mestre)
     async def monstro_editar(
@@ -328,14 +424,15 @@ class Bestiary(commands.Cog):
         hp_max: int | None = None,
         iniciativa: int | None = None,
         dano_base: str | None = None,
+        lore_cd: int | None = None,
     ):
-        if hp_max is None and iniciativa is None and dano_base is None:
+        if hp_max is None and iniciativa is None and dano_base is None and lore_cd is None:
             return await interaction.response.send_message(
                 "⚠️ Informe ao menos um campo para atualizar.", ephemeral=True
             )
 
         async with self.bot.db.execute(
-            "SELECT id, nome, hp_max, iniciativa, dano_base FROM criaturas WHERE nome LIKE ? ORDER BY nome LIMIT 1",
+            "SELECT id, nome, hp_max, iniciativa, dano_base, lore_cd FROM criaturas WHERE nome LIKE ? ORDER BY nome LIMIT 1",
             (f"%{nome}%",),
         ) as cursor:
             row = await cursor.fetchone()
@@ -345,29 +442,38 @@ class Bestiary(commands.Cog):
                 "❌ Monstro não encontrado no bestiário.", ephemeral=True
             )
 
-        criatura_id, nome_real, hp_atual, ini_atual, dano_atual = row
+        criatura_id, nome_real, hp_atual, ini_atual, dano_atual, lore_cd_atual = row
         novos_valores = {
             "hp_max": hp_atual if hp_max is None else hp_max,
             "iniciativa": ini_atual if iniciativa is None else iniciativa,
             "dano_base": dano_atual if dano_base is None else dano_base,
+            "lore_cd": lore_cd_atual if lore_cd is None else lore_cd,
         }
 
         await self.bot.db.execute(
-            "UPDATE criaturas SET hp_max = ?, iniciativa = ?, dano_base = ? WHERE id = ?",
+            "UPDATE criaturas SET hp_max = ?, iniciativa = ?, dano_base = ?, lore_cd = ? WHERE id = ?",
             (
                 novos_valores["hp_max"],
                 novos_valores["iniciativa"],
                 novos_valores["dano_base"],
+                novos_valores["lore_cd"],
                 criatura_id,
             ),
         )
         await self.bot.db.commit()
 
-        await interaction.response.send_message(
-            f"✅ **{nome_real}** atualizado.\n"
-            f"• HP: {hp_atual} → {novos_valores['hp_max']}\n"
-            f"• Iniciativa: {ini_atual} → {novos_valores['iniciativa']}\n"
+        detalhes = [
+            f"• HP: {hp_atual} → {novos_valores['hp_max']}",
+            f"• Iniciativa: {ini_atual} → {novos_valores['iniciativa']}",
             f"• Dano: {dano_atual} → {novos_valores['dano_base']}",
+        ]
+        if lore_cd is not None:
+            cd_atual_txt = lore_cd_atual if lore_cd_atual is not None else f"Padrão ({DEFAULT_MONSTER_LORE_CD})"
+            cd_novo_txt = novos_valores["lore_cd"] if novos_valores["lore_cd"] is not None else f"Padrão ({DEFAULT_MONSTER_LORE_CD})"
+            detalhes.append(f"• CD Lore: {cd_atual_txt} → {cd_novo_txt}")
+
+        await interaction.response.send_message(
+            f"✅ **{nome_real}** atualizado.\n" + "\n".join(detalhes),
             ephemeral=True,
         )
 
