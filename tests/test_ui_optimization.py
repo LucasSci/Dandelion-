@@ -39,8 +39,8 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
             (10, 10, 0, 100), # Recursos: vigor_atual, vigor_max, tox_atual, tox_max
         ]
 
-        # Skills (20 items)
-        fake_skills = [(f"Skill {i}", "1d6", "Desc") for i in range(20)]
+        # Skills (15 items)
+        fake_skills = [(f"Skill {i}", "1d6", "Desc") for i in range(15)]
         # Items (empty)
         fake_items = []
 
@@ -61,10 +61,10 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         for call in mock_db.execute.call_args_list:
             args, _ = call
             if "SELECT nome, dado, descricao FROM habilidades_personagem" in args[0]:
-                if "LIMIT 20" in args[0].upper():
+                if "LIMIT 15" in args[0].upper():
                     found_limit = True
 
-        self.assertTrue(found_limit, "LIMIT 20 should be present in the skills query")
+        self.assertTrue(found_limit, "LIMIT 15 should be present in the skills query")
 
         # Check that we have correct number of children
         # FichaView static buttons:
@@ -72,10 +72,10 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         # Row 1: Buscar, Nova Skill, Gerenciar (3 buttons)
         # Total static = 8
 
-        # Added dynamic: 20 skills.
-        # Total = 28.
+        # Added dynamic: 15 skills.
+        # Total = 23 (Safe under 25).
 
-        self.assertEqual(len(view.children), 28)
+        self.assertEqual(len(view.children), 23)
 
 if __name__ == "__main__":
     unittest.main()

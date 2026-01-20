@@ -46,12 +46,6 @@ class GridMap:
     scale_meters_per_square: int = 2
     grid_mode: GridMode = "square"
 
-    def generate(self, biome: str, clima: str | None = None, seed: int | None = None) -> None:
-    grid_type: str = "square"
-    scale_meters: float = 2.0
-    biome: str | None = None
-    clima: str | None = None
-
     def generate(
         self,
         biome: str,
