@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import random
 from typing import List, Tuple
 
 from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel
 
 from vtt_engine.grid_system import GridMap
+from witcher_rules import rolar_pericia
 
 
 router = APIRouter()
@@ -23,29 +23,10 @@ class RollSkillResponse(BaseModel):
     rolls: List[int]
 
 
-def roll_exploding_d10() -> Tuple[int, List[int]]:
-    total = 0
-    rolls: List[int] = []
-    rolling = True
-    while rolling:
-        roll = random.randint(1, 10)
-        rolls.append(roll)
-        if roll == 10:
-            total += roll
-            continue
-        if roll == 1:
-            total -= roll
-            continue
-        total += roll
-        rolling = False
-    return total, rolls
-
-
 @router.post("/roll_skill", response_model=None)
 def roll_skill(payload: RollSkillRequest) -> RollSkillResponse:
-    roll_total, rolls = roll_exploding_d10()
-    total = roll_total + payload.stat + payload.skill
-    return RollSkillResponse(total=total, rolls=rolls)
+    result = rolar_pericia(stat=payload.stat, skill=payload.skill)
+    return RollSkillResponse(total=result.total, rolls=result.rolls)
 
 
 class CombatUpdateRequest(BaseModel):
