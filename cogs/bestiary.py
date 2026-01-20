@@ -304,8 +304,6 @@ class Bestiary(commands.Cog):
         cd="CD opcional para Monster Lore (sobrescreve o valor do monstro)",
     )
     async def ver(self, interaction: discord.Interaction, nome: str, cd: int | None = None):
-    @app_commands.describe(cd="CD de Monster Lore para revelar fraquezas (padrão: 15)")
-    async def ver(self, interaction: discord.Interaction, nome: str, cd: int = 15):
         # Lógica de consulta ao banco (mantida igual)
         async with self.bot.db.execute("SELECT * FROM criaturas WHERE nome LIKE ?", (f'%{nome}%',)) as cursor:
             data = await cursor.fetchone()
