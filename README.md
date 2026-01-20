@@ -54,6 +54,13 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 * Importação/exportação de fichas em formatos populares.
 * Sistema de legado (benefícios de campanhas anteriores).
 
+### 🗂️ Organização da Campanha (The GM Grimoire)
+
+* Painel administrativo para o mestre organizar o mundo de forma relacional.
+* NPCs com ficha simplificada, campo de disposição (Aliado/Neutro/Inimigo) e localização atual.
+* Bestiário com importação do livro oficial e sistema de "Witcher Knowledge" (fraquezas visíveis apenas após teste de Monster Lore definido pelo mestre).
+* Quest Log ramificado com árvore de decisões e estado atual salvo.
+
 ### 📦 Bestiário e Conteúdo Coletado
 
 * Scraping inteligente de múltiplas fontes de lore.
@@ -77,6 +84,7 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 * Temas de UI customizáveis (cores, emojis, layouts).
 * Lembretes e eventos programados (sessões, quests).
 * Sistema de economia e crafting com simulação de mercado.
+* Tabelas de loot procedurais baseadas na região (ex: Velen = loot pobre/crafting; Toussaint = vinho/ouro/armas finas).
 * Integração com plataformas externas (Twitch, Patreon).
 * Suporte nativo a múltiplas línguas com localização automática.
 

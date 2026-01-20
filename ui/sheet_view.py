@@ -122,6 +122,42 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         embed.add_field(name="Total", value=f"# **{total}**", inline=False)
 
         await interaction.response.send_message(embed=embed)
+class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
+    def __init__(self, personagem_id):
+        super().__init__()
+        self.personagem_id = personagem_id
+
+    termo = ui.TextInput(
+        label="Nome ou parte do nome",
+        placeholder="Ex: Espada, Esquiva, Igni",
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        db = interaction.client.db
+        termo = f"%{self.termo.value.strip()}%"
+        async with db.execute(
+            """
+            SELECT nome, dado, descricao
+            FROM habilidades_personagem
+            WHERE personagem_id = ? AND nome LIKE ?
+            ORDER BY nome ASC
+            LIMIT 5
+            """,
+            (self.personagem_id, termo)
+        ) as cursor:
+            resultados = await cursor.fetchall()
+
+        if not resultados:
+            return await interaction.response.send_message("🔎 Nenhuma perícia encontrada.", ephemeral=True)
+
+        linhas = []
+        for nome, dado, descricao in resultados:
+            dado_txt = f" ({dado})" if dado else ""
+            resumo = (descricao[:80] + "...") if descricao and len(descricao) > 80 else (descricao or "Sem descrição.")
+            linhas.append(f"• **{nome}**{dado_txt} — {resumo}")
+
+        await interaction.response.send_message("\n".join(linhas), ephemeral=True)
 
 # ==============================================================================
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)
@@ -204,12 +240,103 @@ class GerenciarHabilidadesView(ui.View):
         super().__init__(timeout=60)
         self.add_item(SelecionarHabilidadeSelect(skills, view_ficha))
 
+class FerimentosCriticosSelect(ui.Select):
+    def __init__(self):
+        ferimentos = [
+            ("Fratura", "Movimento reduzido e penalidade em testes físicos."),
+            ("Sangramento", "Perde HP por turno até estancar."),
+            ("Concussão", "Penalidade em Percepção e Magia."),
+            ("Perfuração", "Ações de combate com desvantagem."),
+            ("Queimadura", "Resistência reduzida e dor contínua.")
+        ]
+
+        options = [
+            discord.SelectOption(
+                label=nome,
+                value=nome,
+                description=desc[:100],
+                emoji="🩸"
+            ) for nome, desc in ferimentos
+        ]
+        super().__init__(placeholder="🩸 Ferimentos Críticos (tabela)", min_values=1, max_values=1, options=options)
+        self.ferimentos_map = {nome: desc for nome, desc in ferimentos}
+        self.row = 3
+
+    async def callback(self, interaction: discord.Interaction):
+        ferimento = self.values[0]
+        desc = self.ferimentos_map.get(ferimento, "Sem detalhes.")
+        embed = discord.Embed(title=f"🩸 {ferimento}", description=desc, color=0x8B1A1A)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class FerimentosCriticosView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+        self.add_item(FerimentosCriticosSelect())
+
+class PocaoSelect(ui.Select):
+    def __init__(self, potions, personagem_id):
+        self.personagem_id = personagem_id
+        self.potion_map = {str(p[0]): p for p in potions}
+        options = [
+            discord.SelectOption(
+                label=nome[:100],
+                value=str(item_id),
+                description=(efeito or "Sem efeito")[:100],
+                emoji="🧪"
+            )
+            for item_id, nome, efeito in potions
+        ]
+        super().__init__(placeholder="🧪 Consumir poção", min_values=1, max_values=1, options=options)
+        self.row = 3
+
+    async def callback(self, interaction: discord.Interaction):
+        item_id = self.values[0]
+        potion = self.potion_map.get(item_id)
+        if not potion:
+            return await interaction.response.send_message("❌ Poção não encontrada.", ephemeral=True)
+
+        _, nome, efeito = potion
+        db = interaction.client.db
+
+        async with db.execute(
+            "SELECT toxicidade_atual, toxicidade_max FROM personagens WHERE id = ?",
+            (self.personagem_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        toxicidade_atual, toxicidade_max = row
+        custo_toxicidade = 10
+        nova_toxicidade = min((toxicidade_atual or 0) + custo_toxicidade, toxicidade_max or 100)
+
+        await db.execute(
+            "UPDATE personagens SET toxicidade_atual = ? WHERE id = ?",
+            (nova_toxicidade, self.personagem_id)
+        )
+        await db.execute("DELETE FROM inventario WHERE id = ?", (item_id,))
+        await db.commit()
+
+        embed = discord.Embed(
+            title=f"🧪 {interaction.user.display_name} consumiu {nome}",
+            description=efeito or "Efeito não descrito.",
+            color=0x4B7B6F
+        )
+        embed.add_field(name="☠️ Toxicidade", value=f"+{custo_toxicidade} (Total: {nova_toxicidade})")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class PocaoView(ui.View):
+    def __init__(self, potions, personagem_id):
+        super().__init__(timeout=120)
+        self.add_item(PocaoSelect(potions, personagem_id))
+
 # ==============================================================================
 # 3. COMPONENTES DA FICHA PRINCIPAL
 # ==============================================================================
 
 class HabilidadeButton(ui.Button):
-    def __init__(self, nome, dado, descricao):
+    def __init__(self, nome, dado, descricao, personagem_id=None, vigor_cost=0):
         if dado:
             emoji = "🎲"
             style = discord.ButtonStyle.primary
@@ -223,8 +350,38 @@ class HabilidadeButton(ui.Button):
         self.nome_habilidade = nome
         self.dado_habilidade = dado
         self.desc_habilidade = descricao
+        self.personagem_id = personagem_id
+        self.vigor_cost = vigor_cost
 
     async def callback(self, interaction: discord.Interaction):
+        if self.personagem_id and self.vigor_cost:
+            db = interaction.client.db
+            async with db.execute(
+                "SELECT vigor_atual, vigor_max FROM personagens WHERE id = ?",
+                (self.personagem_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+
+            if not row:
+                return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+            vigor_atual, vigor_max = row
+            if vigor_atual is None:
+                vigor_atual = vigor_max
+
+            if vigor_atual < self.vigor_cost:
+                return await interaction.response.send_message(
+                    "⚠️ Vigor insuficiente para conjurar.",
+                    ephemeral=True
+                )
+
+            novo_vigor = max(vigor_atual - self.vigor_cost, 0)
+            await db.execute(
+                "UPDATE personagens SET vigor_atual = ? WHERE id = ?",
+                (novo_vigor, self.personagem_id)
+            )
+            await db.commit()
+
         embed = discord.Embed(title=f"⚔️ {interaction.user.display_name} usou {self.nome_habilidade}", color=0xFF5500)
         embed.description = self.desc_habilidade or "..."
         
@@ -244,29 +401,77 @@ class AtributoButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(RolarPericiaModal(self.nome_atributo, self.valor_atributo))
+class RolagemCombateButton(ui.Button):
+    def __init__(self, label, emoji, personagem_id, formula_template):
+        super().__init__(style=discord.ButtonStyle.primary, label=label, emoji=emoji, row=2)
+        self.personagem_id = personagem_id
+        self.formula_template = formula_template
+
+    async def callback(self, interaction: discord.Interaction):
+        db = interaction.client.db
+        async with db.execute(
+            "SELECT ataque FROM personagens WHERE id = ?",
+            (self.personagem_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        ataque = row[0] or 0
+        formula = self.formula_template.format(ataque=ataque)
+        detalhes, total = rolar_dados(formula)
+        if detalhes is None:
+            return await interaction.response.send_message("❌ Fórmula inválida.", ephemeral=True)
+
+        embed = discord.Embed(
+            title=f"🎲 {interaction.user.display_name} rolou {self.label}",
+            description=f"`{formula}`\nResultado: {detalhes}\n**Total: {total}**",
+            color=0xB5651D
+        )
+        await interaction.response.send_message(embed=embed)
 
 class FichaView(ui.View):
     def __init__(self, personagem_id, user_id_dono):
         super().__init__(timeout=None)
         self.personagem_id = personagem_id
         self.dono_id = user_id_dono
-        self.update_buttons_state("info")
+        self._mark_static_items()
+        self.update_buttons_state("geral")
+
+    def _mark_static_items(self):
+        for item in self.children:
+            item.is_static = True
 
     def update_buttons_state(self, mode: str):
         for item in self.children:
             if isinstance(item, ui.Button) and item.label:
-                if item.label == "Info/Lore":
-                    is_active = (mode == "info")
+                if item.label == "Geral":
+                    is_active = (mode == "geral")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Habilidades":
-                    is_active = (mode == "skills")
+                elif item.label == "Combate":
+                    is_active = (mode == "combate")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Atributos":
                     is_active = (mode == "atributos")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+                elif item.label == "Magia/Alquimia":
+                    is_active = (mode == "magia")
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+                elif item.label == "Inventário":
+                    is_active = (mode == "inventario")
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+                elif item.label == "Buscar Perícia":
+                    item.disabled = (mode != "geral")
+                    item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
+                elif item.label in {"Nova Skill", "Gerenciar"}:
+                    item.disabled = (mode != "magia")
+                    item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # ============================================================
@@ -282,12 +487,16 @@ class FichaView(ui.View):
         return False
 
     # --- NAVEGAÇÃO (ROW 0) ---
-    @ui.button(label="Info/Lore", emoji="📜", style=discord.ButtonStyle.secondary, row=0)
-    async def btn_info(self, interaction: discord.Interaction, button: ui.Button):
+    @ui.button(label="Geral", emoji="📜", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_geral(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_info_geral(interaction)
 
-    @ui.button(label="Habilidades", emoji="⚔️", style=discord.ButtonStyle.secondary, row=0)
-    async def btn_skills(self, interaction: discord.Interaction, button: ui.Button):
+    @ui.button(label="Combate", emoji="⚔️", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_combate(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_combate(interaction)
+
+    @ui.button(label="Magia/Alquimia", emoji="✨", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_magia(self, interaction: discord.Interaction, button: ui.Button):
         await self.atualizar_botoes_habilidade(interaction)
 
     @ui.button(label="Atributos", emoji="🎯", style=discord.ButtonStyle.secondary, row=0)
@@ -295,10 +504,20 @@ class FichaView(ui.View):
         await self.atualizar_botoes_atributos(interaction)
 
     @ui.button(label="Nova Skill", emoji="➕", style=discord.ButtonStyle.success, row=0)
+    @ui.button(label="Inventário", emoji="🎒", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_inventario(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_inventario(interaction)
+
+    # --- AÇÕES (ROW 1) ---
+    @ui.button(label="Buscar Perícia", emoji="🔎", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_buscar(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
+
+    @ui.button(label="Nova Skill", emoji="➕", style=discord.ButtonStyle.success, row=1)
     async def btn_add_skill(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self))
 
-    @ui.button(label="Gerenciar", emoji="⚙️", style=discord.ButtonStyle.secondary, row=0)
+    @ui.button(label="Gerenciar", emoji="⚙️", style=discord.ButtonStyle.secondary, row=1)
     async def btn_gerenciar(self, interaction: discord.Interaction, button: ui.Button):
         db = interaction.client.db
         async with db.execute("SELECT id, nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (self.personagem_id,)) as cursor:
@@ -313,46 +532,222 @@ class FichaView(ui.View):
     # --- MÉTODOS DE EXIBIÇÃO ---
     
     async def mostrar_info_geral(self, interaction: discord.Interaction):
-        self.update_buttons_state("info")
+        self.update_buttons_state("geral")
         
         db = interaction.client.db
-        async with db.execute("SELECT nome, raca, classe, nivel, historia, imagem_url, ouro, hp_atual, hp_max FROM personagens WHERE id = ?", (self.personagem_id,)) as cursor:
+        async with db.execute("""
+            SELECT p.nome, p.raca, p.classe, p.nivel, p.historia, p.imagem_url, p.ouro,
+                   p.hp_atual, p.hp_max, p.mp_max, p.ataque, p.defesa, p.xp_atual,
+                   p.vigor_atual, p.vigor_max, p.toxicidade_atual, p.toxicidade_max, w.nome
+            FROM personagens p
+            LEFT JOIN world_locations w ON w.id = p.localizacao_id
+            WHERE p.id = ?
+        """, (self.personagem_id,)) as cursor:
             dados = await cursor.fetchone()
         
         if not dados: return
-        nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max = dados
+        (
+            nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max, mp_max,
+            ataque, defesa, xp_atual, vigor_atual, vigor_max, toxicidade_atual, toxicidade_max, local
+        ) = dados
         if hp_atual is None: hp_atual = hp_max
+        if vigor_atual is None: vigor_atual = vigor_max
 
-        embed = discord.Embed(title=f"📜 {nome}", description=historia or "Sem registro.", color=0x2b2d31)
+        async with db.execute(
+            "SELECT nome FROM habilidades_personagem WHERE personagem_id = ? ORDER BY nome ASC LIMIT 5",
+            (self.personagem_id,)
+        ) as cursor:
+            pericias = await cursor.fetchall()
+        async with db.execute(
+            "SELECT COUNT(*) FROM habilidades_personagem WHERE personagem_id = ?",
+            (self.personagem_id,)
+        ) as cursor:
+            total_pericias = (await cursor.fetchone())[0]
+
+        pericias_txt = ", ".join([p[0] for p in pericias]) if pericias else "Nenhuma registrada."
+        if total_pericias > 5:
+            pericias_txt += f" (+{total_pericias - 5} outras)"
+
+        embed = discord.Embed(
+            title=f"📜 {nome}",
+            description=historia or "Sem registro.",
+            color=0xE8D6B3
+        )
         embed.add_field(name="Raça", value=raca, inline=True)
         embed.add_field(name="Classe", value=classe, inline=True)
         embed.add_field(name="Nível", value=str(nivel), inline=True)
+        embed.add_field(name="📍 Localização", value=local or "Desconhecida", inline=False)
         
         barra = "🟩" * int((hp_atual/hp_max)*10) if hp_max > 0 else "🟩"*10
         embed.add_field(name="❤️ Vida", value=f"{hp_atual}/{hp_max}\n`{barra}`", inline=True)
+
+        barra_vigor = "🟨" * int((vigor_atual/vigor_max)*10) if vigor_max > 0 else "🟨"*10
+        embed.add_field(name="⚡ Vigor", value=f"{vigor_atual}/{vigor_max}\n`{barra_vigor}`", inline=True)
+        embed.add_field(name="☠️ Toxicidade", value=f"{toxicidade_atual}/{toxicidade_max}", inline=True)
         
         embed.add_field(name="Ouro", value=f"💰 {ouro}", inline=True)
+        embed.add_field(name="XP Atual", value=str(xp_atual), inline=True)
+        embed.add_field(name="Atributos", value=f"Ataque {ataque} • Defesa {defesa} • MP {mp_max}", inline=False)
+        embed.add_field(name="Perícias (Busca rápida disponível)", value=pericias_txt, inline=False)
         if img: embed.set_thumbnail(url=img)
         
         self.clear_dynamic_buttons()
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
-        self.update_buttons_state("skills")
+        self.update_buttons_state("magia")
         self.clear_dynamic_buttons()
 
         db = interaction.client.db
-        async with db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ? LIMIT 20", (self.personagem_id,)) as cursor:
+        async with db.execute("""
+            SELECT p.vigor_atual, p.vigor_max, p.toxicidade_atual, p.toxicidade_max
+            FROM personagens p
+            WHERE p.id = ?
+        """, (self.personagem_id,)) as cursor:
+            recursos = await cursor.fetchone()
+
+        if not recursos:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        vigor_atual, vigor_max, toxicidade_atual, toxicidade_max = recursos
+        if vigor_atual is None: vigor_atual = vigor_max
+        if toxicidade_atual is None: toxicidade_atual = 0
+
+        async with db.execute(
+            "SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ? LIMIT 20",
+            (self.personagem_id,)
+        ) as cursor:
             skills = await cursor.fetchall()
 
-        embed = discord.Embed(title="⚔️ Grimório de Habilidades", color=0x992d22)
+        async with db.execute(
+            "SELECT id, nome, tipo, efeito FROM inventario WHERE user_id = ?",
+            (interaction.user.id,)
+        ) as cursor:
+            itens = await cursor.fetchall()
+
+        potions = [
+            (item_id, nome, efeito)
+            for item_id, nome, tipo, efeito in itens
+            if (tipo and "poção" in tipo.lower())
+            or (tipo and "pocao" in tipo.lower())
+            or (tipo and "potion" in tipo.lower())
+            or (nome and "poção" in nome.lower())
+            or (nome and "pocao" in nome.lower())
+        ]
+
+        barra_vigor = "🟨" * int((vigor_atual / vigor_max) * 10) if vigor_max > 0 else "🟨"*10
+        embed = discord.Embed(title="✨ Magia & Alquimia", color=0x8E7CC3)
+        embed.add_field(name="⚡ Vigor", value=f"{vigor_atual}/{vigor_max}\n`{barra_vigor}`", inline=True)
+        embed.add_field(name="☠️ Toxicidade", value=f"{toxicidade_atual}/{toxicidade_max}", inline=True)
+
         if not skills:
-            embed.description = "Nenhuma habilidade aprendida. Clique em '➕ Nova Skill'."
+            embed.add_field(name="Sinais/Feitiços", value="Nenhuma habilidade aprendida. Clique em '➕ Nova Skill'.", inline=False)
         else:
-            embed.description = "Clique para usar ou '⚙️ Gerenciar' para editar:"
+            embed.add_field(name="Sinais/Feitiços", value="Clique para conjurar (gasta 1 vigor).", inline=False)
 
         for nome, dado, desc in skills:
-            self.add_item(HabilidadeButton(nome, dado, desc))
+            self.add_item(HabilidadeButton(nome, dado, desc, personagem_id=self.personagem_id, vigor_cost=1))
+
+        if potions:
+            embed.add_field(
+                name="🧪 Poções",
+                value=f"{len(potions)} disponíveis (selecione abaixo para consumir).",
+                inline=False
+            )
+            self.add_item(PocaoSelect(potions, self.personagem_id))
+        else:
+            embed.add_field(name="🧪 Poções", value="Nenhuma poção no inventário.", inline=False)
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def mostrar_combate(self, interaction: discord.Interaction):
+        self.update_buttons_state("combate")
+        self.clear_dynamic_buttons()
+
+        db = interaction.client.db
+        async with db.execute(
+            "SELECT hp_atual, hp_max, ataque, defesa FROM personagens WHERE id = ?",
+            (self.personagem_id,)
+        ) as cursor:
+            dados = await cursor.fetchone()
+
+        if not dados:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        hp_atual, hp_max, ataque, defesa = dados
+        if hp_atual is None: hp_atual = hp_max
+
+        async with db.execute(
+            "SELECT nome, tipo, efeito FROM inventario WHERE user_id = ?",
+            (interaction.user.id,)
+        ) as cursor:
+            itens = await cursor.fetchall()
+
+        armas = []
+        armaduras = []
+        for nome, tipo, efeito in itens:
+            tipo_lower = (tipo or "").lower()
+            nome_lower = (nome or "").lower()
+            if "arma" in tipo_lower or "weapon" in tipo_lower:
+                armas.append((nome, efeito))
+            if "armadura" in tipo_lower or "armor" in tipo_lower or "escudo" in nome_lower:
+                armaduras.append((nome, efeito))
+
+        armas_txt = "\n".join([f"• **{n}** — {e or 'Sem efeito'}" for n, e in armas]) or "Sem armas equipadas."
+        armaduras_txt = "\n".join([f"• **{n}** — {e or 'Sem efeito'}" for n, e in armaduras]) or "Sem armaduras registradas."
+
+        barra_hp = "🟥" * int((hp_atual / hp_max) * 10) if hp_max > 0 else "🟥"*10
+        embed = discord.Embed(title="⚔️ Combate", color=0xB07D62)
+        embed.add_field(name="❤️ Vida", value=f"{hp_atual}/{hp_max}\n`{barra_hp}`", inline=True)
+        embed.add_field(name="⚔️ Ataque", value=str(ataque), inline=True)
+        embed.add_field(name="🛡️ SP Atual", value=str(defesa), inline=True)
+        embed.add_field(name="Armas", value=armas_txt, inline=False)
+        embed.add_field(name="Armadura", value=armaduras_txt, inline=False)
+        embed.add_field(name="Ferimentos Críticos", value="Use a tabela interativa abaixo.", inline=False)
+
+        self.add_item(RolagemCombateButton("Roll to Hit", "🎯", self.personagem_id, "1d20+{ataque}"))
+        self.add_item(RolagemCombateButton("Roll Damage", "💥", self.personagem_id, "1d6+{ataque}"))
+        self.add_item(FerimentosCriticosSelect())
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def mostrar_inventario(self, interaction: discord.Interaction):
+        self.update_buttons_state("inventario")
+        self.clear_dynamic_buttons()
+
+        db = interaction.client.db
+        async with db.execute(
+            "SELECT nome, tipo, valor, efeito FROM inventario WHERE user_id = ?",
+            (interaction.user.id,)
+        ) as cursor:
+            itens = await cursor.fetchall()
+
+        async with db.execute(
+            "SELECT nivel FROM personagens WHERE id = ?",
+            (self.personagem_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        nivel = row[0] if row else 1
+
+        if not itens:
+            descricao = "🎒 Inventário vazio."
+        else:
+            descricao = "\n".join([
+                f"• **{nome}** ({tipo}) — 💰 {valor}\n  {efeito or 'Sem efeito'}"
+                for nome, tipo, valor, efeito in itens[:20]
+            ])
+
+        encumbrance = len(itens)
+        capacidade = 10 + (nivel * 2)
+        embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
+        embed.add_field(name="Encumbrance", value=f"{encumbrance}/{capacidade} (1 por item)", inline=False)
+        embed.set_footer(text="Layout estilo pergaminho limpo • Lista dinâmica")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -384,7 +779,7 @@ class FichaView(ui.View):
             await interaction.response.edit_message(embed=embed, view=self)
 
     def clear_dynamic_buttons(self):
-        items_to_keep = [item for item in self.children if getattr(item, 'row', 0) == 0]
+        items_to_keep = [item for item in self.children if getattr(item, "is_static", False)]
         self.clear_items()
         for item in items_to_keep:
             self.add_item(item)

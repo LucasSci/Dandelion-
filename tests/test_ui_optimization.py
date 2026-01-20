@@ -57,6 +57,9 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         # row 0 has: Info, Skills, Atributos, Nova Skill, Gerenciar. (5 items)
         # So 5 + 20 = 25.
         self.assertEqual(len(view.children), 25)
+        # 7 static (Geral, Combate, Magia/Alquimia, Inventário, Buscar, Nova Skill, Gerenciar)
+        # + 20 dynamic = 27.
+        self.assertEqual(len(view.children), 27)
 
 if __name__ == "__main__":
     unittest.main()
