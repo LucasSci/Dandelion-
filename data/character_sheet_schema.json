@@ -26,6 +26,17 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["INT", "REF", "DEX", "BODY", "SPD", "EMP", "CRA", "WILL", "LUCK"],
+      "required": [
+        "INT",
+        "REF",
+        "DEX",
+        "BODY",
+        "SPD",
+        "EMP",
+        "CRA",
+        "WILL",
+        "LUCK"
+      ],
       "properties": {
         "INT": { "type": "integer", "minimum": 1, "maximum": 10 },
         "REF": { "type": "integer", "minimum": 1, "maximum": 10 },
@@ -42,6 +53,15 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["Stun", "Run", "Leap", "HP", "Stamina", "Vigor", "Recovery"],
+      "required": [
+        "Stun",
+        "Run",
+        "Leap",
+        "HP",
+        "Stamina",
+        "Vigor",
+        "Recovery"
+      ],
       "properties": {
         "Stun": { "type": "integer", "minimum": 0 },
         "Run": { "type": "integer", "minimum": 0 },
@@ -61,11 +81,13 @@
         "required": ["nome", "stat_base", "pontos_investidos", "modificadores"],
         "properties": {
           "nome": { "type": "string" },
+          "nome": {"type": "string"},
           "stat_base": {
             "type": "string",
             "enum": ["INT", "REF", "DEX", "BODY", "SPD", "EMP", "CRA", "WILL", "LUCK"]
           },
           "pontos_investidos": { "type": "integer", "minimum": 0 },
+          "pontos_investidos": {"type": "integer", "minimum": 0},
           "modificadores": { "type": "integer" }
         }
       }

@@ -6,7 +6,7 @@ from typing import Optional
 from discord.ext import commands
 from discord import app_commands
 from ui.modals import CriarFichaModal
-from ui.sheet_view import FichaView
+from ui.sheet_view import FichaView, construir_embed_ficha
 
 DB_NAME = "bestiario.db"
 LOCALIZACOES_ARMADURA = {
@@ -312,8 +312,8 @@ class Characters(commands.Cog):
         personagem_id, personagem_nome, _, _ = personagem
         await self.bot.db.execute(
             """
-            INSERT INTO armaduras_personagem (personagem_id, localizacao, sp)
-            VALUES (?, ?, ?)
+            INSERT INTO armaduras_personagem (personagem_id, localizacao, sp, reliability)
+            VALUES (?, ?, ?, 100)
             ON CONFLICT(personagem_id, localizacao) DO UPDATE SET sp = excluded.sp
             """,
             (personagem_id, localizacao, sp)
@@ -353,7 +353,10 @@ class Characters(commands.Cog):
             armadura_id = armadura[0]
         else:
             cursor = await self.bot.db.execute(
-                "INSERT INTO armaduras_personagem (personagem_id, localizacao, sp) VALUES (?, ?, 0)",
+                """
+                INSERT INTO armaduras_personagem (personagem_id, localizacao, sp, reliability)
+                VALUES (?, ?, 0, 100)
+                """,
                 (personagem_id, localizacao)
             )
             armadura_id = cursor.lastrowid
@@ -397,12 +400,18 @@ class Characters(commands.Cog):
             hp_atual = hp_max
 
         async with self.bot.db.execute(
-            "SELECT id, sp FROM armaduras_personagem WHERE personagem_id = ? AND localizacao = ?",
+            "SELECT id, sp, reliability FROM armaduras_personagem WHERE personagem_id = ? AND localizacao = ?",
             (personagem_id, localizacao)
         ) as cursor:
             armadura = await cursor.fetchone()
 
+        sp_base = armadura[1] if armadura else 0
+        reliability = armadura[2] if armadura and armadura[2] is not None else 100
+        reliability = max(0, min(100, reliability))
+        sp_atual = max(0, int(sp_base * (reliability / 100))) if sp_base > 0 else 0
         sp = armadura[1] if armadura else 0
+        reliability = armadura[2] if armadura and armadura[2] is not None else 100
+        sp_efetivo = int(round(sp * (reliability / 100)))
         multiplicador = 1.0
         if tipo_dano and armadura:
             async with self.bot.db.execute(
@@ -413,9 +422,31 @@ class Characters(commands.Cog):
             if mod_row:
                 multiplicador = mod_row[0]
 
-        dano_reduzido = max(0, dano - sp)
+        dano_reduzido = max(0, dano - sp_atual)
         dano_final = max(0, int(round(dano_reduzido * multiplicador)))
         novo_hp = max(0, hp_atual - dano_final)
+
+        nova_reliability = reliability
+        novo_sp_atual = sp_atual
+        if armadura and sp_base > 0 and dano > 0:
+            reducao_sp = max(1, dano // 5)
+            novo_sp_atual = max(0, sp_atual - reducao_sp)
+            nova_reliability = max(0, min(100, int(round((novo_sp_atual / sp_base) * 100))))
+            await self.bot.db.execute(
+                "UPDATE armaduras_personagem SET reliability = ? WHERE id = ?",
+                (nova_reliability, armadura[0])
+        dano_reduzido = max(0, dano - sp_efetivo)
+        dano_final = max(0, int(round(dano_reduzido * multiplicador)))
+        novo_hp = max(0, hp_atual - dano_final)
+
+        reliability_nova = reliability
+        if armadura and dano > 0:
+            degradacao = max(1, dano // 5)
+            reliability_nova = max(0, reliability - degradacao)
+            await self.bot.db.execute(
+                "UPDATE armaduras_personagem SET reliability = ? WHERE id = ?",
+                (reliability_nova, armadura[0])
+            )
 
         await self.bot.db.execute(
             "UPDATE personagens SET hp_atual = ? WHERE id = ?",
@@ -426,12 +457,17 @@ class Characters(commands.Cog):
         tipo_txt = f" ({tipo_dano})" if tipo_dano else ""
         resposta = (
             f"💥 **{personagem_nome}** recebeu **{dano}** de dano{tipo_txt} em **{localizacao}**.\n"
-            f"🛡️ SP: {sp} | 🔻 Dano após SP: {dano_reduzido}\n"
+            f"🛡️ SP: {sp_atual} | 🔻 Dano após SP: {dano_reduzido}\n"
+            f"🛡️ SP: {sp_efetivo} (Base {sp} | Rel {reliability}%) | 🔻 Dano após SP: {dano_reduzido}\n"
         )
+        if armadura and sp_base > 0 and dano > 0:
+            resposta += f"🧱 Integridade: {reliability}% → {nova_reliability}% (SP efetivo {sp_atual} → {novo_sp_atual})\n"
         if multiplicador != 1.0:
             resposta += f"🧪 Multiplicador: {multiplicador}x | Dano final: {dano_final}\n"
         else:
             resposta += f"✅ Dano final: {dano_final}\n"
+        if armadura:
+            resposta += f"🛡️ Reliability: {reliability}% → {reliability_nova}%\n"
         resposta += f"❤️ HP: {hp_atual} → {novo_hp}"
 
         await interaction.response.send_message(resposta)
@@ -445,7 +481,8 @@ class Characters(commands.Cog):
         async with self.bot.db.execute(
             """
             SELECT id, nome, raca, classe, nivel, xp_atual, historia, imagem_url, ouro,
-                   hp_max, hp_atual, mp_max, ataque, defesa
+                   hp_max, hp_atual, mp_max, ataque, defesa, vigor_max, vigor_atual,
+                   toxicidade_max, toxicidade_atual
             FROM personagens WHERE user_id = ?
             """,
             (target.id,),
@@ -464,27 +501,73 @@ class Characters(commands.Cog):
         ) as cursor:
             habilidades = await cursor.fetchall()
 
+        async with self.bot.db.execute(
+            "SELECT nome, valor FROM atributos_personagem WHERE personagem_id = ?",
+            (personagem_id,),
+        ) as cursor:
+            atributos = await cursor.fetchall()
+
+        async with self.bot.db.execute(
+            """
+            SELECT localizacao, sp, reliability
+            FROM armaduras_personagem
+            WHERE personagem_id = ? AND localizacao IN ('cabeca', 'torso', 'pernas')
+            """,
+            (personagem_id,),
+        ) as cursor:
+            armaduras = await cursor.fetchall()
+
+        atributos_map = {nome: valor for nome, valor in atributos}
+        armor_defaults = {
+            "cabeca": {"sp": 0, "reliability": 100},
+            "torso": {"sp": 0, "reliability": 100},
+            "pernas": {"sp": 0, "reliability": 100},
+        }
+        for localizacao, sp, reliability in armaduras:
+            armor_defaults[localizacao] = {
+                "sp": sp or 0,
+                "reliability": reliability if reliability is not None else 100,
+            }
+
+        async with self.bot.db.execute(
+            "SELECT localizacao, sp, reliability FROM armaduras_personagem WHERE personagem_id = ?",
+            (personagem_id,),
+        ) as cursor:
+            armaduras = await cursor.fetchall()
+
+        export_localizacoes = ["cabeca", "tronco", "pernas"]
+        armor_layers = {
+            localizacao: {"sp": 0, "reliability": 100}
+            for localizacao in export_localizacoes
+        }
+        for localizacao, sp, reliability in armaduras:
+            if localizacao in armor_layers:
+                armor_layers[localizacao] = {
+                    "sp": sp or 0,
+                    "reliability": reliability if reliability is not None else 100,
+                }
+
         ficha = {
             "schema_version": "v1.0.0",
             "character_name": personagem[1],
             "core_stats": {
-                "INT": 0,
-                "REF": 0,
-                "DEX": 0,
-                "BODY": 0,
-                "SPD": 0,
-                "EMP": 0,
-                "CRA": 0,
-                "WILL": 0,
-                "LUCK": 0,
+                "INT": atributos_map.get("INT", 1),
+                "REF": atributos_map.get("REF", 1),
+                "DEX": atributos_map.get("DEX", 1),
+                "BODY": atributos_map.get("BODY", 1),
+                "SPD": atributos_map.get("SPD", 1),
+                "EMP": atributos_map.get("EMP", 1),
+                "CRA": atributos_map.get("CRA", 1),
+                "WILL": atributos_map.get("WILL", 1),
+                "LUCK": atributos_map.get("LUCK", 1),
             },
             "derived_stats": {
                 "Stun": 0,
                 "Run": 0,
                 "Leap": 0,
                 "HP": personagem[9],
-                "Stamina": 0,
-                "Vigor": 0,
+                "Stamina": personagem[14] if personagem[14] is not None else 0,
+                "Vigor": personagem[15] if personagem[15] is not None else 0,
                 "Recovery": 0,
             },
             "skills_tree": [
@@ -504,6 +587,24 @@ class Characters(commands.Cog):
                 "head": {"sp": 0, "reliability": 100},
                 "torso": {"sp": 0, "reliability": 100},
                 "legs": {"sp": 0, "reliability": 100},
+                "toxicity": {
+                    "current": personagem[17] if personagem[17] is not None else 0,
+                    "max": personagem[16] if personagem[16] is not None else 0,
+                },
+                "focus": 0,
+            },
+            "armor_layers": {
+                **armor_layers
+            },
+            "atributos": {
+                "hp_max": personagem[9],
+                "hp_atual": personagem[10],
+                "mp_max": personagem[11],
+                "ataque": personagem[12],
+                "defesa": personagem[13],
+                "head": armor_defaults["cabeca"],
+                "torso": armor_defaults["torso"],
+                "legs": armor_defaults["pernas"],
             },
         }
 
@@ -572,12 +673,8 @@ class Characters(commands.Cog):
         target = usuario or interaction.user
         
         async with self.bot.db.execute("""
-            SELECT p.id, p.nome, p.raca, p.classe, p.nivel, p.historia, p.imagem_url,
-                   p.ouro, p.hp_atual, p.hp_max, p.vigor_atual, p.vigor_max,
-                   p.toxicidade_atual, p.toxicidade_max, p.ataque, p.defesa, p.mp_max,
-                   w.nome
+            SELECT p.id
             FROM personagens p
-            LEFT JOIN world_locations w ON w.id = p.localizacao_id
             WHERE p.user_id = ?
         """, (target.id,)) as cursor:
             res = await cursor.fetchone()
@@ -585,39 +682,14 @@ class Characters(commands.Cog):
         if not res:
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        (
-            char_id, nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max,
-            vigor_atual, vigor_max, toxicidade_atual, toxicidade_max, ataque, defesa, mp_max, local
-        ) = res
-        if hp_atual is None: hp_atual = hp_max
-        if vigor_atual is None: vigor_atual = vigor_max
+        char_id = res[0]
 
-        embed = discord.Embed(
-            title=f"📜 {nome}",
-            description=historia or "Sem registro.",
-            color=0xE8D6B3
-        )
-        embed.add_field(name="Raça", value=raca, inline=True)
-        embed.add_field(name="Classe", value=classe, inline=True)
-        embed.add_field(name="Nível", value=str(nivel), inline=True)
-        embed.add_field(name="📍 Localização", value=local or "Desconhecida", inline=False)
-        
-        pct = hp_atual / hp_max if hp_max > 0 else 0
-        barra_vida = "🟩" * int(pct * 10) + "⬛" * (10 - int(pct * 10))
-        embed.add_field(name="❤️ Vida (HP)", value=f"{hp_atual}/{hp_max}\n`{barra_vida}`", inline=False)
+        embed = await construir_embed_ficha(self.bot.db, char_id, target.id)
+        if not embed:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        pct_vigor = vigor_atual / vigor_max if vigor_max else 0
-        barra_vigor = "🟨" * int(pct_vigor * 10) + "⬛" * (10 - int(pct_vigor * 10))
-        embed.add_field(name="⚡ Vigor", value=f"{vigor_atual}/{vigor_max}\n`{barra_vigor}`", inline=True)
-        embed.add_field(name="☠️ Toxicidade", value=f"{toxicidade_atual}/{toxicidade_max}", inline=True)
-        embed.add_field(name="⚔️ Combate", value=f"Ataque {ataque} • Defesa {defesa}", inline=True)
-        embed.add_field(name="✨ Magia", value=f"MP {mp_max}", inline=True)
-        
-        embed.add_field(name="Ouro", value=f"💰 {ouro}", inline=True)
-        if img: embed.set_thumbnail(url=img)
-        
         view = FichaView(personagem_id=char_id, user_id_dono=target.id)
-        
+
         await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="listar_fichas", description="Lista todas as fichas")
