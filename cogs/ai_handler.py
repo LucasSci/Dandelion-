@@ -37,19 +37,46 @@ class AIHandler(commands.Cog):
             texto += f"- {r[1]}\n"
         return texto
 
+    async def ler_lore_mundo(self) -> str:
+        """Lê todo o lore inserido pelo mestre para servir de base ao mundo."""
+        async with self.bot.db.execute(
+            "SELECT titulo, resumo, conteudo FROM lore_entries ORDER BY id ASC"
+        ) as c:
+            rows = await c.fetchall()
+
+        if not rows:
+            return "LORE VAZIO. Nenhuma informação adicional do mundo foi registrada."
+
+        linhas = []
+        for titulo, resumo, conteudo in rows:
+            base = resumo or conteudo or ""
+            base = base.strip()
+            if len(base) > 240:
+                base = f"{base[:240]}..."
+            linhas.append(f"- {titulo}: {base}")
+
+        return "\n".join(linhas)
+
     async def gerar_quest_cronologica(self, dificuldade: str) -> dict:
         if not self.client: return None
         
         cronologia = await self.ler_cronologia_estrita()
+        lore = await self.ler_lore_mundo()
         
         prompt = (
             f"Atue como Mestre de RPG (The Witcher/Zerrikania).\n"
             f"=== LINHA DO TEMPO (FATOS REAIS) ===\n"
             f"{cronologia}\n"
             f"====================================\n\n"
+            f"=== LORE DO MUNDO (FATOS REAIS) ===\n"
+            f"{lore}\n"
+            f"===================================\n\n"
             
-            f"TAREFA: Crie um CONTRATO (Dificuldade {dificuldade}) que seja uma consequência LÓGICA dos eventos acima.\n"
-            f"IMPORTANTE: Você deve explicar qual evento específico do passado motivou esta missão.\n\n"
+            f"TAREFA: Crie um CONTRATO (Dificuldade {dificuldade}) que seja uma consequência LÓGICA dos eventos acima e do lore.\n"
+            f"ESTILO: Misture o senso investigativo e moral cinzento de The Witcher, a sensação de rivalidade e escalada de ameaça de Sombras de Mordor, e a exploração/descoberta de Skyrim.\n"
+            f"FOCO: A missão precisa fazer sentido dentro do universo de The Witcher e na região escolhida.\n"
+            f"IMPORTANTE: Você deve explicar qual evento específico do passado motivou esta missão e quais fatos do lore foram usados.\n"
+            f"GANCHOS: A descrição deve terminar com uma linha 'Gancho futuro: ...' conectando a missão a um próximo arco.\n\n"
             
             f"FORMATO DE RESPOSTA (Obrigatório, separado por '|'):\n"
             f"TÍTULO | DESCRIÇÃO | OURO (apenas numeros) | XP (apenas numeros) | CLASSES | REGIÃO | MONSTRO | PROMPT VISUAL | JUSTIFICATIVA"

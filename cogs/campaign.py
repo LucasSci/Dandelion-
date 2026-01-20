@@ -7,6 +7,13 @@ class Campaign(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @staticmethod
+    def _resumir_texto(texto: str, limite: int = 200) -> str:
+        texto = (texto or "").strip()
+        if len(texto) <= limite:
+            return texto
+        return f"{texto[:limite]}..."
+
     def is_mestre(interaction: discord.Interaction) -> bool:
         return interaction.user.guild_permissions.administrator
 
@@ -77,6 +84,95 @@ class Campaign(commands.Cog):
         await self.bot.db.execute("DELETE FROM memoria_campanha")
         await self.bot.db.commit()
         await interaction.response.send_message("🔥 **TABULA RASA!** O Dandelion esqueceu tudo sobre a campanha.", ephemeral=True)
+
+    @app_commands.command(name="lore_ver", description="📚 Vê o conhecimento de mundo registrado pelo mestre")
+    @app_commands.check(is_mestre)
+    async def lore_ver(self, interaction: discord.Interaction):
+        async with self.bot.db.execute(
+            "SELECT id, titulo, resumo, conteudo FROM lore_entries ORDER BY id ASC"
+        ) as c:
+            rows = await c.fetchall()
+
+        if not rows:
+            return await interaction.response.send_message(
+                "📭 Nenhum lore registrado ainda. Use /lore_adicionar ou /lore_importar_txt.",
+                ephemeral=True,
+            )
+
+        texto = ""
+        for entry_id, titulo, resumo, conteudo in rows:
+            base = resumo or conteudo or ""
+            base = self._resumir_texto(base, 150)
+            texto += f"**[{entry_id}]** {titulo}: {base}\n"
+
+        embed = discord.Embed(title="📚 Banco de Conhecimento do Mundo", description=texto, color=0x2E7D32)
+        embed.set_footer(text="A IA usa este lore como verdade adicional para criar missões.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="lore_adicionar", description="➕ Registra um fato do mundo para a IA usar")
+    @app_commands.describe(titulo="Título curto do lore", conteudo="Texto completo do conhecimento")
+    @app_commands.check(is_mestre)
+    async def lore_adicionar(self, interaction: discord.Interaction, titulo: str, conteudo: str):
+        resumo = self._resumir_texto(conteudo, 240)
+        await self.bot.db.execute(
+            "INSERT INTO lore_entries (titulo, resumo, conteudo) VALUES (?, ?, ?)",
+            (titulo, resumo, conteudo),
+        )
+        await self.bot.db.commit()
+        await interaction.response.send_message("✅ Lore registrado com sucesso.", ephemeral=True)
+
+    @app_commands.command(name="lore_importar_txt", description="📂 Importa lore longo via arquivo .txt")
+    @app_commands.describe(titulo="Título do lore", arquivo="Arquivo .txt com o conteúdo")
+    @app_commands.check(is_mestre)
+    async def lore_importar_txt(self, interaction: discord.Interaction, titulo: str, arquivo: discord.Attachment):
+        if not arquivo.filename.endswith(".txt"):
+            return await interaction.response.send_message("Apenas .txt", ephemeral=True)
+        await interaction.response.defer()
+
+        texto = (await arquivo.read()).decode("utf-8")
+        resumo = self._resumir_texto(texto, 240)
+        await self.bot.db.execute(
+            "INSERT INTO lore_entries (titulo, resumo, conteudo) VALUES (?, ?, ?)",
+            (titulo, resumo, texto),
+        )
+        await self.bot.db.commit()
+        await interaction.followup.send("✅ Lore importado! A IA agora conhece esse conteúdo.")
+
+    @app_commands.command(name="lore_editar", description="✏️ Corrige um lore existente")
+    @app_commands.describe(id_lore="ID do lore (veja em /lore_ver)", novo_titulo="Novo título", novo_conteudo="Novo texto")
+    @app_commands.check(is_mestre)
+    async def lore_editar(
+        self,
+        interaction: discord.Interaction,
+        id_lore: int,
+        novo_titulo: str,
+        novo_conteudo: str,
+    ):
+        resumo = self._resumir_texto(novo_conteudo, 240)
+        cursor = await self.bot.db.execute(
+            "UPDATE lore_entries SET titulo = ?, resumo = ?, conteudo = ?, atualizado_em = datetime('now') WHERE id = ?",
+            (novo_titulo, resumo, novo_conteudo, id_lore),
+        )
+        await self.bot.db.commit()
+
+        if cursor.rowcount > 0:
+            await interaction.response.send_message(f"✅ Lore [{id_lore}] atualizado.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ ID não encontrado.", ephemeral=True)
+
+    @app_commands.command(name="lore_apagar", description="🗑️ Remove um lore do banco de conhecimento")
+    @app_commands.check(is_mestre)
+    async def lore_apagar(self, interaction: discord.Interaction, id_lore: int):
+        await self.bot.db.execute("DELETE FROM lore_entries WHERE id = ?", (id_lore,))
+        await self.bot.db.commit()
+        await interaction.response.send_message(f"🗑️ Lore [{id_lore}] removido.", ephemeral=True)
+
+    @app_commands.command(name="lore_limpar_tudo", description="⚠️ Apaga TODO o banco de conhecimento do mundo")
+    @app_commands.check(is_mestre)
+    async def lore_limpar_tudo(self, interaction: discord.Interaction):
+        await self.bot.db.execute("DELETE FROM lore_entries")
+        await self.bot.db.commit()
+        await interaction.response.send_message("🔥 Todo o lore foi apagado.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Campaign(bot))
