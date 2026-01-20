@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dandelion.bot/schemas/character_sheet.schema.json",
+  "title": "Dandelion Witcher Character Sheet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "core_stats",
+    "derived_stats",
+    "skills_tree",
+    "witcher_specifics",
+    "armor_layers"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Versão do schema para migrações futuras.",
+      "pattern": "^v\\d+\\.\\d+\\.\\d+$"
+    },
+    "character_name": {
+      "type": "string",
+      "description": "Nome do personagem na ficha."
+    },
+    "core_stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["INT", "REF", "DEX", "BODY", "SPD", "EMP", "CRA", "WILL", "LUCK"],
+      "properties": {
+        "INT": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "REF": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "DEX": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "BODY": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "SPD": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "EMP": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "CRA": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "WILL": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "LUCK": { "type": "integer", "minimum": 1, "maximum": 10 }
+      }
+    },
+    "derived_stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Stun", "Run", "Leap", "HP", "Stamina", "Vigor", "Recovery"],
+      "properties": {
+        "Stun": { "type": "integer", "minimum": 0 },
+        "Run": { "type": "integer", "minimum": 0 },
+        "Leap": { "type": "integer", "minimum": 0 },
+        "HP": { "type": "integer", "minimum": 0 },
+        "Stamina": { "type": "integer", "minimum": 0 },
+        "Vigor": { "type": "integer", "minimum": 0 },
+        "Recovery": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "skills_tree": {
+      "type": "array",
+      "description": "Lista de perícias e seus investimentos.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["nome", "stat_base", "pontos_investidos", "modificadores"],
+        "properties": {
+          "nome": { "type": "string" },
+          "stat_base": {
+            "type": "string",
+            "enum": ["INT", "REF", "DEX", "BODY", "SPD", "EMP", "CRA", "WILL", "LUCK"]
+          },
+          "pontos_investidos": { "type": "integer", "minimum": 0 },
+          "modificadores": { "type": "integer" }
+        }
+      }
+    },
+    "witcher_specifics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["toxicity", "focus"],
+      "properties": {
+        "toxicity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["current", "max"],
+          "properties": {
+            "current": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "focus": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "armor_layers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "torso", "legs"],
+      "properties": {
+        "head": { "$ref": "#/$defs/armorLayer" },
+        "torso": { "$ref": "#/$defs/armorLayer" },
+        "legs": { "$ref": "#/$defs/armorLayer" }
+      }
+    }
+  },
+  "$defs": {
+    "armorLayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sp", "reliability"],
+      "properties": {
+        "sp": { "type": "integer", "minimum": 0 },
+        "reliability": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Condição da armadura (0-100)."
+        }
+      }
+    }
+  }
+}
