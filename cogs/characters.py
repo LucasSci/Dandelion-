@@ -409,9 +409,6 @@ class Characters(commands.Cog):
         reliability = armadura[2] if armadura and armadura[2] is not None else 100
         reliability = max(0, min(100, reliability))
         sp_atual = max(0, int(sp_base * (reliability / 100))) if sp_base > 0 else 0
-        sp = armadura[1] if armadura else 0
-        reliability = armadura[2] if armadura and armadura[2] is not None else 100
-        sp_efetivo = int(round(sp * (reliability / 100)))
         multiplicador = 1.0
         if tipo_dano and armadura:
             async with self.bot.db.execute(
@@ -435,17 +432,6 @@ class Characters(commands.Cog):
             await self.bot.db.execute(
                 "UPDATE armaduras_personagem SET reliability = ? WHERE id = ?",
                 (nova_reliability, armadura[0])
-        dano_reduzido = max(0, dano - sp_efetivo)
-        dano_final = max(0, int(round(dano_reduzido * multiplicador)))
-        novo_hp = max(0, hp_atual - dano_final)
-
-        reliability_nova = reliability
-        if armadura and dano > 0:
-            degradacao = max(1, dano // 5)
-            reliability_nova = max(0, reliability - degradacao)
-            await self.bot.db.execute(
-                "UPDATE armaduras_personagem SET reliability = ? WHERE id = ?",
-                (reliability_nova, armadura[0])
             )
 
         await self.bot.db.execute(
@@ -457,8 +443,7 @@ class Characters(commands.Cog):
         tipo_txt = f" ({tipo_dano})" if tipo_dano else ""
         resposta = (
             f"💥 **{personagem_nome}** recebeu **{dano}** de dano{tipo_txt} em **{localizacao}**.\n"
-            f"🛡️ SP: {sp_atual} | 🔻 Dano após SP: {dano_reduzido}\n"
-            f"🛡️ SP: {sp_efetivo} (Base {sp} | Rel {reliability}%) | 🔻 Dano após SP: {dano_reduzido}\n"
+            f"🛡️ SP: {sp_atual} (Base {sp_base} | Rel {reliability}%) | 🔻 Dano após SP: {dano_reduzido}\n"
         )
         if armadura and sp_base > 0 and dano > 0:
             resposta += f"🧱 Integridade: {reliability}% → {nova_reliability}% (SP efetivo {sp_atual} → {novo_sp_atual})\n"
@@ -466,8 +451,8 @@ class Characters(commands.Cog):
             resposta += f"🧪 Multiplicador: {multiplicador}x | Dano final: {dano_final}\n"
         else:
             resposta += f"✅ Dano final: {dano_final}\n"
-        if armadura:
-            resposta += f"🛡️ Reliability: {reliability}% → {reliability_nova}%\n"
+        if armadura and sp_base > 0 and dano > 0:
+            resposta += f"🛡️ Reliability: {reliability}% → {nova_reliability}%\n"
         resposta += f"❤️ HP: {hp_atual} → {novo_hp}"
 
         await interaction.response.send_message(resposta)
@@ -535,7 +520,7 @@ class Characters(commands.Cog):
         ) as cursor:
             armaduras = await cursor.fetchall()
 
-        export_localizacoes = ["cabeca", "tronco", "pernas"]
+        export_localizacoes = ["cabeca", "torso", "pernas"]
         armor_layers = {
             localizacao: {"sp": 0, "reliability": 100}
             for localizacao in export_localizacoes
@@ -580,22 +565,13 @@ class Characters(commands.Cog):
                 for h in habilidades
             ],
             "witcher_specifics": {
-                "toxicity": {"current": 0, "max": 0},
-                "focus": 0,
-            },
-            "armor_layers": {
-                "head": {"sp": 0, "reliability": 100},
-                "torso": {"sp": 0, "reliability": 100},
-                "legs": {"sp": 0, "reliability": 100},
                 "toxicity": {
                     "current": personagem[17] if personagem[17] is not None else 0,
                     "max": personagem[16] if personagem[16] is not None else 0,
                 },
                 "focus": 0,
             },
-            "armor_layers": {
-                **armor_layers
-            },
+            "armor_layers": {**armor_layers},
             "atributos": {
                 "hp_max": personagem[9],
                 "hp_atual": personagem[10],
