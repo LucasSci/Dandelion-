@@ -49,7 +49,7 @@ class QuestPostView(ui.View):
         async with self.db.execute(query, (thread_id,)) as c: q = await c.fetchone()
         
         if not q: return await interaction.response.send_message("❌ Quest não encontrada/inválida.", ephemeral=True)
-        q_id, _, _, _, _, status, req, _, max_p, _, _ = q
+        q_id, _, _, _, _, status, req, reg, max_p, _, _ = q
 
         if status == "Rascunho": return await interaction.response.send_message("🚧 Esta missão ainda é um rascunho.", ephemeral=True)
         if status == "Concluida": return await interaction.response.send_message("🏁 Encerrada.", ephemeral=True)
@@ -71,6 +71,23 @@ class QuestPostView(ui.View):
         allowed = [x.strip().lower() for x in req.split(',')]
         if "todas" not in allowed and p_cls not in allowed:
             return await interaction.response.send_message(f"🚫 Classe {char[0]} não permitida.", ephemeral=True)
+
+        async with self.db.execute("""
+            SELECT w.nome
+            FROM personagens p
+            LEFT JOIN world_locations w ON w.id = p.localizacao_id
+            WHERE p.user_id = ?
+        """, (interaction.user.id,)) as c:
+            loc_row = await c.fetchone()
+
+        if reg and reg.lower() != "desconhecida":
+            if not loc_row or not loc_row[0]:
+                return await interaction.response.send_message("🧭 Defina sua localização com `/viajar` antes de aceitar.", ephemeral=True)
+            if loc_row[0].lower() != reg.lower():
+                return await interaction.response.send_message(
+                    f"🚫 Você está em **{loc_row[0]}** e a missão acontece em **{reg}**.",
+                    ephemeral=True
+                )
 
         # Insere
         await self.db.execute("INSERT INTO quest_participantes (quest_id, user_id) VALUES (?,?)", (q_id, interaction.user.id))
@@ -114,8 +131,12 @@ class Quests(commands.Cog):
             return [app_commands.Choice(name=f"{x[1]}", value=str(x[0])) for x in await r.fetchall()]
 
     async def regiao_autocomplete(self, interaction: discord.Interaction, current: str):
-        regioes = ["Zerrikania", "Deserto de Korath", "Novigrad", "Velen", "Skellige", "Kaer Morhen", "Toussaint", "Ofir", "Brokilon"]
-        return [app_commands.Choice(name=r, value=r) for r in regioes if current.lower() in r.lower()]
+        async with self.bot.db.execute(
+            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome LIMIT 25",
+            (f'%{current}%',)
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
 
     async def classes_autocomplete(self, interaction: discord.Interaction, current: str):
         opcoes = ["Todas", "Bruxo", "Feiticeira", "Bardo", "Guerreiro", "Ladino", "Bruxo,Feiticeira", "Guerreiro,Arqueiro"]
