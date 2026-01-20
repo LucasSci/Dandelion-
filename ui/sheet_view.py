@@ -118,14 +118,17 @@ class SelecionarHabilidadeSelect(ui.Select):
             desc_curta = f"({dado}) " if dado else ""
             desc_curta += desc[:50] if desc else "Sem descrição"
             
+            # UX Improvement: Use consistent emojis for skill types
+            emoji = "🎲" if dado else "✨"
+
             options.append(discord.SelectOption(
                 label=nome[:100], 
                 value=str(id_skill), 
                 description=desc_curta[:100],
-                emoji="🔸"
+                emoji=emoji
             ))
 
-        super().__init__(placeholder="Selecione uma habilidade...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="✨ Escolha uma habilidade para gerenciar...", min_values=1, max_values=1, options=options)
         self.view_ficha = view_ficha
 
     async def callback(self, interaction: discord.Interaction):
