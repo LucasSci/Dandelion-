@@ -1,12 +1,22 @@
 import asyncio
-import discord
-import aiohttp
-import os
 import base64
+import os
+from pathlib import Path
+
+import aiohttp
+import discord
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 from openai import OpenAI
+
+from database import (
+    SEED_LOCATIONS_SQL,
+    SEED_LOOKUPS_SQL,
+    SEED_MONSTERS_SQL,
+    SEED_RELATIONS_SQL,
+    SEEDS_DIR,
+)
 
 # --- CONFIGURAÇÕES ---
 DB_NAME = 'bestiario.db'
@@ -21,9 +31,44 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
+
+def is_mestre(interaction: discord.Interaction) -> bool:
+    return interaction.user.guild_permissions.administrator
+
+
 class Bestiary(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.seed_files = [
+            "seed_bestiary_ecosystem.sql",
+            "seed_tw3_full_by_category.sql",
+            "seed_books_core.sql",
+            "seed_books_core_lote2.sql",
+            "seed_tw2_full.sql",
+            "seed_dlcs_hos_baw.sql",
+            "seed_named_monsters_core.sql",
+        ]
+
+    async def _aplicar_seeds(self) -> list[str]:
+        aplicados = []
+        for filename in self.seed_files:
+            seed_path = SEEDS_DIR / filename
+            if not seed_path.exists():
+                continue
+            script = seed_path.read_text(encoding="utf-8")
+            await self.bot.db.executescript(script)
+            try:
+                display_path = seed_path.relative_to(Path.cwd())
+            except ValueError:
+                display_path = seed_path
+            aplicados.append(str(display_path))
+
+        await self.bot.db.executescript(SEED_LOOKUPS_SQL)
+        await self.bot.db.executescript(SEED_LOCATIONS_SQL)
+        await self.bot.db.executescript(SEED_MONSTERS_SQL)
+        await self.bot.db.executescript(SEED_RELATIONS_SQL)
+        await self.bot.db.commit()
+        return aplicados
 
     # --- TRADUTOR INTELIGENTE ---
     async def traduzir_nome(self, nome_usuario):
@@ -193,6 +238,86 @@ class Bestiary(commands.Cog):
         embed.add_field(name="⚔️ Status", value=f"HP: {hp} | Ini: {ini} | Dano: {dano}", inline=False)
         if img_url: embed.set_image(url=img_url)
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(
+        name="alimentar_bestiario",
+        description="🔒 Importa seeds do bestiário e atualiza tabelas base.",
+    )
+    @app_commands.check(is_mestre)
+    async def alimentar_bestiario(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        aplicados = await self._aplicar_seeds()
+        if not aplicados:
+            return await interaction.followup.send(
+                "⚠️ Nenhum arquivo de seed encontrado. Mantive apenas os seeds internos.",
+                ephemeral=True,
+            )
+        detalhes = "\n".join(f"• {path}" for path in aplicados)
+        await interaction.followup.send(
+            f"✅ Seeds aplicados com sucesso:\n{detalhes}",
+            ephemeral=True,
+        )
+
+    @app_commands.command(
+        name="monstro_editar",
+        description="🔒 Ajusta HP, iniciativa e dano de um monstro do bestiário.",
+    )
+    @app_commands.describe(
+        nome="Nome (ou parte) da criatura",
+        hp_max="Novo HP máximo",
+        iniciativa="Nova iniciativa",
+        dano_base="Nova fórmula de dano (ex: 2d6+3)",
+    )
+    @app_commands.check(is_mestre)
+    async def monstro_editar(
+        self,
+        interaction: discord.Interaction,
+        nome: str,
+        hp_max: int | None = None,
+        iniciativa: int | None = None,
+        dano_base: str | None = None,
+    ):
+        if hp_max is None and iniciativa is None and dano_base is None:
+            return await interaction.response.send_message(
+                "⚠️ Informe ao menos um campo para atualizar.", ephemeral=True
+            )
+
+        async with self.bot.db.execute(
+            "SELECT id, nome, hp_max, iniciativa, dano_base FROM criaturas WHERE nome LIKE ? ORDER BY nome LIMIT 1",
+            (f"%{nome}%",),
+        ) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            return await interaction.response.send_message(
+                "❌ Monstro não encontrado no bestiário.", ephemeral=True
+            )
+
+        criatura_id, nome_real, hp_atual, ini_atual, dano_atual = row
+        novos_valores = {
+            "hp_max": hp_atual if hp_max is None else hp_max,
+            "iniciativa": ini_atual if iniciativa is None else iniciativa,
+            "dano_base": dano_atual if dano_base is None else dano_base,
+        }
+
+        await self.bot.db.execute(
+            "UPDATE criaturas SET hp_max = ?, iniciativa = ?, dano_base = ? WHERE id = ?",
+            (
+                novos_valores["hp_max"],
+                novos_valores["iniciativa"],
+                novos_valores["dano_base"],
+                criatura_id,
+            ),
+        )
+        await self.bot.db.commit()
+
+        await interaction.response.send_message(
+            f"✅ **{nome_real}** atualizado.\n"
+            f"• HP: {hp_atual} → {novos_valores['hp_max']}\n"
+            f"• Iniciativa: {ini_atual} → {novos_valores['iniciativa']}\n"
+            f"• Dano: {dano_atual} → {novos_valores['dano_base']}",
+            ephemeral=True,
+        )
 
 async def setup(bot):
     await bot.add_cog(Bestiary(bot))
