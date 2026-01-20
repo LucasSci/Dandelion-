@@ -1,15 +1,22 @@
 import sqlite3
 from pathlib import Path
-from typing import Iterable, Tuple, Optional
+from typing import Iterable, Tuple, Union
 
 DB_NAME = "bestiario.db"
+BASE_DIR = Path(__file__).resolve().parent
+SEEDS_DIR = BASE_DIR / "data" / "seeds"
+
+
+def _resolve_db_path(db_path: Union[str, Path]) -> Path:
+    path = Path(db_path)
+    return path if path.is_absolute() else BASE_DIR / path
 
 # =========================
 # CONEXAO / UTIL
 # =========================
 
-def get_connection(db_path: str = DB_NAME) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+def get_connection(db_path: Union[str, Path] = DB_NAME) -> sqlite3.Connection:
+    conn = sqlite3.connect(_resolve_db_path(db_path))
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
@@ -72,7 +79,11 @@ CREATE TABLE IF NOT EXISTS quests (
     imagem_url TEXT -- URL da imagem gerada pelo DALL-E
 );
 
-CREATE TABLE IF NOT EXISTS quest_participantes (quest_id INTEGER, user_id INTEGER, PRIMARY KEY(quest_id, user_id));
+CREATE TABLE IF NOT EXISTS quest_participantes (
+    quest_id INTEGER,
+    user_id INTEGER,
+    PRIMARY KEY(quest_id, user_id)
+);
 
 -- NOVA TABELA: MEMÓRIA DA CAMPANHA --
 CREATE TABLE IF NOT EXISTS memoria_campanha (
@@ -117,32 +128,6 @@ CREATE TABLE IF NOT EXISTS loja_itens (
     estoque INTEGER DEFAULT 1,
     efeito TEXT,
     descricao TEXT
-);
-
--- QUESTS E MISSÕES --
-
-CREATE TABLE IF NOT EXISTS quests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    titulo TEXT,
-    descricao TEXT,
-    recompensa_ouro INTEGER DEFAULT 0,
-    recompensa_xp INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'Disponivel',
-    classes_req TEXT DEFAULT 'Todas',
-    
-    -- Novos Campos --
-    regiao TEXT DEFAULT 'Desconhecida',
-    max_jogadores INTEGER DEFAULT 1,
-    alvo_monstro TEXT, -- Nome do monstro ou "Nenhum"
-    thread_id INTEGER
-);
-
--- Tabela para suportar múltiplos jogadores na mesma quest
-CREATE TABLE IF NOT EXISTS quest_participantes (
-    quest_id INTEGER,
-    user_id INTEGER,
-    FOREIGN KEY(quest_id) REFERENCES quests(id) ON DELETE CASCADE,
-    PRIMARY KEY(quest_id, user_id)
 );
 
 -- BESTIÁRIO (SIMPLIFICADO) --
@@ -428,14 +413,14 @@ def seed_bestiary(conn: sqlite3.Connection) -> None:
         "seed_books_core_lote2.sql",
         "seed_tw2_full.sql",
         "seed_dlcs_hos_baw.sql",
-        "seed_named_monsters_core.sql"
+        "seed_named_monsters_core.sql",
     ]
     
     for filename in seed_files:
-        p = Path(filename)
+        p = SEEDS_DIR / filename
         if p.exists():
             try:
-                print(f"📄 Aplicando seed externo: {filename}")
+                print(f"📄 Aplicando seed externo: {p.relative_to(BASE_DIR)}")
                 script = p.read_text(encoding="utf-8")
                 conn.executescript(script)
                 conn.commit()
@@ -457,8 +442,9 @@ def seed_bestiary(conn: sqlite3.Connection) -> None:
 # INIT
 # =========================
 
-def init_db(db_path: str = DB_NAME) -> None:
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+def init_db(db_path: Union[str, Path] = DB_NAME) -> None:
+    db_path = _resolve_db_path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
     with get_connection(db_path) as conn:
         cur = conn.cursor()

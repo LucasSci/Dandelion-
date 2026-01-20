@@ -1,15 +1,15 @@
-import os
-import discord
-import aiosqlite
+import asyncio
+
 import aiohttp
-from discord.ext import commands
-from dotenv import load_dotenv
+import aiosqlite
+import discord
 from discord import app_commands
+from discord.ext import commands
 from google import genai
 from google.genai import types
-import asyncio
-import json
-from database import init_db, DB_NAME
+
+from config import settings
+from database import DB_NAME, init_db
 from cogs.characters import Characters
 from cogs.dice import Dice
 from cogs.inventory import Inventory
@@ -18,12 +18,7 @@ from cogs.skills import Skills
 # ======================
 # CARREGA O .env E CONFIGURA IA
 # ======================
-load_dotenv()
-TOKEN = os.getenv("DISCORD_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-# Inicializa o Client do Gemini aqui no bot.py também
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
 
 init_db()
 
@@ -48,17 +43,15 @@ class DandelionBot(commands.Bot):
         await self.add_cog(Dice(self))
         await self.add_cog(Inventory(self))
         await self.add_cog(Skills(self))
-        try:
-             await self.load_extension("cogs.shop")
-             print("✅ Extensão carregada: cogs.shop")
-        except Exception as e:
-             print(f"❌ Falha ao carregar cogs.shop: {e}")
+        for ext in settings.optional_extensions:
+            try:
+                await self.load_extension(ext)
+                print(f"✅ Extensão carregada: {ext}")
+            except Exception as e:
+                print(f"❌ Falha ao carregar {ext}: {e}")
 
         # Carregamento seguro de extensões
-       # Em bot.py, dentro de setup_hook:
-
-        extensoes = ["cogs.ai_handler", "cogs.bestiary", "cogs.combat", "cogs.scribe","cogs.quests", "cogs.campaign"] # <--- Adicione cogs.scribe
-        for ext in extensoes:
+        for ext in settings.extensions:
             try:
                 await self.load_extension(ext)
                 print(f"✅ Extensão carregada: {ext}")
@@ -147,4 +140,6 @@ async def on_app_command_error(interaction: discord.Interaction, error):
         print(f"Erro no comando: {error}")
 
 if __name__ == "__main__":
-    bot.run(TOKEN)
+    if not settings.discord_token:
+        raise RuntimeError("DISCORD_TOKEN não configurado no arquivo .env.")
+    bot.run(settings.discord_token)

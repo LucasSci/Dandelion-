@@ -89,6 +89,12 @@ GEMINI_API_KEY=sua_chave_api_gemini_aqui
 
 ---
 
+## 📚 Dados do Bestiário (Seeds)
+
+Os arquivos SQL usados para popular o bestiário ficam em `data/seeds/`. Ao iniciar o bot, o `database.py` aplica esses seeds automaticamente caso existam. Isso facilita organizar conteúdo e manter o banco atualizado com novas fontes.
+
+---
+
 ## ▶️ Como Rodar
 
 Com o ambiente virtual ativado e as dependências instaladas, inicie o bot:
@@ -151,10 +157,13 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 ```
 /
 ├── bot.py                # Arquivo principal de inicialização
+├── config.py             # Configurações centralizadas (tokens, extensões)
 ├── database.py           # Gerenciamento do SQLite (Cria tabelas)
 ├── utils.py              # Funções auxiliares (Rolagem de dados)
 ├── requirements.txt      # Lista de dependências
 ├── .env                  # Chaves de API (Você deve criar)
+├── data/                 # Dados auxiliares do projeto
+│   └── seeds/            # Seeds SQL para popular o bestiário
 ├── cogs/                 # Módulos de comandos
 │   ├── ai_handler.py     # Integração Google Gemini
 │   ├── bestiary.py       # Scraper e Bestiário
