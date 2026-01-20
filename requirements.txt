@@ -10,10 +10,6 @@ google-genai
 # Banco de dados assíncrono SQLite
 aiosqlite
 
-discord.py
-python-dotenv
-google-genai
-aiosqlite
 deep-translator
 beautifulsoup4
-aiohttp 
+aiohttp
