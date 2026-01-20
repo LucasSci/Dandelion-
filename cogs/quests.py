@@ -134,7 +134,13 @@ class Quests(commands.Cog):
 
     # --- AUTOCOMPLETES ---
     async def ac_monstro(self, i, c: str):
-        async with self.bot.db.execute("SELECT id, name FROM monsters WHERE name LIKE ? LIMIT 25", (f'%{c}%',)) as r:
+        termo = c.strip()
+        if not termo:
+            return []
+        async with self.bot.db.execute(
+            "SELECT id, name FROM monsters WHERE name LIKE ? COLLATE NOCASE ORDER BY name COLLATE NOCASE LIMIT 25",
+            (f"{termo}%",),
+        ) as r:
             return [app_commands.Choice(name=x[1], value=str(x[0])) for x in await r.fetchall()]
     
     async def ac_quest_rascunho(self, i, c: str):

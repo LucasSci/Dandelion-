@@ -7,12 +7,20 @@ from typing import Optional
 from discord.ext import commands
 from discord import app_commands
 from ui.combat_view import CombateView, MestreView, gerar_barra
+from vtt_engine.grid_system import GridMap
 from utils import rolar_dados
 
 DB_NAME = "bestiario.db"
 DEFAULT_MONSTER_HP = 50
 DEFAULT_MONSTER_INI = 10
 DEFAULT_MONSTER_DANO = "1d6"
+MAP_WIDTH = 12
+MAP_HEIGHT = 8
+TERRAIN_EMOJI = {
+    0: "🟩",
+    1: "🟥",
+    2: "🟫",
+}
 
 # --- HELPER: SISTEMA DE XP ---
 async def aplicar_xp(db, user_id, xp_ganho, channel):
@@ -73,14 +81,17 @@ class Combat(commands.Cog):
         """
 
     async def ac_criatura(self, interaction: discord.Interaction, current: str):
+        termo = current.strip()
+        if not termo:
+            return []
         async with self.bot.db.execute(
             """
-            SELECT nome AS nome FROM criaturas WHERE nome LIKE ?
+            SELECT nome AS nome FROM criaturas WHERE nome LIKE ? COLLATE NOCASE
             UNION
-            SELECT name AS nome FROM monsters WHERE name LIKE ?
-            ORDER BY nome LIMIT 25
+            SELECT name AS nome FROM monsters WHERE name LIKE ? COLLATE NOCASE
+            ORDER BY nome COLLATE NOCASE LIMIT 25
             """,
-            (f"%{current}%", f"%{current}%"),
+            (f"{termo}%", f"{termo}%"),
         ) as cursor:
             rows = await cursor.fetchall()
         return [app_commands.Choice(name=row[0], value=row[0]) for row in rows]
@@ -154,6 +165,42 @@ class Combat(commands.Cog):
             linhas.append(f"{icone} **{m['nome']}**\n{barra} `{status}`")
         return "\n".join(linhas) + "\n"
 
+    def _resolver_bioma(self, regiao: str | None) -> str:
+        if not regiao:
+            return "Planície"
+        regiao_lower = regiao.lower()
+        if "pântano" in regiao_lower or "pantano" in regiao_lower:
+            return "Pântano"
+        if "floresta" in regiao_lower or "bosque" in regiao_lower:
+            return "Floresta"
+        if "caverna" in regiao_lower or "gruta" in regiao_lower:
+            return "Caverna"
+        if "cidade" in regiao_lower or "vila" in regiao_lower or "vilarejo" in regiao_lower:
+            return "Cidade"
+        return "Planície"
+
+    def _renderizar_battlemap(self, grid):
+        linhas = []
+        for row in grid:
+            linhas.append("".join(TERRAIN_EMOJI.get(cell, "⬜") for cell in row))
+        return "\n".join(linhas)
+
+    async def _enviar_battlemap(self, channel, session):
+        if session.get("battlemap_enviado"):
+            return
+        bioma = self._resolver_bioma(session.get("regiao"))
+        grid_map = GridMap(width=MAP_WIDTH, height=MAP_HEIGHT)
+        grid_map.generate(biome=bioma)
+        mapa = self._renderizar_battlemap(grid_map.grid)
+        descricao = (
+            f"**Bioma:** {bioma}\n"
+            f"{mapa}\n"
+            "🟩 livre • 🟥 bloqueado • 🟫 difícil"
+        )
+        embed = discord.Embed(title="🗺️ Tabletop", description=descricao, color=0x1f8b4c)
+        await channel.send(embed=embed)
+        session["battlemap_enviado"] = True
+
     @app_commands.command(name="combate_criar", description="Cria uma sala de batalha")
     @app_commands.describe(regiao="Região do combate", monstro_nome="Criatura opcional do bestiário")
     @app_commands.autocomplete(monstro_nome=ac_criatura, regiao=regiao_autocomplete)
@@ -172,7 +219,8 @@ class Combat(commands.Cog):
             'turno_index': 0,
             'turno_monstro': False,
             'log': [f"Combate iniciado em {regiao}."],
-            'contador_monstros': 0
+            'contador_monstros': 0,
+            'battlemap_enviado': False,
         }
         session = self.sessions[interaction.channel_id]
 
@@ -282,6 +330,7 @@ class Combat(commands.Cog):
         
         # Gera a primeira interface e SALVA o ID
         await self.atualizar_interface(interaction.channel, nova_mensagem=True)
+        await self._enviar_battlemap(interaction.channel, session)
 
     @app_commands.command(name="combate_exportar", description="📄 Exporta o log de combate em Markdown.")
     async def combate_exportar(self, interaction: discord.Interaction):
