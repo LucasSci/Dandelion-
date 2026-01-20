@@ -3,6 +3,7 @@ import aiosqlite
 import random
 import asyncio
 import io
+from typing import Optional
 from discord.ext import commands
 from discord import app_commands
 from ui.combat_view import CombateView, MestreView, gerar_barra
@@ -56,37 +57,139 @@ class Combat(commands.Cog):
         session = self.sessions.get(channel_id)
         if not session: return "Nenhum combate ocorrendo."
         
-        monstro = session['monstro']
-        jogadores_str = ", ".join([f"{p['nome']} (HP:{p['hp']})" for p in session['jogadores']])
+        monstros_str = ", ".join(
+            [f"{m['nome']} (HP:{m['hp_atual']}/{m['hp_max']})" for m in session['monstros']]
+        ) or "Nenhum"
+        jogadores_str = ", ".join([f"{p['nome']} (HP:{p['hp']})" for p in session['jogadores']]) or "Nenhum"
         
         return f"""
         CENÁRIO ATUAL:
-        Inimigo: {monstro['nome']} (HP: {monstro['hp_atual']}/{monstro['hp_max']}).
+        Região: {session.get('regiao', 'Desconhecida')}
+        Inimigos: {monstros_str}
         Heróis: {jogadores_str}.
         """
 
+    async def ac_criatura(self, interaction: discord.Interaction, current: str):
+        async with self.bot.db.execute(
+            "SELECT nome FROM criaturas WHERE nome LIKE ? ORDER BY nome LIMIT 25",
+            (f"%{current}%",),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [app_commands.Choice(name=row[0], value=row[0]) for row in rows]
+
+    async def regiao_autocomplete(self, interaction: discord.Interaction, current: str):
+        async with self.bot.db.execute(
+            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome LIMIT 25",
+            (f"%{current}%",),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [app_commands.Choice(name=row[0], value=row[0]) for row in rows]
+
+    async def _buscar_criatura(self, nome: str):
+        async with self.bot.db.execute(
+            "SELECT nome, hp_max, imagem_url, iniciativa, dano_base FROM criaturas WHERE nome LIKE ? ORDER BY nome LIMIT 1",
+            (f"%{nome}%",),
+        ) as cursor:
+            return await cursor.fetchone()
+
+    def _proximo_indice_monstro(self, session, nome_base):
+        existentes = [m for m in session["monstros"] if m["nome_base"] == nome_base]
+        return len(existentes) + 1
+
+    def _criar_instancia_monstro(self, session, nome, hp, img, ini, dano_base):
+        session["contador_monstros"] += 1
+        indice = self._proximo_indice_monstro(session, nome)
+        nome_exibicao = f"{nome} #{indice}" if indice > 1 else nome
+        return {
+            "id": session["contador_monstros"],
+            "nome_base": nome,
+            "nome": nome_exibicao,
+            "hp_max": hp,
+            "hp_atual": hp,
+            "img": img,
+            "ini": ini,
+            "dano_base": dano_base,
+        }
+
+    def _monstros_vivos(self, session):
+        return [m for m in session["monstros"] if m["hp_atual"] > 0]
+
+    def _obter_monstro(self, session, monstro_id):
+        return next((m for m in session["monstros"] if m["id"] == monstro_id), None)
+
+    def _formatar_monstros(self, session, atual):
+        if not session["monstros"]:
+            return "Sem inimigos adicionados ainda.\n"
+
+        linhas = []
+        for m in session["monstros"]:
+            status = "💀 CAÍDO" if m["hp_atual"] <= 0 else f"{m['hp_atual']}/{m['hp_max']}"
+            icone = "👉" if (atual["tipo"] == "MONSTRO" and atual.get("monstro_id") == m["id"]) else "👹"
+            barra = gerar_barra(m["hp_atual"], m["hp_max"])
+            linhas.append(f"{icone} **{m['nome']}**\n{barra} `{status}`")
+        return "\n".join(linhas) + "\n"
+
     @app_commands.command(name="combate_criar", description="Cria uma sala de batalha")
-    async def combate_criar(self, interaction: discord.Interaction, monstro_nome: str):
-        async with self.bot.db.execute("SELECT nome, hp_max, imagem_url, iniciativa, dano_base FROM criaturas WHERE nome LIKE ?", (f'%{monstro_nome}%',)) as cursor:
-            monster_data = await cursor.fetchone()
-        
-        if not monster_data: return await interaction.response.send_message("❌ Monstro não encontrado.", ephemeral=True)
-        nome, hp, img, ini, dano_base = monster_data
-        
+    @app_commands.describe(regiao="Região do combate", monstro_nome="Criatura opcional do bestiário")
+    @app_commands.autocomplete(monstro_nome=ac_criatura, regiao=regiao_autocomplete)
+    async def combate_criar(self, interaction: discord.Interaction, regiao: str, monstro_nome: Optional[str] = None):
+        if interaction.channel_id in self.sessions:
+            return await interaction.response.send_message("❌ Já existe um combate neste canal.", ephemeral=True)
+
         self.sessions[interaction.channel_id] = {
             'status': 'LOBBY',
             'bloqueado': False,
             'mensagem_id': None, # ID da mensagem para edição
-            'monstro': {'nome': nome, 'hp_max': hp, 'hp_atual': hp, 'img': img, 'ini': ini, 'dano_base': dano_base},
+            'regiao': regiao,
+            'monstros': [],
             'jogadores': [],
             'ordem': [],
             'turno_index': 0,
             'turno_monstro': False,
-            'log': [f"Um {nome} selvagem apareceu!"]
+            'log': [f"Combate iniciado em {regiao}."],
+            'contador_monstros': 0
         }
-        embed = discord.Embed(title=f"⚠️ COMBATE: {nome}", description=f"HP: {hp}\n\n**Aguardando guerreiros...**", color=0xFF0000)
-        if img: embed.set_image(url=img)
+        session = self.sessions[interaction.channel_id]
+
+        if monstro_nome:
+            monster_data = await self._buscar_criatura(monstro_nome)
+            if not monster_data:
+                return await interaction.response.send_message("❌ Monstro não encontrado.", ephemeral=True)
+            nome, hp, img, ini, dano_base = monster_data
+            session["monstros"].append(self._criar_instancia_monstro(session, nome, hp, img, ini, dano_base))
+            session["log"].append(f"Um {nome} selvagem apareceu!")
+
+        titulo = f"⚠️ COMBATE: {regiao}"
+        desc = "**Aguardando guerreiros...**\n\n"
+        desc += self._formatar_monstros(session, {"tipo": "MONSTRO"})
+        embed = discord.Embed(title=titulo, description=desc, color=0xFF0000)
+        if session["monstros"]:
+            img = session["monstros"][0]["img"]
+            if img:
+                embed.set_image(url=img)
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="combate_adicionar", description="Adiciona criaturas ao combate")
+    @app_commands.describe(monstro_nome="Criatura do bestiário", quantidade="Quantidade")
+    @app_commands.autocomplete(monstro_nome=ac_criatura)
+    async def combate_adicionar(self, interaction: discord.Interaction, monstro_nome: str, quantidade: int = 1):
+        session = self.sessions.get(interaction.channel_id)
+        if not session:
+            return await interaction.response.send_message("❌ Nenhum combate criado neste canal.", ephemeral=True)
+        if session["status"] != "LOBBY":
+            return await interaction.response.send_message("❌ Só é possível adicionar criaturas antes do combate iniciar.", ephemeral=True)
+        if quantidade < 1 or quantidade > 10:
+            return await interaction.response.send_message("❌ Quantidade inválida (1-10).", ephemeral=True)
+
+        monster_data = await self._buscar_criatura(monstro_nome)
+        if not monster_data:
+            return await interaction.response.send_message("❌ Monstro não encontrado.", ephemeral=True)
+
+        nome, hp, img, ini, dano_base = monster_data
+        for _ in range(quantidade):
+            session["monstros"].append(self._criar_instancia_monstro(session, nome, hp, img, ini, dano_base))
+        session["log"].append(f"{quantidade}x {nome} adicionado ao combate.")
+        await interaction.response.send_message(f"✅ {quantidade}x **{nome}** adicionado ao combate.", ephemeral=True)
 
     @app_commands.command(name="combate_entrar", description="Entra no combate atual")
     async def combate_entrar(self, interaction: discord.Interaction):
@@ -110,6 +213,8 @@ class Combat(commands.Cog):
     async def combate_iniciar(self, interaction: discord.Interaction):
         session = self.sessions.get(interaction.channel_id)
         if not session or session['status'] != 'LOBBY': return
+        if not session["monstros"]:
+            return await interaction.response.send_message("❌ Adicione pelo menos um monstro para iniciar.", ephemeral=True)
         
         session['status'] = 'RODANDO'
         
@@ -122,10 +227,17 @@ class Combat(commands.Cog):
             ordem.append({**p, 'tipo': 'JOGADOR', 'roll': roll})
             log_iniciativa.append(f"{p['nome']}: 🎲 {roll}")
         
-        monstro = session['monstro']
-        roll_monstro = random.randint(1, 20) + (monstro['ini'] or 0)
-        ordem.append({'tipo': 'MONSTRO', 'nome': monstro['nome'], 'roll': roll_monstro})
-        log_iniciativa.append(f"{monstro['nome']}: 🎲 {roll_monstro}")
+        for monstro in session["monstros"]:
+            roll_monstro = random.randint(1, 20) + (monstro['ini'] or 0)
+            ordem.append(
+                {
+                    'tipo': 'MONSTRO',
+                    'nome': monstro['nome'],
+                    'monstro_id': monstro['id'],
+                    'roll': roll_monstro
+                }
+            )
+            log_iniciativa.append(f"{monstro['nome']}: 🎲 {roll_monstro}")
         
         ordem.sort(key=lambda x: x['roll'], reverse=True)
         session['ordem'] = ordem
@@ -184,11 +296,11 @@ class Combat(commands.Cog):
         session = self.sessions.get(channel.id)
         if not session: return
 
-        monstro = session['monstro']
         atual = session['ordem'][session['turno_index']]
         session['turno_monstro'] = (atual['tipo'] == 'MONSTRO')
 
-        desc = f"**{monstro['nome']}**\n{gerar_barra(monstro['hp_atual'], monstro['hp_max'])} `{monstro['hp_atual']}/{monstro['hp_max']}`\n\n"
+        desc = f"**📍 Região:** {session.get('regiao', 'Desconhecida')}\n\n"
+        desc += self._formatar_monstros(session, atual) + "\n"
         for p in session['jogadores']:
             status = "💀 CAÍDO" if p['hp'] <= 0 else f"{p['hp']}/{p['hp_max']}"
             icone = "👉" if (atual['tipo'] == 'JOGADOR' and atual['user_id'] == p['user_id']) else "👤"
@@ -196,7 +308,11 @@ class Combat(commands.Cog):
 
         desc += "\n**📜 Log:**\n" + "\n".join(session['log'][-3:])
         embed = discord.Embed(title="⚔️ Campo de Batalha", description=desc, color=0x2b2d31)
-        if monstro['img']: embed.set_thumbnail(url=monstro['img'])
+        monstro_thumb = self._monstros_vivos(session)
+        if monstro_thumb:
+            img = monstro_thumb[0]['img']
+            if img:
+                embed.set_thumbnail(url=img)
 
         view = None
         if session['bloqueado']:
@@ -233,22 +349,25 @@ class Combat(commands.Cog):
 
     async def processar_acao_jogador(self, interaction, channel_id, acao, detalhes_skill=None):
         session = self.sessions.get(channel_id)
-        monstro = session['monstro']
         jogador = next(p for p in session['jogadores'] if p['user_id'] == interaction.user.id)
+        monstro = next((m for m in session['monstros'] if m['hp_atual'] > 0), None)
+        if not monstro:
+            await interaction.response.send_message("❌ Não há monstros vivos no combate.", ephemeral=True)
+            return
 
         dano = 0
         narrativa = ""
         if acao == "Ataque Básico":
             roll_d20 = random.randint(1, 20)
             dano_total = max(1, (roll_d20 + jogador['atk']) // 2)
-            narrativa = f"⚔️ {jogador['nome']} atacou! (🎲{roll_d20} + {jogador['atk']}) -> **{dano_total} dano**"
+            narrativa = f"⚔️ {jogador['nome']} atacou {monstro['nome']}! (🎲{roll_d20} + {jogador['atk']}) -> **{dano_total} dano**"
             dano = dano_total
         elif acao == "Defesa":
             narrativa = f"🛡️ {jogador['nome']} preparou defesa!"
         elif acao == "Habilidade" and detalhes_skill:
             detalhes_rolagem, total = rolar_dados(detalhes_skill['formula'])
             dano = total if detalhes_skill['formula'] else 0
-            narrativa = f"✨ {jogador['nome']} usou **{detalhes_skill['nome']}**! ({detalhes_rolagem or 'Efeito'}) -> **{dano} dano**"
+            narrativa = f"✨ {jogador['nome']} usou **{detalhes_skill['nome']}** em {monstro['nome']}! ({detalhes_rolagem or 'Efeito'}) -> **{dano} dano**"
 
         monstro['hp_atual'] -= dano
         session['log'].append(narrativa)
@@ -257,12 +376,15 @@ class Combat(commands.Cog):
         
         # --- FIM DE COMBATE COM XP ---
         if monstro['hp_atual'] <= 0:
-            xp_total = int(monstro['hp_max'] * 1.5)
+            session['log'].append(f"💥 {monstro['nome']} foi derrotado!")
+
+        if not self._monstros_vivos(session):
+            xp_total = int(sum(m['hp_max'] for m in session['monstros']) * 1.5)
             if xp_total < 10: xp_total = 10
 
             vivos = [p for p in session['jogadores'] if p['hp'] > 0]
-            msg_vitoria = f"🏆 **VITÓRIA!** O {monstro['nome']} foi derrotado!"
-            
+            msg_vitoria = "🏆 **VITÓRIA!** Todos os inimigos foram derrotados!"
+
             if vivos:
                 xp_individual = xp_total // len(vivos)
                 msg_vitoria += f"\n🌟 O grupo recebeu **{xp_total} XP** ({xp_individual} p/ cada)."
@@ -282,7 +404,13 @@ class Combat(commands.Cog):
     async def turno_ia_monstro(self, channel):
         await asyncio.sleep(2)
         session = self.sessions.get(channel.id)
-        monstro = session['monstro']
+        atual = session['ordem'][session['turno_index']]
+        monstro = self._obter_monstro(session, atual.get("monstro_id"))
+        if not monstro or monstro["hp_atual"] <= 0:
+            self.avancar_indice_turno(session)
+            session['bloqueado'] = True
+            await self.atualizar_interface(channel)
+            return
         
         alvos = [p for p in session['jogadores'] if p['hp'] > 0]
         if not alvos: return await channel.send("💀 Fim de jogo.")
@@ -306,7 +434,10 @@ class Combat(commands.Cog):
             session['turno_index'] = (session['turno_index'] + 1) % len(session['ordem'])
             atual = session['ordem'][session['turno_index']]
             
-            if atual['tipo'] == 'MONSTRO': return
+            if atual['tipo'] == 'MONSTRO':
+                monstro = self._obter_monstro(session, atual.get("monstro_id"))
+                if monstro and monstro['hp_atual'] > 0:
+                    return
             
             jogador_real = next((p for p in session['jogadores'] if p['user_id'] == atual['user_id']), None)
             if jogador_real and jogador_real['hp'] > 0: return
