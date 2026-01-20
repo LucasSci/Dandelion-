@@ -75,10 +75,10 @@ class CombateView(ui.View):
 
         return True
 
-    @ui.button(label="⚔️ Atacar", style=discord.ButtonStyle.danger)
+    @ui.button(label="Atacar", emoji="⚔️", style=discord.ButtonStyle.danger)
     async def btn_atacar(self, interaction: discord.Interaction, button: ui.Button):
         await self.cog.processar_acao_jogador(interaction, self.combate_id, "Ataque Básico")
 
-    @ui.button(label="🛡️ Defender", style=discord.ButtonStyle.secondary)
+    @ui.button(label="Defender", emoji="🛡️", style=discord.ButtonStyle.secondary)
     async def btn_defender(self, interaction: discord.Interaction, button: ui.Button):
         await self.cog.processar_acao_jogador(interaction, self.combate_id, "Defesa")
