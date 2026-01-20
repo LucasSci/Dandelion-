@@ -1,6 +1,6 @@
 import discord
 from discord import ui
-from utils import rolar_dados
+from utils import rolar_dados, rolar_pericia_explosiva
 from ui.views import ConfirmarExclusaoView
 
 # ==============================================================================
@@ -70,6 +70,58 @@ class EditarHabilidadeModal(ui.Modal, title="✏️ Editar Habilidade"):
         await interaction.response.send_message(f"✅ Habilidade **{self.nome_input.value}** atualizada!", ephemeral=True)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
+class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
+    def __init__(self, atributo_nome: str, atributo_valor: int):
+        super().__init__()
+        self.atributo_nome = atributo_nome
+        self.atributo_valor = atributo_valor
+
+        self.pericia_nome = ui.TextInput(
+            label="Nome da Perícia (opcional)",
+            required=False,
+            placeholder="Ex: Atletismo"
+        )
+        self.pericia_valor = ui.TextInput(
+            label="Valor da Perícia",
+            placeholder="Ex: 4",
+        )
+
+        self.add_item(self.pericia_nome)
+        self.add_item(self.pericia_valor)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            pericia_valor = int(self.pericia_valor.value)
+        except ValueError:
+            return await interaction.response.send_message("❌ Valor da perícia inválido.", ephemeral=True)
+
+        rolagens, total, direcao = rolar_pericia_explosiva(self.atributo_valor, pericia_valor)
+
+        etiqueta = self.pericia_nome.value.strip() if self.pericia_nome.value else "Perícia"
+        detalhes_rolagem = ", ".join(map(str, rolagens))
+        explosao_txt = ""
+        if direcao == 1:
+            explosao_txt = " (Explosão para cima)"
+        elif direcao == -1:
+            explosao_txt = " (Explosão para baixo)"
+
+        embed = discord.Embed(
+            title=f"🎯 {etiqueta} - {self.atributo_nome}",
+            color=0x2b2d31
+        )
+        embed.add_field(
+            name="Rolagem",
+            value=f"[{detalhes_rolagem}]{explosao_txt}",
+            inline=False
+        )
+        embed.add_field(
+            name="Fórmula",
+            value=f"1d10 + Stat({self.atributo_valor}) + Skill({pericia_valor})",
+            inline=False
+        )
+        embed.add_field(name="Total", value=f"# **{total}**", inline=False)
+
+        await interaction.response.send_message(embed=embed)
 class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
     def __init__(self, personagem_id):
         super().__init__()
@@ -340,6 +392,15 @@ class HabilidadeButton(ui.Button):
         
         await interaction.response.send_message(embed=embed)
 
+class AtributoButton(ui.Button):
+    def __init__(self, nome, valor):
+        label_btn = f"{nome} ({valor})"
+        super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, emoji="🎯", row=None)
+        self.nome_atributo = nome
+        self.valor_atributo = valor
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(RolarPericiaModal(self.nome_atributo, self.valor_atributo))
 class RolagemCombateButton(ui.Button):
     def __init__(self, label, emoji, personagem_id, formula_template):
         super().__init__(style=discord.ButtonStyle.primary, label=label, emoji=emoji, row=2)
@@ -393,6 +454,10 @@ class FichaView(ui.View):
                     is_active = (mode == "combate")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+                elif item.label == "Atributos":
+                    is_active = (mode == "atributos")
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Magia/Alquimia":
                     is_active = (mode == "magia")
                     item.disabled = is_active
@@ -434,6 +499,11 @@ class FichaView(ui.View):
     async def btn_magia(self, interaction: discord.Interaction, button: ui.Button):
         await self.atualizar_botoes_habilidade(interaction)
 
+    @ui.button(label="Atributos", emoji="🎯", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_atributos(self, interaction: discord.Interaction, button: ui.Button):
+        await self.atualizar_botoes_atributos(interaction)
+
+    @ui.button(label="Nova Skill", emoji="➕", style=discord.ButtonStyle.success, row=0)
     @ui.button(label="Inventário", emoji="🎒", style=discord.ButtonStyle.secondary, row=0)
     async def btn_inventario(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_inventario(interaction)
@@ -678,6 +748,30 @@ class FichaView(ui.View):
         embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
         embed.add_field(name="Encumbrance", value=f"{encumbrance}/{capacidade} (1 por item)", inline=False)
         embed.set_footer(text="Layout estilo pergaminho limpo • Lista dinâmica")
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def atualizar_botoes_atributos(self, interaction: discord.Interaction):
+        self.update_buttons_state("atributos")
+        self.clear_dynamic_buttons()
+
+        db = interaction.client.db
+        async with db.execute(
+            "SELECT nome, valor FROM atributos_personagem WHERE personagem_id = ? ORDER BY nome",
+            (self.personagem_id,)
+        ) as cursor:
+            atributos = await cursor.fetchall()
+
+        embed = discord.Embed(title="🎯 Atributos", color=0x5865f2)
+        if not atributos:
+            embed.description = "Nenhum atributo cadastrado. Use /atributo_definir para criar."
+        else:
+            embed.description = "Clique em um atributo para rolar uma perícia."
+            for nome, valor in atributos:
+                self.add_item(AtributoButton(nome, valor))
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)

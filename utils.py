@@ -31,6 +31,36 @@ def rolar_dados(formula: str):
     
     return detalhes, total
 
+def rolar_pericia_explosiva(stat: int, skill: int):
+    """
+    Rola 1d10 com explosão para cima (10) ou para baixo (1).
+    Retorna (lista_de_rolagens, total, direcao_explosao).
+    direcao_explosao: 1 (cima), -1 (baixo) ou 0 (sem explosão).
+    """
+    rolagens = []
+    primeira = random.randint(1, 10)
+    rolagens.append(primeira)
+    total = primeira
+
+    direcao = 0
+    gatilho = None
+    if primeira == 10:
+        direcao = 1
+        gatilho = 10
+    elif primeira == 1:
+        direcao = -1
+        gatilho = 1
+
+    while direcao != 0 and rolagens[-1] == gatilho:
+        extra = random.randint(1, 10)
+        rolagens.append(extra)
+        total += direcao * extra
+        if extra != gatilho:
+            break
+
+    total += stat + skill
+    return rolagens, total, direcao
+
 def calcular_xp_necessario(nivel_atual):
     # Fórmula: Base 100 * (Nível ^ 2) * Constante de ajuste
     # Exemplo simples estilo D&D:
