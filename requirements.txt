@@ -13,3 +13,4 @@ aiosqlite
 deep-translator
 beautifulsoup4
 aiohttp
+fastapi
