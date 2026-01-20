@@ -637,7 +637,6 @@ class FichaView(ui.View):
     async def btn_atributos(self, interaction: discord.Interaction, button: ui.Button):
         await self.atualizar_botoes_atributos(interaction)
 
-    @ui.button(label="Nova Skill", emoji="➕", style=discord.ButtonStyle.success, row=0)
     @ui.button(label="Inventário", emoji="🎒", style=discord.ButtonStyle.secondary, row=0)
     async def btn_inventario(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_inventario(interaction)
@@ -818,6 +817,7 @@ class FichaView(ui.View):
         nivel = row[0] if row else 1
 
         if not itens:
+            descricao = "_Sua bolsa está leve..._\nVisite a `/loja` para comprar itens ou conquiste espólios em suas aventuras."
             descricao = "🎒 Seu inventário está vazio.\n\nVisite a **/loja** para comprar equipamentos ou explore o mundo para encontrar tesouros!"
         else:
             descricao = "\n".join([
