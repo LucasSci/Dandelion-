@@ -41,6 +41,13 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 * Regras customizadas baseadas no sistema específico de RPG.
 * Ferramentas de balanceamento de encontros e sugestões de ajustes.
 
+### 🗺️ Tabletop & Battlemaps (VTT Procedural)
+
+* Grid tático web-based (Canvas/WebGL) para execução das cenas.
+* Geração procedural de mapas via Wave Function Collapse ou Perlin Noise.
+* Inputs do usuário para bioma (pântano, floresta, caverna, cidade), tamanho (ex: 20x20) e clima (chuva, sol).
+* Seleção automática de tilesets conforme o bioma (ex: tiles de lama para pântano).
+
 ### 📇 Personagens e Progressão
 
 * Sistema de níveis, talentos e subclasses expansível.
