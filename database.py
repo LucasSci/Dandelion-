@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS armaduras_personagem (
     personagem_id INTEGER NOT NULL,
     localizacao TEXT NOT NULL,
     sp INTEGER DEFAULT 0,
+    reliability INTEGER DEFAULT 100,
     UNIQUE(personagem_id, localizacao),
     FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE
 );
@@ -584,6 +585,12 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     ]
     if _table_exists(cursor, "quests"):
         _add_columns_if_missing(cursor, "quests", quests_extras)
+
+    armaduras_extras = [
+        ("reliability", "INTEGER DEFAULT 100"),
+    ]
+    if _table_exists(cursor, "armaduras_personagem"):
+        _add_columns_if_missing(cursor, "armaduras_personagem", armaduras_extras)
 
     # 4. Migração de Índices de Performance
     try:

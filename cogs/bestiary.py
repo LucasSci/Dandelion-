@@ -17,6 +17,7 @@ from database import (
     SEED_RELATIONS_SQL,
     SEEDS_DIR,
 )
+from witcher_rules import rolar_pericia
 
 # --- CONFIGURAÇÕES ---
 DB_NAME = 'bestiario.db'
@@ -220,7 +221,8 @@ class Bestiary(commands.Cog):
 
     # --- COMANDO VER ---
     @app_commands.command(name="ver", description="Consulta ficha do monstro")
-    async def ver(self, interaction: discord.Interaction, nome: str):
+    @app_commands.describe(cd="CD de Monster Lore para revelar fraquezas (padrão: 15)")
+    async def ver(self, interaction: discord.Interaction, nome: str, cd: int = 15):
         # Lógica de consulta ao banco (mantida igual)
         async with self.bot.db.execute("SELECT * FROM criaturas WHERE nome LIKE ?", (f'%{nome}%',)) as cursor:
             data = await cursor.fetchone()
@@ -234,8 +236,58 @@ class Bestiary(commands.Cog):
              img_url = data[4] if len(data) > 4 else None
              desc, fraquezas, hp, ini, dano = "Sem dados", "Nenhuma", 50, 10, "1d6"
 
+        show_weaknesses = is_mestre(interaction) or cd <= 0
+        roll_detail = None
+        if not show_weaknesses:
+            async with self.bot.db.execute(
+                "SELECT id FROM personagens WHERE user_id = ?",
+                (interaction.user.id,),
+            ) as cursor:
+                personagem = await cursor.fetchone()
+
+            stat_int = 1
+            skill_lore = 0
+            if personagem:
+                personagem_id = personagem[0]
+                async with self.bot.db.execute(
+                    "SELECT valor FROM atributos_personagem WHERE personagem_id = ? AND nome = 'INT'",
+                    (personagem_id,),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                if row:
+                    stat_int = max(1, row[0])
+
+                async with self.bot.db.execute(
+                    """
+                    SELECT valor FROM atributos_personagem
+                    WHERE personagem_id = ? AND nome IN ('Monster Lore', 'Conhecimento de Monstros')
+                    ORDER BY valor DESC
+                    LIMIT 1
+                    """,
+                    (personagem_id,),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                if row:
+                    skill_lore = max(0, row[0])
+
+            roll_result = rolar_pericia(stat_int, skill_lore)
+            roll_detail = (
+                f"🎲 {roll_result.rolls} + INT({stat_int}) + Skill({skill_lore}) = {roll_result.total}"
+            )
+            show_weaknesses = roll_result.total >= cd
+
         embed = discord.Embed(title=f"📜 {nome_real.upper()}", description=f"_{desc}_", color=WITCHER_THEME_COLOR)
         embed.add_field(name="⚔️ Status", value=f"HP: {hp} | Ini: {ini} | Dano: {dano}", inline=False)
+        if show_weaknesses:
+            embed.add_field(name="🧪 Fraquezas", value=fraquezas or "Nenhuma", inline=False)
+        else:
+            embed.add_field(
+                name="🧪 Fraquezas",
+                value=f"Ocultas. Teste Monster Lore (CD {cd}) falhou.",
+                inline=False,
+            )
+        if roll_detail and not is_mestre(interaction):
+            embed.add_field(name="📚 Witcher Knowledge", value=roll_detail, inline=False)
         if img_url: embed.set_image(url=img_url)
         await interaction.response.send_message(embed=embed)
 
