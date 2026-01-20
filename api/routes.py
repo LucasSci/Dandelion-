@@ -11,6 +11,7 @@ from vtt_engine.grid_system import GridMap
 
 router = APIRouter()
 app = FastAPI(title="Witcher TTRPG Integration")
+MAP_SCALE_METERS_PER_SQUARE = 2
 
 
 class RollSkillRequest(BaseModel):
@@ -60,6 +61,20 @@ class CombatUpdateResponse(BaseModel):
     terrain_cost: int
 
 
+class GenerateMapRequest(BaseModel):
+    width: int
+    height: int
+    biome: str
+    clima: str | None = None
+    seed: int | None = None
+    grid_mode: str = "square"
+
+
+class GenerateMapResponse(BaseModel):
+    grid: List[List[int]]
+    metadata: dict
+
+
 @router.post("/combat_update", response_model=None)
 def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
     width = len(payload.grid[0]) if payload.grid else 0
@@ -68,6 +83,24 @@ def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
     x, y = payload.position
     cost = grid_map.terrain_cost(x, y) if grid_map.in_bounds(x, y) else 9999
     return CombatUpdateResponse(token_id=payload.token_id, position=payload.position, terrain_cost=cost)
+
+
+@router.post("/generate_map", response_model=None)
+def generate_map(payload: GenerateMapRequest) -> GenerateMapResponse:
+    grid_map = GridMap(
+        width=payload.width,
+        height=payload.height,
+        scale_meters_per_square=MAP_SCALE_METERS_PER_SQUARE,
+        grid_mode=payload.grid_mode,
+    )
+    grid_map.generate(biome=payload.biome, clima=payload.clima, seed=payload.seed)
+    metadata = {
+        "biome": grid_map.biome,
+        "clima": grid_map.clima,
+        "scale_meters_per_square": grid_map.scale_meters_per_square,
+        "grid_mode": grid_map.grid_mode,
+    }
+    return GenerateMapResponse(grid=grid_map.grid, metadata=metadata)
 
 
 app.include_router(router)
