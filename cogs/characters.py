@@ -6,7 +6,7 @@ from typing import Optional
 from discord.ext import commands
 from discord import app_commands
 from ui.modals import CriarFichaModal
-from ui.sheet_view import FichaView
+from ui.sheet_view import FichaView, construir_embed_ficha
 
 DB_NAME = "bestiario.db"
 LOCALIZACOES_ARMADURA = {
@@ -599,12 +599,8 @@ class Characters(commands.Cog):
         target = usuario or interaction.user
         
         async with self.bot.db.execute("""
-            SELECT p.id, p.nome, p.raca, p.classe, p.nivel, p.historia, p.imagem_url,
-                   p.ouro, p.hp_atual, p.hp_max, p.vigor_atual, p.vigor_max,
-                   p.toxicidade_atual, p.toxicidade_max, p.ataque, p.defesa, p.mp_max,
-                   w.nome
+            SELECT p.id
             FROM personagens p
-            LEFT JOIN world_locations w ON w.id = p.localizacao_id
             WHERE p.user_id = ?
         """, (target.id,)) as cursor:
             res = await cursor.fetchone()
@@ -612,39 +608,14 @@ class Characters(commands.Cog):
         if not res:
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        (
-            char_id, nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max,
-            vigor_atual, vigor_max, toxicidade_atual, toxicidade_max, ataque, defesa, mp_max, local
-        ) = res
-        if hp_atual is None: hp_atual = hp_max
-        if vigor_atual is None: vigor_atual = vigor_max
+        char_id = res[0]
 
-        embed = discord.Embed(
-            title=f"📜 {nome}",
-            description=historia or "Sem registro.",
-            color=0xE8D6B3
-        )
-        embed.add_field(name="Raça", value=raca, inline=True)
-        embed.add_field(name="Classe", value=classe, inline=True)
-        embed.add_field(name="Nível", value=str(nivel), inline=True)
-        embed.add_field(name="📍 Localização", value=local or "Desconhecida", inline=False)
-        
-        pct = hp_atual / hp_max if hp_max > 0 else 0
-        barra_vida = "🟩" * int(pct * 10) + "⬛" * (10 - int(pct * 10))
-        embed.add_field(name="❤️ Vida (HP)", value=f"{hp_atual}/{hp_max}\n`{barra_vida}`", inline=False)
+        embed = await construir_embed_ficha(self.bot.db, char_id, target.id)
+        if not embed:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        pct_vigor = vigor_atual / vigor_max if vigor_max else 0
-        barra_vigor = "🟨" * int(pct_vigor * 10) + "⬛" * (10 - int(pct_vigor * 10))
-        embed.add_field(name="⚡ Vigor", value=f"{vigor_atual}/{vigor_max}\n`{barra_vigor}`", inline=True)
-        embed.add_field(name="☠️ Toxicidade", value=f"{toxicidade_atual}/{toxicidade_max}", inline=True)
-        embed.add_field(name="⚔️ Combate", value=f"Ataque {ataque} • Defesa {defesa}", inline=True)
-        embed.add_field(name="✨ Magia", value=f"MP {mp_max}", inline=True)
-        
-        embed.add_field(name="Ouro", value=f"💰 {ouro}", inline=True)
-        if img: embed.set_thumbnail(url=img)
-        
         view = FichaView(personagem_id=char_id, user_id_dono=target.id)
-        
+
         await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="listar_fichas", description="Lista todas as fichas")
