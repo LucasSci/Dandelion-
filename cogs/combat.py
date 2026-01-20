@@ -10,6 +10,9 @@ from ui.combat_view import CombateView, MestreView, gerar_barra
 from utils import rolar_dados
 
 DB_NAME = "bestiario.db"
+DEFAULT_MONSTER_HP = 50
+DEFAULT_MONSTER_INI = 10
+DEFAULT_MONSTER_DANO = "1d6"
 
 # --- HELPER: SISTEMA DE XP ---
 async def aplicar_xp(db, user_id, xp_ganho, channel):
@@ -71,8 +74,13 @@ class Combat(commands.Cog):
 
     async def ac_criatura(self, interaction: discord.Interaction, current: str):
         async with self.bot.db.execute(
-            "SELECT nome FROM criaturas WHERE nome LIKE ? ORDER BY nome LIMIT 25",
-            (f"%{current}%",),
+            """
+            SELECT nome AS nome FROM criaturas WHERE nome LIKE ?
+            UNION
+            SELECT name AS nome FROM monsters WHERE name LIKE ?
+            ORDER BY nome LIMIT 25
+            """,
+            (f"%{current}%", f"%{current}%"),
         ) as cursor:
             rows = await cursor.fetchall()
         return [app_commands.Choice(name=row[0], value=row[0]) for row in rows]
@@ -90,7 +98,24 @@ class Combat(commands.Cog):
             "SELECT nome, hp_max, imagem_url, iniciativa, dano_base FROM criaturas WHERE nome LIKE ? ORDER BY nome LIMIT 1",
             (f"%{nome}%",),
         ) as cursor:
-            return await cursor.fetchone()
+            criatura = await cursor.fetchone()
+        if criatura:
+            return criatura
+        async with self.bot.db.execute(
+            "SELECT name, threat_level FROM monsters WHERE name LIKE ? ORDER BY name LIMIT 1",
+            (f"%{nome}%",),
+        ) as cursor:
+            monstro = await cursor.fetchone()
+        if not monstro:
+            return None
+        nome_monstro, _threat_level = monstro
+        return (
+            nome_monstro,
+            DEFAULT_MONSTER_HP,
+            None,
+            DEFAULT_MONSTER_INI,
+            DEFAULT_MONSTER_DANO,
+        )
 
     def _proximo_indice_monstro(self, session, nome_base):
         existentes = [m for m in session["monstros"] if m["nome_base"] == nome_base]
