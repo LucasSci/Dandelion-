@@ -233,13 +233,26 @@ class Quests(commands.Cog):
         await interaction.followup.send(f"✅ Criada em {thread.mention}!", ephemeral=True)
 
     @app_commands.command(name="quest_gerar", description="🔒 (Mestre) IA cria missão cronológica. Padrão: Rascunho.")
+    @app_commands.describe(
+        regiao="Região da missão (opcional)",
+        publicar_agora="Publica no fórum imediatamente?",
+        canal_forum="Fórum do Discord (obrigatório se publicar agora)"
+    )
     @app_commands.choices(dificuldade=[
         app_commands.Choice(name="Fácil", value="Fácil"),
         app_commands.Choice(name="Média", value="Média"),
         app_commands.Choice(name="Difícil", value="Difícil")
     ])
+    @app_commands.autocomplete(regiao=regiao_autocomplete)
     @app_commands.check(is_mestre)
-    async def gerar(self, i: discord.Interaction, dificuldade: str, publicar_agora: bool = False, canal_forum: Optional[discord.ForumChannel] = None):
+    async def gerar(
+        self,
+        i: discord.Interaction,
+        dificuldade: str,
+        regiao: Optional[str] = None,
+        publicar_agora: bool = False,
+        canal_forum: Optional[discord.ForumChannel] = None,
+    ):
         """
         Se publicar_agora = False (padrão), cria um Rascunho visível só aqui.
         Se publicar_agora = True, exige canal_forum e posta direto.
@@ -252,8 +265,10 @@ class Quests(commands.Cog):
         if not ai: return await i.followup.send("IA Off.")
 
         # 1. Gera baseada na Cronologia (Memória) com NOTA
-        d = await ai.gerar_quest_cronologica(dificuldade)
+        d = await ai.gerar_quest_cronologica(dificuldade, regiao=regiao)
         if not d: return await i.followup.send("Erro IA.")
+        if regiao:
+            d["regiao"] = regiao
 
         # 2. Imagens
         img_url = await ai.gerar_imagem_dalle(d['prompt_img'])
@@ -304,6 +319,8 @@ class Quests(commands.Cog):
         name="quest_gerar_auto",
         description="🔒 (Mestre) IA cria missão com dificuldade automática baseada no nível.",
     )
+    @app_commands.describe(regiao="Região da missão (opcional)")
+    @app_commands.autocomplete(regiao=regiao_autocomplete)
     @app_commands.check(is_mestre)
     async def gerar_auto(
         self,
@@ -312,6 +329,7 @@ class Quests(commands.Cog):
         jogador_2: Optional[discord.Member] = None,
         jogador_3: Optional[discord.Member] = None,
         jogador_4: Optional[discord.Member] = None,
+        regiao: Optional[str] = None,
         publicar_agora: bool = False,
         canal_forum: Optional[discord.ForumChannel] = None,
     ):
@@ -320,6 +338,7 @@ class Quests(commands.Cog):
         await self.gerar(
             i,
             dificuldade=dificuldade,
+            regiao=regiao,
             publicar_agora=publicar_agora,
             canal_forum=canal_forum,
         )

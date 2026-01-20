@@ -57,11 +57,17 @@ class AIHandler(commands.Cog):
 
         return "\n".join(linhas)
 
-    async def gerar_quest_cronologica(self, dificuldade: str) -> dict:
+    async def gerar_quest_cronologica(self, dificuldade: str, regiao: str = None) -> dict:
         if not self.client: return None
         
         cronologia = await self.ler_cronologia_estrita()
         lore = await self.ler_lore_mundo()
+
+        regiao_info = (
+            f"REGIÃO ESCOLHIDA PELO MESTRE: {regiao}. A missão deve acontecer exatamente nesta região.\n"
+            if regiao
+            else "REGIÃO: escolha a região mais coerente com a cronologia e o lore.\n"
+        )
         
         prompt = (
             f"Atue como Mestre de RPG (The Witcher/Zerrikania).\n"
@@ -71,15 +77,17 @@ class AIHandler(commands.Cog):
             f"=== LORE DO MUNDO (FATOS REAIS) ===\n"
             f"{lore}\n"
             f"===================================\n\n"
+            f"{regiao_info}\n"
             
             f"TAREFA: Crie um CONTRATO (Dificuldade {dificuldade}) que seja uma consequência LÓGICA dos eventos acima e do lore.\n"
             f"ESTILO: Misture o senso investigativo e moral cinzento de The Witcher, a sensação de rivalidade e escalada de ameaça de Sombras de Mordor, e a exploração/descoberta de Skyrim.\n"
             f"FOCO: A missão precisa fazer sentido dentro do universo de The Witcher e na região escolhida.\n"
             f"IMPORTANTE: Você deve explicar qual evento específico do passado motivou esta missão e quais fatos do lore foram usados.\n"
             f"GANCHOS: A descrição deve terminar com uma linha 'Gancho futuro: ...' conectando a missão a um próximo arco.\n\n"
+            f"LINGUAGEM: escreva tudo em português brasileiro.\n\n"
             
             f"FORMATO DE RESPOSTA (Obrigatório, separado por '|'):\n"
-            f"TÍTULO | DESCRIÇÃO | OURO (apenas numeros) | XP (apenas numeros) | CLASSES | REGIÃO | MONSTRO | PROMPT VISUAL | JUSTIFICATIVA"
+            f"TÍTULO | DESCRIÇÃO | OURO (apenas numeros) | XP (apenas numeros) | CLASSES | REGIÃO | MONSTRO | PROMPT VISUAL (em português brasileiro e sem texto na imagem) | JUSTIFICATIVA"
         )
 
         try:
@@ -116,8 +124,18 @@ class AIHandler(commands.Cog):
     async def gerar_imagem_dalle(self, prompt_visual: str):
         if not self.client: return None
         try:
-            p = f"The Witcher RPG art style. {prompt_visual}"
-            r = await self.client.images.generate(model="dall-e-3", prompt=p, size="1024x1024", quality="standard", n=1)
+            p = (
+                "The Witcher RPG art style. "
+                f"{prompt_visual}. "
+                "Sem texto, sem letras, sem palavras, sem marcas d'água."
+            )
+            r = await self.client.images.generate(
+                model="dall-e-3",
+                prompt=p,
+                size="1024x1024",
+                quality="hd",
+                n=1,
+            )
             return r.data[0].url
         except: return None
 
