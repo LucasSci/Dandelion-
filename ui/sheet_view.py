@@ -93,11 +93,17 @@ async def construir_embed_ficha(db, personagem_id, user_id):
 
     embed = discord.Embed(
         title=f"📜 {nome}",
-        description=(
-            f"*{classe}* • **{raca}** • Nível **{nivel}**\n"
-            f"{historia or '_Sem registro._'}"
-        ),
         color=0xE8D6B3
+    )
+    embed.add_field(
+        name="📖 Identidade",
+        value=f"*{classe}* • **{raca}** • Nível **{nivel}**",
+        inline=False,
+    )
+    embed.add_field(
+        name="📝 História",
+        value=historia or "_Sem registro._",
+        inline=False,
     )
     embed.add_field(name="📍 Localização", value=local or "Desconhecida", inline=True)
     embed.add_field(name="💰 Ouro", value=str(ouro), inline=True)
@@ -108,13 +114,14 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     recursos = (
         f"❤️ HP {hp_atual}/{hp_max}\n`{barra_hp}`\n"
         f"⚡ Vigor {vigor_atual}/{vigor_max}\n`{barra_vigor}`\n"
+        f"✨ MP {mp_max}\n"
         f"☠️ Toxicidade {toxicidade_atual}/{toxicidade_max}"
     )
-    embed.add_field(name="Recursos", value=recursos, inline=False)
+    embed.add_field(name="Recursos", value=recursos, inline=True)
     embed.add_field(
         name="⚔️ Combate & Magia",
         value=f"Ataque **{ataque}** • Defesa **{defesa}** • MP **{mp_max}**",
-        inline=False
+        inline=True
     )
     embed.add_field(
         name="🧠 Atributos",
