@@ -696,7 +696,7 @@ class FichaView(ui.View):
         if toxicidade_atual is None: toxicidade_atual = 0
 
         async with db.execute(
-            "SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ? LIMIT 20",
+            "SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ? LIMIT 15",
             (self.personagem_id,)
         ) as cursor:
             skills = await cursor.fetchall()

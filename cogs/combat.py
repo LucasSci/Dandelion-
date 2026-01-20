@@ -100,9 +100,14 @@ class Combat(commands.Cog):
         if not dados: return await interaction.response.send_message("❌ Sem ficha!", ephemeral=True)
         char_id, hp_max, atk = dados
 
+        # Pre-fetch skills to avoid DB calls in combat loop
+        async with self.bot.db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (char_id,)) as cursor:
+            skills = await cursor.fetchall()
+
         session['jogadores'].append({
             'user_id': interaction.user.id, 'personagem_id': char_id,
-            'nome': interaction.user.display_name, 'hp': hp_max, 'hp_max': hp_max, 'atk': atk
+            'nome': interaction.user.display_name, 'hp': hp_max, 'hp_max': hp_max, 'atk': atk,
+            'skills': skills
         })
         await interaction.response.send_message(f"⚔️ **{interaction.user.display_name}** entrou! (HP: {hp_max})", ephemeral=False)
 
@@ -212,8 +217,8 @@ class Combat(commands.Cog):
         else:
             skills_do_turno = []
             if atual['tipo'] == 'JOGADOR':
-                 async with self.bot.db.execute("SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (atual['personagem_id'],)) as cursor:
-                    skills_do_turno = await cursor.fetchall()
+                # Use pre-fetched skills from session
+                skills_do_turno = atual.get('skills', [])
 
             embed.set_footer(text=f"VEZ DE: {atual.get('nome', 'Alguém')}")
             view = CombateView(self, channel.id, habilidades_jogador=skills_do_turno)
