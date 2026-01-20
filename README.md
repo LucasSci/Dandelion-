@@ -8,6 +8,7 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 * **⚔️ Sistema de Combate:** Gerenciamento de batalha com iniciativa, turnos travados, barras de vida e log de combate.
 * **🧠 Narrador IA (Dandelion):** Integração com Google Gemini para narrar cenas e resultados de ações complexas.
 * **📚 Bestiário Automático:** Importação de monstros diretamente da Wiki do The Witcher, incluindo fraquezas e lore traduzida.
+* **🗺️ Banco de Lore Autoral:** Estrutura dedicada para registrar lore do seu universo com fontes em textos, arquivos e imagens.
 * **🎲 Rolagem de Dados:** Suporte a fórmulas de dados (ex: `1d20+5`, `2d6`).
 * **🎒 Inventário & Habilidades:** Gerenciamento de itens e skills equipáveis.
 

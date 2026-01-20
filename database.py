@@ -257,6 +257,53 @@ CREATE TABLE IF NOT EXISTS monster_sources (
 );
 
 -- =========================
+-- LORE (BASE AUTORAL)
+-- =========================
+
+CREATE TABLE IF NOT EXISTS lore_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  titulo TEXT NOT NULL,
+  resumo TEXT,
+  conteudo TEXT,
+  criado_em TEXT DEFAULT (datetime('now')),
+  atualizado_em TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS lore_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tipo TEXT NOT NULL, -- 'texto', 'imagem', 'arquivo', 'link'
+  titulo TEXT,
+  caminho_arquivo TEXT,
+  url TEXT,
+  mime_type TEXT,
+  notas TEXT,
+  criado_em TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS lore_entry_sources (
+  lore_entry_id INTEGER NOT NULL,
+  source_id INTEGER NOT NULL,
+  relevancia INTEGER DEFAULT 1,
+  nota TEXT,
+  PRIMARY KEY (lore_entry_id, source_id),
+  FOREIGN KEY(lore_entry_id) REFERENCES lore_entries(id) ON DELETE CASCADE,
+  FOREIGN KEY(source_id) REFERENCES lore_sources(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS lore_tags (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome TEXT UNIQUE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS lore_entry_tags (
+  lore_entry_id INTEGER NOT NULL,
+  tag_id INTEGER NOT NULL,
+  PRIMARY KEY (lore_entry_id, tag_id),
+  FOREIGN KEY(lore_entry_id) REFERENCES lore_entries(id) ON DELETE CASCADE,
+  FOREIGN KEY(tag_id) REFERENCES lore_tags(id) ON DELETE CASCADE
+);
+
+-- =========================
 -- INDICES
 -- =========================
 
@@ -271,6 +318,8 @@ CREATE INDEX IF NOT EXISTS idx_weaknesses_type ON weaknesses(type);
 CREATE INDEX IF NOT EXISTS idx_traits_key ON traits(key);
 CREATE INDEX IF NOT EXISTS idx_loot_items_key ON loot_items(key);
 CREATE INDEX IF NOT EXISTS idx_sources_key ON sources(key);
+CREATE INDEX IF NOT EXISTS idx_lore_entries_titulo ON lore_entries(titulo);
+CREATE INDEX IF NOT EXISTS idx_lore_sources_tipo ON lore_sources(tipo);
 """
 
 # =========================
