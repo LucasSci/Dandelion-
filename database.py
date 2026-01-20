@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS armaduras_personagem (
     personagem_id INTEGER NOT NULL,
     localizacao TEXT NOT NULL,
     sp INTEGER DEFAULT 0,
+    reliability INTEGER DEFAULT 100,
     UNIQUE(personagem_id, localizacao),
     FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE
 );
@@ -248,7 +249,8 @@ CREATE TABLE IF NOT EXISTS criaturas (
     imagem_url TEXT,
     hp_max INTEGER DEFAULT 50,
     iniciativa INTEGER DEFAULT 10,
-    dano_base TEXT DEFAULT '1d6'
+    dano_base TEXT DEFAULT '1d6',
+    lore_cd INTEGER
 );
 
 -- =========================
@@ -573,6 +575,12 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     if _table_exists(cursor, "monsters"):
         _add_columns_if_missing(cursor, "monsters", monsters_extras)
 
+    criaturas_extras = [
+        ("lore_cd", "INTEGER"),
+    ]
+    if _table_exists(cursor, "criaturas"):
+        _add_columns_if_missing(cursor, "criaturas", criaturas_extras)
+
     # 3. Migração Quests (Restrição de Classe)
     quests_extras = [
         ("classes_req", "TEXT DEFAULT 'Todas'"),
@@ -584,6 +592,12 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     ]
     if _table_exists(cursor, "quests"):
         _add_columns_if_missing(cursor, "quests", quests_extras)
+
+    armaduras_extras = [
+        ("reliability", "INTEGER DEFAULT 100"),
+    ]
+    if _table_exists(cursor, "armaduras_personagem"):
+        _add_columns_if_missing(cursor, "armaduras_personagem", armaduras_extras)
 
     # 4. Migração de Índices de Performance
     try:
