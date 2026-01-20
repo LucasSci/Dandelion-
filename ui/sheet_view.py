@@ -213,7 +213,7 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         self.pericia_nome = ui.TextInput(
             label="Nome da Perícia (opcional)",
             required=False,
-            placeholder="Ex: Atletismo"
+            placeholder="Ex: Atletismo (ou deixe vazio)"
         )
         self.pericia_valor = ui.TextInput(
             label="Valor da Perícia",
@@ -818,7 +818,7 @@ class FichaView(ui.View):
         nivel = row[0] if row else 1
 
         if not itens:
-            descricao = "🎒 Inventário vazio."
+            descricao = "🎒 Seu inventário está vazio.\n\nVisite a **/loja** para comprar equipamentos ou explore o mundo para encontrar tesouros!"
         else:
             descricao = "\n".join([
                 f"• **{nome}** ({tipo}) — 💰 {valor}\n  {efeito or 'Sem efeito'}"
