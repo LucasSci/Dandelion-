@@ -178,6 +178,12 @@ Os arquivos SQL usados para popular o bestiário ficam em `data/seeds/`. Ao inic
 
 ---
 
+## 🧾 Schema JSON da Ficha (Witcher)
+
+Para suportar a ficha digital baseada em JSON, o schema canônico está em `data/schemas/character_sheet.schema.json` e um exemplo em `data/schemas/character_sheet.example.json`. Esse arquivo define `Core Stats`, `Derived Stats`, `Skills Tree`, `Witcher Specifics` e `Armor Layers`, servindo como base para validação automática de regras.
+
+---
+
 ## ▶️ Como Rodar
 
 Com o ambiente virtual ativado e as dependências instaladas, inicie o bot:

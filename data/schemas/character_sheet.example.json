@@ -1,0 +1,50 @@
+{
+  "schema_version": "v1.0.0",
+  "character_name": "Geralt de Rívia",
+  "core_stats": {
+    "INT": 6,
+    "REF": 8,
+    "DEX": 7,
+    "BODY": 8,
+    "SPD": 7,
+    "EMP": 4,
+    "CRA": 6,
+    "WILL": 7,
+    "LUCK": 5
+  },
+  "derived_stats": {
+    "Stun": 28,
+    "Run": 21,
+    "Leap": 6,
+    "HP": 45,
+    "Stamina": 30,
+    "Vigor": 18,
+    "Recovery": 9
+  },
+  "skills_tree": [
+    {
+      "nome": "Monster Lore",
+      "stat_base": "INT",
+      "pontos_investidos": 6,
+      "modificadores": 2
+    },
+    {
+      "nome": "Swordsmanship",
+      "stat_base": "REF",
+      "pontos_investidos": 7,
+      "modificadores": 1
+    }
+  ],
+  "witcher_specifics": {
+    "toxicity": {
+      "current": 12,
+      "max": 40
+    },
+    "focus": 3
+  },
+  "armor_layers": {
+    "head": { "sp": 4, "reliability": 90 },
+    "torso": { "sp": 8, "reliability": 75 },
+    "legs": { "sp": 6, "reliability": 80 }
+  }
+}
