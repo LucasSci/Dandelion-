@@ -77,6 +77,7 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 * Temas de UI customizáveis (cores, emojis, layouts).
 * Lembretes e eventos programados (sessões, quests).
 * Sistema de economia e crafting com simulação de mercado.
+* Tabelas de loot procedurais baseadas na região (ex: Velen = loot pobre/crafting; Toussaint = vinho/ouro/armas finas).
 * Integração com plataformas externas (Twitch, Patreon).
 * Suporte nativo a múltiplas línguas com localização automática.
 
