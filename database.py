@@ -42,6 +42,17 @@ def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
 # =========================
 
 SCHEMA_SQL = """
+-- MUNDO / LOCALIZACOES --
+CREATE TABLE IF NOT EXISTS world_locations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT UNIQUE NOT NULL,
+    descricao TEXT,
+    parent_id INTEGER,
+    x INTEGER,
+    y INTEGER,
+    FOREIGN KEY(parent_id) REFERENCES world_locations(id) ON DELETE SET NULL
+);
+
 -- CORE RPG --
 CREATE TABLE IF NOT EXISTS personagens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,7 +69,9 @@ CREATE TABLE IF NOT EXISTS personagens (
     hp_atual INTEGER DEFAULT 30,
     mp_max INTEGER DEFAULT 10,
     ataque INTEGER DEFAULT 2,
-    defesa INTEGER DEFAULT 10
+    defesa INTEGER DEFAULT 10,
+    localizacao_id INTEGER,
+    FOREIGN KEY(localizacao_id) REFERENCES world_locations(id) ON DELETE SET NULL
 );
 -- QUESTS ATUALIZADA --
 CREATE TABLE IF NOT EXISTS quests (
@@ -323,6 +336,30 @@ INSERT OR IGNORE INTO sources (key,label,canon_tier) VALUES
 ('original','Originais (Witcher-like)','apocrypha');
 """
 
+SEED_LOCATIONS_SQL = """
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+VALUES ('Continente', 'Mundo conhecido, base para regiões e reinos.', NULL);
+
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+SELECT 'Zerrikania', 'Reino distante de guerreiras lendárias.', id FROM world_locations WHERE nome='Continente';
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+SELECT 'Deserto de Korath', 'Deserto vasto e hostil no sul.', id FROM world_locations WHERE nome='Continente';
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+SELECT 'Novigrad', 'Grande cidade portuária e centro comercial.', id FROM world_locations WHERE nome='Continente';
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+SELECT 'Velen', 'Pântanos e aldeias assoladas pela guerra.', id FROM world_locations WHERE nome='Continente';
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+SELECT 'Skellige', 'Arquipélago de clãs e tradição naval.', id FROM world_locations WHERE nome='Continente';
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+SELECT 'Kaer Morhen', 'Fortaleza dos bruxos da Escola do Lobo.', id FROM world_locations WHERE nome='Continente';
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+SELECT 'Toussaint', 'Ducado conhecido por vinho e cavalaria.', id FROM world_locations WHERE nome='Continente';
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+SELECT 'Ofir', 'Império oriental e fonte de riquezas exóticas.', id FROM world_locations WHERE nome='Continente';
+INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
+SELECT 'Brokilon', 'Floresta sagrada das dríades.', id FROM world_locations WHERE nome='Continente';
+"""
+
 SEED_MONSTERS_SQL = """
 INSERT OR IGNORE INTO monsters (slug, name, category, threat_level, origin, canon_tier)
 VALUES
@@ -366,7 +403,8 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
         ("ataque", "INTEGER DEFAULT 2"),
         ("defesa", "INTEGER DEFAULT 10"),
         ("xp_atual", "INTEGER DEFAULT 0"),
-        ("hp_atual", "INTEGER DEFAULT 30")
+        ("hp_atual", "INTEGER DEFAULT 30"),
+        ("localizacao_id", "INTEGER")
     ]
     if _table_exists(cursor, "personagens"):
         _add_columns_if_missing(cursor, "personagens", personagens_extras)
@@ -432,6 +470,7 @@ def seed_bestiary(conn: sqlite3.Connection) -> None:
     # 2. Aplica seeds internos de garantia (Lookups, Monstros básicos)
     try:
         cur.executescript(SEED_LOOKUPS_SQL)
+        cur.executescript(SEED_LOCATIONS_SQL)
         cur.executescript(SEED_MONSTERS_SQL)
         cur.executescript(SEED_RELATIONS_SQL)
         conn.commit()

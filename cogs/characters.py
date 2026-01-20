@@ -30,6 +30,14 @@ class Characters(commands.Cog):
             rows = await cursor.fetchall()
             return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
 
+    async def localizacao_autocomplete(self, interaction: discord.Interaction, current: str):
+        async with self.bot.db.execute(
+            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome LIMIT 25",
+            (f'%{current}%',)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
+
     # --- COMANDOS DE MESTRE (XP, NÍVEL E OURO) ---
 
     @app_commands.command(name="mestre_add_xp", description="🔒 (Mestre) Dá XP ao jogador e processa Level Up")
@@ -152,6 +160,55 @@ class Characters(commands.Cog):
             perda = abs(quantidade)
             await interaction.response.send_message(f"💸 **{usuario.display_name}** perdeu **{perda}** moedas de ouro.\n(Total: {novo_ouro})")
 
+    # --- LOCALIZACAO / MUNDO ---
+    @app_commands.command(name="localizacao", description="Mostra a localização atual do personagem")
+    async def localizacao(self, interaction: discord.Interaction, usuario: discord.Member = None):
+        target = usuario or interaction.user
+
+        async with self.bot.db.execute("""
+            SELECT p.nome, w.nome
+            FROM personagens p
+            LEFT JOIN world_locations w ON w.id = p.localizacao_id
+            WHERE p.user_id = ?
+        """, (target.id,)) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem, local = row
+        local = local or "Desconhecida"
+        await interaction.response.send_message(f"📍 **{personagem}** está em **{local}**.")
+
+    @app_commands.command(name="viajar", description="Define a localização atual do personagem")
+    @app_commands.autocomplete(destino=localizacao_autocomplete)
+    async def viajar(self, interaction: discord.Interaction, destino: str, usuario: discord.Member = None):
+        if usuario and not is_mestre(interaction):
+            return await interaction.response.send_message("❌ Apenas o Mestre pode mover outros jogadores.", ephemeral=True)
+
+        target = usuario or interaction.user
+
+        async with self.bot.db.execute("SELECT id FROM world_locations WHERE nome = ?", (destino,)) as cursor:
+            row = await cursor.fetchone()
+        if not row:
+            return await interaction.response.send_message("❌ Localização não encontrada.", ephemeral=True)
+
+        local_id = row[0]
+
+        cursor = await self.bot.db.execute(
+            "UPDATE personagens SET localizacao_id = ? WHERE user_id = ?",
+            (local_id, target.id)
+        )
+        await self.bot.db.commit()
+
+        if cursor.rowcount == 0:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        if target.id == interaction.user.id:
+            await interaction.response.send_message(f"🧭 Você viajou para **{destino}**.")
+        else:
+            await interaction.response.send_message(f"🧭 {target.display_name} foi movido para **{destino}**.")
+
     # --- COMANDOS PADRÃO ---
 
     @app_commands.command(name="criar_ficha", description="Crie seu personagem")
@@ -210,21 +267,25 @@ class Characters(commands.Cog):
         target = usuario or interaction.user
         
         async with self.bot.db.execute("""
-            SELECT id, nome, raca, classe, nivel, historia, imagem_url, ouro, hp_atual, hp_max
-            FROM personagens WHERE user_id = ?
+            SELECT p.id, p.nome, p.raca, p.classe, p.nivel, p.historia, p.imagem_url,
+                   p.ouro, p.hp_atual, p.hp_max, w.nome
+            FROM personagens p
+            LEFT JOIN world_locations w ON w.id = p.localizacao_id
+            WHERE p.user_id = ?
         """, (target.id,)) as cursor:
             res = await cursor.fetchone()
         
         if not res:
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        char_id, nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max = res
+        char_id, nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max, local = res
         if hp_atual is None: hp_atual = hp_max
 
         embed = discord.Embed(title=f"📜 {nome}", color=0x2b2d31)
         embed.add_field(name="Raça", value=raca)
         embed.add_field(name="Classe", value=classe)
         embed.add_field(name="Nível", value=str(nivel))
+        embed.add_field(name="📍 Localização", value=local or "Desconhecida")
         
         pct = hp_atual / hp_max if hp_max > 0 else 0
         barra_vida = "🟩" * int(pct * 10) + "⬛" * (10 - int(pct * 10))
