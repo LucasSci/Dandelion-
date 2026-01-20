@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import aiosqlite
+from typing import Optional
 
 class Campaign(commands.Cog):
     def __init__(self, bot):
@@ -17,11 +18,21 @@ class Campaign(commands.Cog):
     def is_mestre(interaction: discord.Interaction) -> bool:
         return interaction.user.guild_permissions.administrator
 
+    async def localizacao_autocomplete(self, interaction: discord.Interaction, current: str):
+        async with self.bot.db.execute(
+            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome LIMIT 25",
+            (f"%{current}%",),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
+
     @app_commands.command(name="diario_ver", description="📖 Vê a Linha do Tempo atual da campanha (O que a IA sabe)")
     @app_commands.check(is_mestre)
     async def ver_diario(self, interaction: discord.Interaction):
         # Busca tudo ordenado por ID (Ordem de inserção = Ordem Cronológica)
-        async with self.bot.db.execute("SELECT id, conteudo FROM memoria_campanha WHERE tipo IN ('Evento', 'Resumo', 'Quest') ORDER BY id ASC") as c:
+        async with self.bot.db.execute(
+            "SELECT id, conteudo FROM memoria_campanha WHERE tipo IN ('Evento', 'Resumo', 'Quest', 'Consequence') ORDER BY id ASC"
+        ) as c:
             rows = await c.fetchall()
         
         if not rows:
@@ -45,6 +56,17 @@ class Campaign(commands.Cog):
         await self.bot.db.execute("INSERT INTO memoria_campanha (tipo, conteudo) VALUES ('Evento', ?)", (evento,))
         await self.bot.db.commit()
         await interaction.response.send_message(f"✅ Evento registrado no fim da fila.", ephemeral=True)
+
+    @app_commands.command(name="diario_consequencia", description="➕ Registra consequência persistente de uma ação")
+    @app_commands.describe(consequencia="Ex: 'A vila agora teme bruxos e recusa abrigo.'")
+    @app_commands.check(is_mestre)
+    async def add_consequencia(self, interaction: discord.Interaction, consequencia: str):
+        await self.bot.db.execute(
+            "INSERT INTO memoria_campanha (tipo, conteudo) VALUES ('Consequence', ?)",
+            (consequencia,),
+        )
+        await self.bot.db.commit()
+        await interaction.response.send_message("✅ Consequência registrada.", ephemeral=True)
 
     @app_commands.command(name="diario_importar_txt", description="📂 Importa um resumo longo via arquivo .txt")
     @app_commands.check(is_mestre)
@@ -173,6 +195,69 @@ class Campaign(commands.Cog):
         await self.bot.db.execute("DELETE FROM lore_entries")
         await self.bot.db.commit()
         await interaction.response.send_message("🔥 Todo o lore foi apagado.", ephemeral=True)
+
+    @app_commands.command(name="localizacao_definir_bioma", description="🔒 Define bioma e clima de uma região.")
+    @app_commands.describe(local="Nome da localização", biome="Bioma principal", clima="Clima dominante")
+    @app_commands.autocomplete(local=localizacao_autocomplete)
+    @app_commands.check(is_mestre)
+    async def localizacao_definir_bioma(
+        self, interaction: discord.Interaction, local: str, biome: str, clima: str
+    ):
+        cursor = await self.bot.db.execute(
+            "UPDATE world_locations SET biome = ?, clima = ? WHERE nome = ?",
+            (biome, clima, local),
+        )
+        await self.bot.db.commit()
+
+        if cursor.rowcount > 0:
+            await interaction.response.send_message(
+                f"✅ {local} atualizado para **{biome}** / **{clima}**.", ephemeral=True
+            )
+        else:
+            await interaction.response.send_message("❌ Localização não encontrada.", ephemeral=True)
+
+    @app_commands.command(name="ambientacao_gerar", description="🌦️ Gera ambientação por bioma/clima.")
+    @app_commands.describe(local="Nome da localização", foco="Foco opcional (ex: tensão, mistério)")
+    @app_commands.autocomplete(local=localizacao_autocomplete)
+    async def ambientacao_gerar(
+        self,
+        interaction: discord.Interaction,
+        local: str,
+        foco: Optional[str] = None,
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        async with self.bot.db.execute(
+            "SELECT descricao, biome, clima FROM world_locations WHERE nome = ?",
+            (local,),
+        ) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            return await interaction.followup.send("❌ Localização não encontrada.")
+
+        descricao, biome, clima = row
+        ai = self.bot.get_cog("AIHandler")
+        if not ai:
+            return await interaction.followup.send("❌ IA indisponível.")
+
+        prompt = (
+            "Crie uma ambientação curta para RPG de fantasia.\n"
+            f"Local: {local}\n"
+            f"Descrição: {descricao or 'Sem descrição'}\n"
+            f"Bioma: {biome or 'Não definido'}\n"
+            f"Clima: {clima or 'Não definido'}\n"
+            f"Foco: {foco or 'geral'}\n"
+            "Retorne 3 a 5 frases com detalhes sensoriais."
+        )
+
+        texto = await ai.get_response(prompt)
+        embed = discord.Embed(
+            title=f"🌦️ Ambientação: {local}",
+            description=texto,
+            color=0x3498DB,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Campaign(bot))

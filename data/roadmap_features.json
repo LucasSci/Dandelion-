@@ -1,0 +1,66 @@
+{
+  "Narrativa IA e Experiência de Jogo": [
+    "Memória de campanha entre sessões para contexto prolongado.",
+    "NPCs com personalidade dinâmica (estilo, humor e hábitos próprios).",
+    "Histórias procedurais com ramificações e consequências persistentes.",
+    "Gerador de quests com objetivos e recompensas variáveis.",
+    "Narrador adaptativo com ajuste automático de dificuldade.",
+    "Gerador de lore & ambientação por bioma/clima.",
+    "Análises narrativas pós-sessão (resumos automáticos).",
+    "Sistema de rumores e ganchos de história automáticos.",
+    "Diálogos de NPC com voz sintetizada opcional."
+  ],
+  "Combate e Mecânicas": [
+    "Sistema de iniciativa avançado com alertas visuais e sons.",
+    "Combate em grid com mapas e tokens interativos.",
+    "Integração com mapas externos (Roll20/Foundry) via API.",
+    "Ferramentas de efeitos de status e condições automatizadas.",
+    "Voz de mestre de combate automatizada (descrições sonoras).",
+    "Logs de combate exportáveis (PDF/Markdown).",
+    "Sistema de eventos aleatórios em combate.",
+    "Estatísticas detalhadas por jogador/monstro.",
+    "Regras customizadas baseadas no sistema específico de RPG.",
+    "Ferramentas de balanceamento de encontros e sugestões de ajustes."
+  ],
+  "Personagens e Progressão": [
+    "Sistema de níveis, talentos e subclasses expansível.",
+    "Interface visual de criação de personagem.",
+    "Histórico de progresso e conquistas.",
+    "Ferramenta de ponderação de atributos baseado em papéis.",
+    "Sincronização com fichas de PDF ou fichas externas.",
+    "Comparador de builds (stats/skills).",
+    "Mecânica de reputação e facções.",
+    "Árvore de habilidades visual e customizável.",
+    "Importação/exportação de fichas em formatos populares.",
+    "Sistema de legado (benefícios de campanhas anteriores)."
+  ],
+  "Bestiário e Conteúdo Coletado": [
+    "Scraping inteligente de múltiplas fontes de lore.",
+    "Banco de dados colaborativo com votação de usuários.",
+    "Imagens geradas por IA (criaturas, mapas, itens).",
+    "Tabelas aleatórias de encontros por região/nível.",
+    "Bestiário multilíngue com traduções automáticas.",
+    "Tags de ambiente e biome para criaturas e eventos.",
+    "Comparador de monstros por atributos e fraquezas.",
+    "Sistema de contramedidas automáticas (resistências/fraquezas).",
+    "Edição colaborativa de bestiário via comandos de chat.",
+    "Bestiário temático (fantasia sombria, steampunk, sci-fi, etc.)."
+  ],
+  "Utilitários e Qualidade de Vida": [
+    "Dashboard web para administradores de campanha.",
+    "Sistema de backups e snapshots automáticos.",
+    "Logs avançados com busca e filtros.",
+    "Modularização de comandos (ativar/desativar módulos).",
+    "Sistema de permissões granular para mestres/equipe.",
+    "Temas de UI customizáveis (cores, emojis, layouts).",
+    "Lembretes e eventos programados (sessões, quests).",
+    "Sistema de economia e crafting com simulação de mercado.",
+    "Integração com plataformas externas (Twitch, Patreon).",
+    "Suporte nativo a múltiplas línguas com localização automática."
+  ],
+  "Bônus de Potência": [
+    "Plugins oficiais para diferentes sistemas de RPG (D&D, Pathfinder, World of Darkness, L5R, etc.).",
+    "Comando de “minuto de mestre” com resumo e sugestões em tempo real.",
+    "Modo solo com IA mestre para aventuras single-player."
+  ]
+}

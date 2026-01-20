@@ -1,5 +1,7 @@
 import aiosqlite
 import discord
+import io
+import json
 from discord.ext import commands
 from discord import app_commands
 from ui.modals import CriarFichaModal
@@ -208,6 +210,71 @@ class Characters(commands.Cog):
             await interaction.response.send_message(f"🧭 Você viajou para **{destino}**.")
         else:
             await interaction.response.send_message(f"🧭 {target.display_name} foi movido para **{destino}**.")
+
+    @app_commands.command(name="ficha_exportar", description="📤 Exporta a ficha em JSON.")
+    async def ficha_exportar(
+        self, interaction: discord.Interaction, usuario: discord.Member = None
+    ):
+        target = usuario or interaction.user
+
+        async with self.bot.db.execute(
+            """
+            SELECT id, nome, raca, classe, nivel, xp_atual, historia, imagem_url, ouro,
+                   hp_max, hp_atual, mp_max, ataque, defesa
+            FROM personagens WHERE user_id = ?
+            """,
+            (target.id,),
+        ) as cursor:
+            personagem = await cursor.fetchone()
+
+        if not personagem:
+            return await interaction.response.send_message(
+                "❌ Nenhuma ficha encontrada.", ephemeral=True
+            )
+
+        personagem_id = personagem[0]
+        async with self.bot.db.execute(
+            "SELECT nome, descricao, dado FROM habilidades_personagem WHERE personagem_id = ?",
+            (personagem_id,),
+        ) as cursor:
+            habilidades = await cursor.fetchall()
+
+        async with self.bot.db.execute(
+            "SELECT nome, tipo, valor, efeito FROM inventario WHERE user_id = ?",
+            (target.id,),
+        ) as cursor:
+            itens = await cursor.fetchall()
+
+        ficha = {
+            "nome": personagem[1],
+            "raca": personagem[2],
+            "classe": personagem[3],
+            "nivel": personagem[4],
+            "xp_atual": personagem[5],
+            "historia": personagem[6],
+            "imagem_url": personagem[7],
+            "ouro": personagem[8],
+            "atributos": {
+                "hp_max": personagem[9],
+                "hp_atual": personagem[10],
+                "mp_max": personagem[11],
+                "ataque": personagem[12],
+                "defesa": personagem[13],
+            },
+            "habilidades": [
+                {"nome": h[0], "descricao": h[1], "dado": h[2]} for h in habilidades
+            ],
+            "inventario": [
+                {"nome": i[0], "tipo": i[1], "valor": i[2], "efeito": i[3]} for i in itens
+            ],
+        }
+
+        conteúdo = json.dumps(ficha, ensure_ascii=False, indent=2)
+        buffer = io.StringIO(conteúdo)
+        arquivo = discord.File(buffer, filename=f"ficha_{target.display_name}.json")
+        await interaction.response.send_message(
+            "✅ Ficha exportada.", file=arquivo, ephemeral=True
+        )
 
     # --- COMANDOS PADRÃO ---
 

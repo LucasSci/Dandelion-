@@ -2,6 +2,7 @@ import discord
 import aiosqlite
 import random
 import asyncio
+import io
 from discord.ext import commands
 from discord import app_commands
 from ui.combat_view import CombateView, MestreView, gerar_barra
@@ -139,6 +140,27 @@ class Combat(commands.Cog):
         
         # Gera a primeira interface e SALVA o ID
         await self.atualizar_interface(interaction.channel, nova_mensagem=True)
+
+    @app_commands.command(name="combate_exportar", description="📄 Exporta o log de combate em Markdown.")
+    async def combate_exportar(self, interaction: discord.Interaction):
+        session = self.sessions.get(interaction.channel_id)
+        if not session:
+            return await interaction.response.send_message(
+                "❌ Nenhum combate em andamento neste canal.", ephemeral=True
+            )
+
+        log = session.get("log", [])
+        if not log:
+            return await interaction.response.send_message(
+                "📭 Nenhum log registrado ainda.", ephemeral=True
+            )
+
+        conteúdo = "# Log de Combate\n\n" + "\n".join(f"- {linha}" for linha in log)
+        buffer = io.StringIO(conteúdo)
+        arquivo = discord.File(buffer, filename="log_combate.md")
+        await interaction.response.send_message(
+            "✅ Log exportado em Markdown.", file=arquivo, ephemeral=True
+        )
 
     async def destravar_turno(self, interaction, channel_id):
         session = self.sessions.get(channel_id)

@@ -26,6 +26,10 @@ def load_settings() -> Settings:
             "cogs.scribe",
             "cogs.quests",
             "cogs.campaign",
+            "cogs.roadmap",
+            "cogs.rumors",
+            "cogs.npcs",
+            "cogs.progress",
         ),
         optional_extensions=("cogs.shop",),
     )

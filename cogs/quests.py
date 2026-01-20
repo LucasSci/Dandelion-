@@ -116,6 +116,22 @@ class Quests(commands.Cog):
     def is_mestre(i: discord.Interaction): return i.user.guild_permissions.administrator
     async def cog_load(self): self.bot.add_view(QuestPostView(self.bot.db))
 
+    async def _calcular_dificuldade(self, jogadores: list[int]) -> str:
+        if not jogadores:
+            return "Média"
+
+        placeholders = ",".join("?" for _ in jogadores)
+        query = f"SELECT AVG(nivel) FROM personagens WHERE user_id IN ({placeholders})"
+        async with self.bot.db.execute(query, jogadores) as cursor:
+            row = await cursor.fetchone()
+
+        nivel_medio = row[0] or 1
+        if nivel_medio <= 2:
+            return "Fácil"
+        if nivel_medio <= 4:
+            return "Média"
+        return "Difícil"
+
     # --- AUTOCOMPLETES ---
     async def ac_monstro(self, i, c: str):
         async with self.bot.db.execute("SELECT id, name FROM monsters WHERE name LIKE ? LIMIT 25", (f'%{c}%',)) as r:
@@ -283,6 +299,30 @@ class Quests(commands.Cog):
             VALUES (?,?,?,?,?,?,?,?,?,?,?)
         """, (d['titulo'], d['descricao'], d['ouro'], d['xp'], status_db, d['classes'], d['regiao'], d['monstro'], img_url, d['nota_mestre'], thread_id))
         await self.bot.db.commit()
+
+    @app_commands.command(
+        name="quest_gerar_auto",
+        description="🔒 (Mestre) IA cria missão com dificuldade automática baseada no nível.",
+    )
+    @app_commands.check(is_mestre)
+    async def gerar_auto(
+        self,
+        i: discord.Interaction,
+        jogador_1: discord.Member,
+        jogador_2: Optional[discord.Member] = None,
+        jogador_3: Optional[discord.Member] = None,
+        jogador_4: Optional[discord.Member] = None,
+        publicar_agora: bool = False,
+        canal_forum: Optional[discord.ForumChannel] = None,
+    ):
+        jogadores = [j for j in [jogador_1, jogador_2, jogador_3, jogador_4] if j]
+        dificuldade = await self._calcular_dificuldade([j.id for j in jogadores])
+        await self.gerar(
+            i,
+            dificuldade=dificuldade,
+            publicar_agora=publicar_agora,
+            canal_forum=canal_forum,
+        )
 
     @app_commands.command(name="quest_publicar", description="🔒 (Mestre) Publica um Rascunho no Fórum")
     @app_commands.autocomplete(rascunho_id=ac_quest_rascunho)

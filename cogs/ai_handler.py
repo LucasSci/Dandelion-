@@ -120,6 +120,38 @@ class AIHandler(commands.Cog):
             r = await self.client.images.generate(model="dall-e-3", prompt=p, size="1024x1024", quality="standard", n=1)
             return r.data[0].url
         except: return None
+
+    async def gerar_dialogo_npc(self, npc: dict, mensagem: str) -> str:
+        if not self.client:
+            return "⚠️ A IA não está configurada para diálogos no momento."
+
+        nome = npc.get("nome", "NPC")
+        personalidade = npc.get("personalidade", "neutro")
+        humor = npc.get("humor", "equilibrado")
+        habitos = npc.get("habitos", "")
+        observacoes = npc.get("observacoes", "")
+
+        prompt = (
+            "Você é um NPC em um RPG estilo The Witcher.\n"
+            f"Nome: {nome}\n"
+            f"Personalidade: {personalidade}\n"
+            f"Humor: {humor}\n"
+            f"Hábitos: {habitos}\n"
+            f"Observações: {observacoes}\n"
+            "Responda ao jogador mantendo o estilo do NPC, com frases curtas e expressivas.\n"
+            "Evite sair do personagem.\n"
+            f"Jogador diz: {mensagem}\n"
+            "Resposta do NPC:"
+        )
+
+        try:
+            r = await self.client.chat.completions.create(
+                model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}]
+            )
+            return r.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"Erro IA diálogo NPC: {e}")
+            return "⚠️ Não consegui gerar a resposta do NPC."
         
     async def get_response(self, prompt: str) -> str:
         """Chat genérico"""
