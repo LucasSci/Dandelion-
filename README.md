@@ -334,7 +334,7 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 * `/legado_ver`: Exibe legados.
 * `/comparar_builds`: Compara atributos entre personagens.
 * `/atributos_sugerir`: Sugere pesos de atributos por papel.
-* `/gwent`: Minijogo de Gwent para ouro.
+* `/gwent`: Batalha de cartas em rounds com clima, linhas e turnos automáticos.
 
 ---
 
