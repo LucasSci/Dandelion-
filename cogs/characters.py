@@ -464,23 +464,9 @@ class Characters(commands.Cog):
         ) as cursor:
             habilidades = await cursor.fetchall()
 
-        async with self.bot.db.execute(
-            "SELECT nome, tipo, valor, efeito FROM inventario WHERE user_id = ?",
-            (target.id,),
-        ) as cursor:
-            itens = await cursor.fetchall()
-
         ficha = {
-            "metadata": {
-                "nome": personagem[1],
-                "raca": personagem[2],
-                "classe": personagem[3],
-                "nivel": personagem[4],
-                "xp_atual": personagem[5],
-                "historia": personagem[6],
-                "imagem_url": personagem[7],
-                "ouro": personagem[8],
-            },
+            "schema_version": "v1.0.0",
+            "character_name": personagem[1],
             "core_stats": {
                 "INT": 0,
                 "REF": 0,
@@ -504,34 +490,21 @@ class Characters(commands.Cog):
             "skills_tree": [
                 {
                     "nome": h[0],
-                    "stat_base": None,
+                    "stat_base": "INT",
                     "pontos_investidos": 0,
-                    "modificadores": [],
+                    "modificadores": 0,
                 }
                 for h in habilidades
             ],
             "witcher_specifics": {
-                "toxicity": {"atual": 0, "max": 0},
+                "toxicity": {"current": 0, "max": 0},
                 "focus": 0,
             },
             "armor_layers": {
-                "cabeca": {"sp": 0, "reliability": 100},
-                "tronco": {"sp": 0, "reliability": 100},
-                "pernas": {"sp": 0, "reliability": 100},
+                "head": {"sp": 0, "reliability": 100},
+                "torso": {"sp": 0, "reliability": 100},
+                "legs": {"sp": 0, "reliability": 100},
             },
-            "atributos": {
-                "hp_max": personagem[9],
-                "hp_atual": personagem[10],
-                "mp_max": personagem[11],
-                "ataque": personagem[12],
-                "defesa": personagem[13],
-            },
-            "habilidades": [
-                {"nome": h[0], "descricao": h[1], "dado": h[2]} for h in habilidades
-            ],
-            "inventario": [
-                {"nome": i[0], "tipo": i[1], "valor": i[2], "efeito": i[3]} for i in itens
-            ],
         }
 
         conteúdo = json.dumps(ficha, ensure_ascii=False, indent=2)
