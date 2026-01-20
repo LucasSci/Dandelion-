@@ -11,6 +11,7 @@ from witcher_rules import rolar_d10_explosivo
 
 router = APIRouter()
 app = FastAPI(title="Witcher TTRPG Integration")
+MAP_SCALE_METERS_PER_SQUARE = 2
 
 
 class RollSkillRequest(BaseModel):
@@ -44,6 +45,20 @@ class CombatUpdateResponse(BaseModel):
     terrain_cost: int
     grid_type: str
     scale_meters: float
+
+
+class GenerateMapRequest(BaseModel):
+    width: int
+    height: int
+    biome: str
+    clima: str | None = None
+    seed: int | None = None
+    grid_mode: str = "square"
+
+
+class GenerateMapResponse(BaseModel):
+    grid: List[List[int]]
+    metadata: dict
 
 
 @router.post("/combat_update", response_model=None)
@@ -107,6 +122,24 @@ def generate_map(payload: MapGenerateRequest) -> MapGenerateResponse:
         grid_type=grid_map.grid_type,
         scale_meters=grid_map.scale_meters,
     )
+
+
+@router.post("/generate_map", response_model=None)
+def generate_map(payload: GenerateMapRequest) -> GenerateMapResponse:
+    grid_map = GridMap(
+        width=payload.width,
+        height=payload.height,
+        scale_meters_per_square=MAP_SCALE_METERS_PER_SQUARE,
+        grid_mode=payload.grid_mode,
+    )
+    grid_map.generate(biome=payload.biome, clima=payload.clima, seed=payload.seed)
+    metadata = {
+        "biome": grid_map.biome,
+        "clima": grid_map.clima,
+        "scale_meters_per_square": grid_map.scale_meters_per_square,
+        "grid_mode": grid_map.grid_mode,
+    }
+    return GenerateMapResponse(grid=grid_map.grid, metadata=metadata)
 
 
 app.include_router(router)
