@@ -40,8 +40,22 @@ class GridMap:
     width: int
     height: int
     grid: TerrainGrid = field(default_factory=list)
+    grid_type: str = "square"
+    scale_meters: float = 2.0
+    biome: str | None = None
+    clima: str | None = None
 
-    def generate(self, biome: str, seed: int | None = None) -> None:
+    def generate(
+        self,
+        biome: str,
+        seed: int | None = None,
+        clima: str | None = None,
+        grid_type: str | None = None,
+    ) -> None:
+        self.biome = biome
+        self.clima = clima
+        if grid_type:
+            self.grid_type = grid_type
         generator = NoiseGenerator(biome=biome, seed=seed)
         self.grid = generator.generate(self.width, self.height)
 
@@ -55,6 +69,17 @@ class GridMap:
         if terrain == 2:
             return 2
         return 1
+
+    def neighbors(self, x: int, y: int) -> List[Tuple[int, int]]:
+        if self.grid_type == "hex":
+            if y % 2 == 0:
+                deltas = [(-1, 0), (1, 0), (-1, -1), (0, -1), (-1, 1), (0, 1)]
+            else:
+                deltas = [(-1, 0), (1, 0), (0, -1), (1, -1), (0, 1), (1, 1)]
+        else:
+            deltas = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        candidates = [(x + dx, y + dy) for dx, dy in deltas]
+        return [(nx, ny) for nx, ny in candidates if self.in_bounds(nx, ny)]
 
 
 @dataclass
@@ -87,8 +112,7 @@ class Pathfinding:
 
     def _neighbors(self, node: Tuple[int, int]) -> List[Tuple[int, int]]:
         x, y = node
-        candidates = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-        return [(nx, ny) for nx, ny in candidates if self.grid_map.in_bounds(nx, ny)]
+        return self.grid_map.neighbors(x, y)
 
     @staticmethod
     def _heuristic(a: Tuple[int, int], b: Tuple[int, int]) -> int:
