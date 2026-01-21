@@ -7,6 +7,19 @@ def gerar_barra(atual, maximo, tamanho=10):
     cheios = int(pct * tamanho)
     return "🟩" * cheios + "⬛" * (tamanho - cheios)
 
+# --- LINK EXTERNO (ROLL20) ---
+class Roll20LinkView(ui.View):
+    def __init__(self, url: str):
+        super().__init__(timeout=None)
+        self.add_item(
+            ui.Button(
+                label="Abrir no Roll20",
+                emoji="🎲",
+                style=discord.ButtonStyle.link,
+                url=url,
+            )
+        )
+
 # --- VIEW DO MESTRE (TRAVA DE NARRATIVA) ---
 class MestreView(ui.View):
     def __init__(self, cog, channel_id):

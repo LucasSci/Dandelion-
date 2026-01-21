@@ -203,6 +203,9 @@ OPENAI_API_KEY=sua_chave_api_openai_aqui
 # Sua chave da API do Google Gemini (Privado)
 GEMINI_API_KEY=sua_chave_api_gemini_aqui
 
+# (Opcional) Link da campanha no Roll20 para abrir pelo botão do tabletop
+ROLL20_CAMPAIGN_URL=https://app.roll20.net/campaigns/details/123456789/campanha
+
 ```
 
 > **Nota:** Nunca compartilhe este arquivo com ninguém.
