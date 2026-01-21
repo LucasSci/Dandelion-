@@ -47,8 +47,6 @@ class Characters(commands.Cog):
         if termo:
             nomes = [nome for nome in nomes if termo in nome.lower()]
         return [app_commands.Choice(name=nome, value=nome) for nome in nomes[:25]]
-        rows = await self.character_repo.list_location_names(current)
-        return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
 
     async def _buscar_personagem(self, user_id: int):
         return await self.character_repo.fetch_character_summary_by_user(user_id)
@@ -69,20 +67,14 @@ class Characters(commands.Cog):
         await interaction.response.defer()
 
         target = usuario or interaction.user
-        db = self.bot.db
-        async with db.execute(
-            "SELECT nivel, xp_atual, hp_max, hp_atual, ataque FROM personagens WHERE user_id = ?",
-            (target.id,),
-        ) as cursor:
-            dados = await cursor.fetchone()
-        
-        dados = await self.character_repo.fetch_progress_by_user(usuario.id)
-        
+
+        dados = await self.character_repo.fetch_progress_by_user(target.id)
         if not dados:
             return await interaction.followup.send("❌ Esse usuário não tem ficha.", ephemeral=True)
 
         nivel, xp_atual, hp_max, hp_atual, ataque = dados
-        if hp_atual is None: hp_atual = hp_max
+        if hp_atual is None:
+            hp_atual = hp_max
 
         xp_atual += xp
         niveis_subidos = 0
@@ -99,13 +91,7 @@ class Characters(commands.Cog):
             else:
                 break
         
-        await db.execute("""
-            UPDATE personagens 
-            SET nivel=?, xp_atual=?, hp_max=?, hp_atual=?, ataque=? 
-            WHERE user_id=?
-        """, (nivel, xp_atual, hp_max, hp_atual, ataque, target.id))
-        await db.commit()
-        await self.character_repo.update_progress(usuario.id, nivel, xp_atual, hp_max, hp_atual, ataque)
+        await self.character_repo.update_progress(target.id, nivel, xp_atual, hp_max, hp_atual, ataque)
 
         msg = f"✨ **{target.display_name}** ganhou {xp} XP!"
         if niveis_subidos > 0:
@@ -121,30 +107,21 @@ class Characters(commands.Cog):
         self, interaction: discord.Interaction, usuario: Optional[discord.Member] = None
     ):
         target = usuario or interaction.user
-        db = self.bot.db
-        async with db.execute(
-            "SELECT nivel, hp_max, hp_atual, ataque FROM personagens WHERE user_id = ?",
-            (target.id,),
-        ) as cursor:
-            dados = await cursor.fetchone()
-    async def mestre_levelup(self, interaction: discord.Interaction, usuario: discord.Member):
-        dados = await self.character_repo.fetch_level_stats_by_user(usuario.id)
-        
-        if not dados: return await interaction.response.send_message("❌ Sem ficha.", ephemeral=True)
-        
+        dados = await self.character_repo.fetch_level_stats_by_user(target.id)
+
+        if not dados:
+            return await interaction.response.send_message("❌ Sem ficha.", ephemeral=True)
+
         nivel, hp_max, hp_atual, ataque = dados
-        if hp_atual is None: hp_atual = hp_max
+        if hp_atual is None:
+            hp_atual = hp_max
 
         novo_nivel = nivel + 1
         novo_hp = hp_max + 5
         novo_hp_atual = hp_atual + 5
         novo_ataque = ataque + 1
 
-        await db.execute("""
-            UPDATE personagens SET nivel=?, hp_max=?, hp_atual=?, ataque=? WHERE user_id=?
-        """, (novo_nivel, novo_hp, novo_hp_atual, novo_ataque, target.id))
-        await db.commit()
-        await self.character_repo.update_level_stats(usuario.id, novo_nivel, novo_hp, novo_hp_atual, novo_ataque)
+        await self.character_repo.update_level_stats(target.id, novo_nivel, novo_hp, novo_hp_atual, novo_ataque)
 
         await interaction.response.send_message(
             f"🆙 **{target.display_name}** foi promovido para o Nível **{novo_nivel}**!\n(+5 HP, +1 Atk)"
@@ -156,19 +133,14 @@ class Characters(commands.Cog):
         self, interaction: discord.Interaction, usuario: Optional[discord.Member] = None
     ):
         target = usuario or interaction.user
-        db = self.bot.db
-        async with db.execute(
-            "SELECT nivel, hp_max, hp_atual, ataque FROM personagens WHERE user_id = ?",
-            (target.id,),
-        ) as cursor:
-            dados = await cursor.fetchone()
-    async def mestre_leveldown(self, interaction: discord.Interaction, usuario: discord.Member):
-        dados = await self.character_repo.fetch_level_stats_by_user(usuario.id)
-        
-        if not dados: return await interaction.response.send_message("❌ Sem ficha.", ephemeral=True)
+        dados = await self.character_repo.fetch_level_stats_by_user(target.id)
+
+        if not dados:
+            return await interaction.response.send_message("❌ Sem ficha.", ephemeral=True)
 
         nivel, hp_max, hp_atual, ataque = dados
-        if hp_atual is None: hp_atual = hp_max
+        if hp_atual is None:
+            hp_atual = hp_max
 
         if nivel <= 1:
             return await interaction.response.send_message("❌ O personagem já está no nível 1.", ephemeral=True)
@@ -178,11 +150,7 @@ class Characters(commands.Cog):
         novo_hp_atual = min(hp_atual, novo_hp) 
         novo_ataque = max(1, ataque - 1)
 
-        await db.execute("""
-            UPDATE personagens SET nivel=?, hp_max=?, hp_atual=?, ataque=? WHERE user_id=?
-        """, (novo_nivel, novo_hp, novo_hp_atual, novo_ataque, target.id))
-        await db.commit()
-        await self.character_repo.update_level_stats(usuario.id, novo_nivel, novo_hp, novo_hp_atual, novo_ataque)
+        await self.character_repo.update_level_stats(target.id, novo_nivel, novo_hp, novo_hp_atual, novo_ataque)
 
         await interaction.response.send_message(
             f"🔻 **{target.display_name}** retornou para o Nível **{novo_nivel}**.\nStatus revertidos."
@@ -198,25 +166,13 @@ class Characters(commands.Cog):
         usuario: Optional[discord.Member] = None,
     ):
         target = usuario or interaction.user
-        db = self.bot.db
-        async with db.execute(
-            "SELECT ouro FROM personagens WHERE user_id = ?", (target.id,)
-        ) as cursor:
-            dados = await cursor.fetchone()
-
-        if not dados:
-    async def mestre_ouro(self, interaction: discord.Interaction, usuario: discord.Member, quantidade: int):
-        ouro_atual = await self.character_repo.fetch_gold_by_user(usuario.id)
+        ouro_atual = await self.character_repo.fetch_gold_by_user(target.id)
         if ouro_atual is None:
             return await interaction.response.send_message("❌ Esse usuário não tem ficha.", ephemeral=True)
         # Garante que o ouro não fique negativo
         novo_ouro = max(0, ouro_atual + quantidade)
 
-        await db.execute(
-            "UPDATE personagens SET ouro = ? WHERE user_id = ?", (novo_ouro, target.id)
-        )
-        await db.commit()
-        await self.character_repo.update_gold_by_user(usuario.id, novo_ouro)
+        await self.character_repo.update_gold_by_user(target.id, novo_ouro)
 
         if quantidade > 0:
             await interaction.response.send_message(
@@ -425,8 +381,6 @@ class Characters(commands.Cog):
             resposta += f"🧪 Multiplicador: {multiplicador}x | Dano final: {dano_final}\n"
         else:
             resposta += f"✅ Dano final: {dano_final}\n"
-        if armadura and sp_base > 0 and dano > 0:
-            resposta += f"🛡️ Reliability: {reliability}% → {nova_reliability}%\n"
         resposta += f"❤️ HP: {hp_atual} → {novo_hp}"
 
         await interaction.response.send_message(resposta)
@@ -449,23 +403,8 @@ class Characters(commands.Cog):
 
         atributos = await self.character_repo.list_attributes(personagem_id)
 
-        armaduras = await self.character_repo.list_armors(personagem_id, ["cabeca", "torso", "pernas"])
-
-        atributos_map = {nome: valor for nome, valor in atributos}
-        armor_defaults = {
-            "cabeca": {"sp": 0, "reliability": 100},
-            "torso": {"sp": 0, "reliability": 100},
-            "pernas": {"sp": 0, "reliability": 100},
-        }
-        for localizacao, sp, reliability in armaduras:
-            armor_defaults[localizacao] = {
-                "sp": sp or 0,
-                "reliability": reliability if reliability is not None else 100,
-            }
-
-        armaduras = await self.character_repo.list_armors(personagem_id)
-
         export_localizacoes = ["cabeca", "torso", "pernas"]
+        armaduras = await self.character_repo.list_armors(personagem_id, export_localizacoes)
         armor_layers = {
             localizacao: {"sp": 0, "reliability": 100}
             for localizacao in export_localizacoes
@@ -476,6 +415,12 @@ class Characters(commands.Cog):
                     "sp": sp or 0,
                     "reliability": reliability if reliability is not None else 100,
                 }
+        armor_defaults = {
+            "cabeca": armor_layers["cabeca"],
+            "torso": armor_layers["torso"],
+            "pernas": armor_layers["pernas"],
+        }
+        atributos_map = {nome: valor for nome, valor in atributos}
 
         ficha = {
             "schema_version": "v1.0.0",
@@ -581,23 +526,10 @@ class Characters(commands.Cog):
         usuario: Optional[discord.Member] = None,
     ):
         target = usuario or interaction.user
-        await self.bot.db.execute(
-            "UPDATE personagens SET user_id = NULL WHERE user_id = ?", (target.id,)
-        )
-        cursor = await self.bot.db.execute(
-            "UPDATE personagens SET user_id = ? WHERE nome = ?",
-            (target.id, nome_personagem),
-        )
-        await self.bot.db.commit()
-        if cursor.rowcount > 0:
-            await interaction.response.send_message(
-                f"✅ **{nome_personagem}** vinculado a {target.mention}."
-            )
-    async def mestre_vincular(self, interaction: discord.Interaction, nome_personagem: str, usuario: discord.Member):
-        await self.character_repo.clear_user_character(usuario.id)
-        rowcount = await self.character_repo.assign_character_to_user(usuario.id, nome_personagem)
+        await self.character_repo.clear_user_character(target.id)
+        rowcount = await self.character_repo.assign_character_to_user(target.id, nome_personagem)
         if rowcount > 0:
-            await interaction.response.send_message(f"✅ **{nome_personagem}** vinculado a {usuario.mention}.")
+            await interaction.response.send_message(f"✅ **{nome_personagem}** vinculado a {target.mention}.")
         else:
             await interaction.response.send_message("❌ Erro ao vincular.", ephemeral=True)
 
