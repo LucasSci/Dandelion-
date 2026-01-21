@@ -1,3 +1,5 @@
+import time
+
 import discord
 from discord import ui
 from data.repositories import CharacterRepository, InventoryRepository, SkillRepository
@@ -36,11 +38,30 @@ def _format_list(items, prefix="• "):
     return "\n".join([f"{prefix}{item}" for item in items])
 
 
-def _barra_progresso(atual, maximo, simbolo, tamanho=10):
+def _format_percentual(atual, maximo):
     if maximo <= 0:
-        return simbolo * tamanho
+        return "0%"
     pct = max(min(atual / maximo, 1), 0)
-    return simbolo * int(pct * tamanho) + "⬛" * (tamanho - int(pct * tamanho))
+    return f"{int(round(pct * 100))}%"
+
+
+def _cor_por_hp(hp_atual, hp_max):
+    if hp_max <= 0:
+        return 0xED4245
+    pct = max(min(hp_atual / hp_max, 1), 0)
+    if pct > 0.7:
+        return 0x57F287
+    if pct > 0.3:
+        return 0xFEE75C
+    return 0xED4245
+
+
+def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
+    timestamp = f"<t:{int(time.time())}:R>"
+    if texto_base:
+        embed.set_footer(text=f"{texto_base} • Atualizado {timestamp}")
+    else:
+        embed.set_footer(text=f"Atualizado {timestamp}")
 
 
 async def construir_embed_ficha(db, personagem_id, user_id):
@@ -78,7 +99,7 @@ async def construir_embed_ficha(db, personagem_id, user_id):
 
     embed = discord.Embed(
         title=f"📜 {nome}",
-        color=0xE8D6B3
+        color=_cor_por_hp(hp_atual, hp_max),
     )
     embed.add_field(
         name="📖 Identidade",
@@ -94,11 +115,11 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     embed.add_field(name="💰 Ouro", value=str(ouro), inline=True)
     embed.add_field(name="🧭 XP Atual", value=str(xp_atual), inline=True)
 
-    barra_hp = _barra_progresso(hp_atual, hp_max, "🟥")
-    barra_vigor = _barra_progresso(vigor_atual, vigor_max, "🟨")
+    hp_pct = _format_percentual(hp_atual, hp_max)
+    vigor_pct = _format_percentual(vigor_atual, vigor_max)
     recursos = (
-        f"❤️ HP {hp_atual}/{hp_max}\n`{barra_hp}`\n"
-        f"⚡ Vigor {vigor_atual}/{vigor_max}\n`{barra_vigor}`\n"
+        f"❤️ HP {hp_atual}/{hp_max} ({hp_pct})\n"
+        f"⚡ Vigor {vigor_atual}/{vigor_max} ({vigor_pct})\n"
         f"✨ MP {mp_max}\n"
         f"☠️ Toxicidade {toxicidade_atual}/{toxicidade_max}"
     )
@@ -126,7 +147,7 @@ async def construir_embed_ficha(db, personagem_id, user_id):
 
     if img:
         embed.set_thumbnail(url=img)
-    embed.set_footer(text="Ficha estilo pergaminho • Visual inspirado em crônicas de bruxos")
+    _set_footer_timestamp(embed, "Ficha estilo pergaminho • Visual inspirado em crônicas de bruxos")
     return embed
 
 # ==============================================================================
@@ -654,9 +675,9 @@ class FichaView(ui.View):
             or (nome and "pocao" in nome.lower())
         ]
 
-        barra_vigor = "🟨" * int((vigor_atual / vigor_max) * 10) if vigor_max > 0 else "🟨"*10
         embed = discord.Embed(title="✨ Magia & Alquimia", color=0x8E7CC3)
-        embed.add_field(name="⚡ Vigor", value=f"{vigor_atual}/{vigor_max}\n`{barra_vigor}`", inline=True)
+        vigor_pct = _format_percentual(vigor_atual, vigor_max)
+        embed.add_field(name="⚡ Vigor", value=f"{vigor_atual}/{vigor_max} ({vigor_pct})", inline=True)
         embed.add_field(name="☠️ Toxicidade", value=f"{toxicidade_atual}/{toxicidade_max}", inline=True)
 
         if not skills:
@@ -676,6 +697,8 @@ class FichaView(ui.View):
             self.add_item(PocaoSelect(potions, self.personagem_id))
         else:
             embed.add_field(name="🧪 Poções", value="Nenhuma poção no inventário.", inline=False)
+
+        _set_footer_timestamp(embed, "Magia & Alquimia")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -711,9 +734,9 @@ class FichaView(ui.View):
         armas_txt = "\n".join([f"• **{n}** — {e or 'Sem efeito'}" for n, e in armas]) or "Sem armas equipadas."
         armaduras_txt = "\n".join([f"• **{n}** — {e or 'Sem efeito'}" for n, e in armaduras]) or "Sem armaduras registradas."
 
-        barra_hp = "🟥" * int((hp_atual / hp_max) * 10) if hp_max > 0 else "🟥"*10
-        embed = discord.Embed(title="⚔️ Combate", color=0xB07D62)
-        embed.add_field(name="❤️ Vida", value=f"{hp_atual}/{hp_max}\n`{barra_hp}`", inline=True)
+        hp_pct = _format_percentual(hp_atual, hp_max)
+        embed = discord.Embed(title="⚔️ Combate", color=_cor_por_hp(hp_atual, hp_max))
+        embed.add_field(name="❤️ Vida", value=f"{hp_atual}/{hp_max} ({hp_pct})", inline=True)
         embed.add_field(name="⚔️ Ataque", value=str(ataque), inline=True)
         embed.add_field(name="🛡️ SP Atual", value=str(defesa), inline=True)
         embed.add_field(name="Armas", value=armas_txt, inline=False)
@@ -723,6 +746,8 @@ class FichaView(ui.View):
         self.add_item(RolagemCombateButton("Roll to Hit", "🎯", self.personagem_id, "1d20+{ataque}"))
         self.add_item(RolagemCombateButton("Roll Damage", "💥", self.personagem_id, "1d6+{ataque}"))
         self.add_item(FerimentosCriticosSelect())
+
+        _set_footer_timestamp(embed, "Combate")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -752,7 +777,7 @@ class FichaView(ui.View):
         capacidade = 10 + (nivel * 2)
         embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
         embed.add_field(name="Encumbrance", value=f"{encumbrance}/{capacidade} (1 por item)", inline=False)
-        embed.set_footer(text="Layout estilo pergaminho limpo • Lista dinâmica")
+        _set_footer_timestamp(embed, "Layout estilo pergaminho limpo • Lista dinâmica")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -773,6 +798,8 @@ class FichaView(ui.View):
             embed.description = "Clique em um atributo para rolar uma perícia."
             for nome, valor in atributos:
                 self.add_item(AtributoButton(nome, valor))
+
+        _set_footer_timestamp(embed, "Atributos")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)

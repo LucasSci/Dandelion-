@@ -71,10 +71,11 @@ class Progress(commands.Cog):
     async def reputacao_definir(
         self,
         interaction: discord.Interaction,
-        usuario: discord.Member,
         faccao: str,
         valor: int,
+        usuario: Optional[discord.Member] = None,
     ):
+        alvo = usuario or interaction.user
         async with self.bot.db.execute(
             "SELECT id FROM faccoes WHERE nome = ?", (faccao,)
         ) as cursor:
@@ -93,7 +94,7 @@ class Progress(commands.Cog):
             ON CONFLICT(user_id, faccao_id)
             DO UPDATE SET reputacao = excluded.reputacao, atualizado_em = datetime('now')
             """,
-            (usuario.id, faccao_id, valor),
+            (alvo.id, faccao_id, valor),
         )
         await self.bot.db.commit()
         await interaction.response.send_message("✅ Reputação atualizada.", ephemeral=True)
@@ -146,9 +147,10 @@ class Progress(commands.Cog):
     async def conquista_dar(
         self,
         interaction: discord.Interaction,
-        usuario: discord.Member,
         conquista: str,
+        usuario: Optional[discord.Member] = None,
     ):
+        alvo = usuario or interaction.user
         async with self.bot.db.execute(
             "SELECT id FROM conquistas WHERE nome = ?", (conquista,)
         ) as cursor:
@@ -162,7 +164,7 @@ class Progress(commands.Cog):
         conquista_id = row[0]
         await self.bot.db.execute(
             "INSERT OR IGNORE INTO usuario_conquistas (user_id, conquista_id) VALUES (?, ?)",
-            (usuario.id, conquista_id),
+            (alvo.id, conquista_id),
         )
         await self.bot.db.commit()
         await interaction.response.send_message("🏅 Conquista concedida!", ephemeral=True)
@@ -200,11 +202,16 @@ class Progress(commands.Cog):
     @app_commands.command(name="legado_adicionar", description="🔒 (Mestre) Registra legado de campanhas anteriores.")
     @app_commands.check(is_mestre)
     async def legado_adicionar(
-        self, interaction: discord.Interaction, usuario: discord.Member, titulo: str, descricao: str
+        self,
+        interaction: discord.Interaction,
+        titulo: str,
+        descricao: str,
+        usuario: Optional[discord.Member] = None,
     ):
+        alvo = usuario or interaction.user
         await self.bot.db.execute(
             "INSERT INTO legado_beneficios (user_id, titulo, descricao) VALUES (?, ?, ?)",
-            (usuario.id, titulo, descricao),
+            (alvo.id, titulo, descricao),
         )
         await self.bot.db.commit()
         await interaction.response.send_message("✅ Legado registrado.", ephemeral=True)
