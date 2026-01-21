@@ -2,6 +2,8 @@ import sqlite3
 from pathlib import Path
 from typing import Iterable, Tuple, Union
 
+from enums import MonsterType
+
 DB_NAME = "bestiario.db"
 BASE_DIR = Path(__file__).resolve().parent
 SEEDS_DIR = BASE_DIR / "data" / "seeds"
@@ -53,6 +55,12 @@ CREATE TABLE IF NOT EXISTS world_locations (
     x INTEGER,
     y INTEGER,
     FOREIGN KEY(parent_id) REFERENCES world_locations(id) ON DELETE SET NULL
+);
+
+-- CONFIGURAÇÕES DA GUILDA --
+CREATE TABLE IF NOT EXISTS configuracoes_guilda (
+    guild_id INTEGER PRIMARY KEY,
+    mestre_role_id INTEGER
 );
 
 -- CORE RPG --
@@ -507,20 +515,20 @@ INSERT OR IGNORE INTO world_locations (nome, descricao, parent_id)
 SELECT 'Brokilon', 'Floresta sagrada das dríades.', id FROM world_locations WHERE nome='Continente';
 """
 
-SEED_MONSTERS_SQL = """
+SEED_MONSTERS_SQL = f"""
 INSERT OR IGNORE INTO monsters (slug, name, category, threat_level, origin, canon_tier)
 VALUES
-('drowner','Drowner','Necrophage',2,'tw3','core'),
-('water_hag','Water Hag','Necrophage',3,'tw3','core'),
-('ghoul','Ghoul','Necrophage',2,'tw3','core'),
-('alghoul','Alghoul','Necrophage',4,'tw3','core'),
-('rotfiend','Rotfiend','Necrophage',3,'tw3','core'),
-('wraith','Wraith','Specter',3,'tw3','core'),
-('nightwraith','Nightwraith','Specter',3,'tw3','core'),
-('noonwraith','Noonwraith','Specter',3,'tw3','core');
+('drowner','Drowner','{MonsterType.NECROPHAGE.value}',2,'tw3','core'),
+('water_hag','Water Hag','{MonsterType.NECROPHAGE.value}',3,'tw3','core'),
+('ghoul','Ghoul','{MonsterType.NECROPHAGE.value}',2,'tw3','core'),
+('alghoul','Alghoul','{MonsterType.NECROPHAGE.value}',4,'tw3','core'),
+('rotfiend','Rotfiend','{MonsterType.NECROPHAGE.value}',3,'tw3','core'),
+('wraith','Wraith','{MonsterType.SPECTER.value}',3,'tw3','core'),
+('nightwraith','Nightwraith','{MonsterType.SPECTER.value}',3,'tw3','core'),
+('noonwraith','Noonwraith','{MonsterType.SPECTER.value}',3,'tw3','core');
 """
 
-SEED_RELATIONS_SQL = """
+SEED_RELATIONS_SQL = f"""
 INSERT OR IGNORE INTO monster_sources (monster_id, source_id)
 SELECT m.id, s.id FROM monsters m JOIN sources s ON s.key = m.origin
 WHERE m.origin IS NOT NULL AND m.origin <> '';
@@ -528,12 +536,12 @@ WHERE m.origin IS NOT NULL AND m.origin <> '';
 INSERT OR IGNORE INTO monster_weaknesses (monster_id, weakness_id, priority, note)
 SELECT m.id, w.id, 1, 'Resposta padrão.'
 FROM monsters m, weaknesses w
-WHERE m.category='Specter' AND w.key IN ('specter_oil','yrden','moon_dust');
+WHERE m.category='{MonsterType.SPECTER.value}' AND w.key IN ('specter_oil','yrden','moon_dust');
 
 INSERT OR IGNORE INTO monster_weaknesses (monster_id, weakness_id, priority, note)
 SELECT m.id, w.id, 1, 'Resposta padrão.'
 FROM monsters m, weaknesses w
-WHERE m.category='Necrophage' AND w.key IN ('necrophage_oil','igni','aard','quen','silver');
+WHERE m.category='{MonsterType.NECROPHAGE.value}' AND w.key IN ('necrophage_oil','igni','aard','quen','silver');
 """
 
 # =========================
@@ -559,6 +567,14 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     ]
     if _table_exists(cursor, "personagens"):
         _add_columns_if_missing(cursor, "personagens", personagens_extras)
+
+    if not _table_exists(cursor, "configuracoes_guilda"):
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS configuracoes_guilda (
+                guild_id INTEGER PRIMARY KEY,
+                mestre_role_id INTEGER
+            );
+        """)
 
     world_location_extras = [
         ("biome", "TEXT"),

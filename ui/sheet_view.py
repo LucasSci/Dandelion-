@@ -2,6 +2,7 @@ import discord
 from discord import ui
 from utils import rolar_dados, rolar_pericia_explosiva
 from ui.views import ConfirmarExclusaoView
+from enums import SheetSection
 
 # ==============================================================================
 # 0. HELPERS (LAYOUT)
@@ -578,48 +579,65 @@ class FichaView(ui.View):
         self.personagem_id = personagem_id
         self.dono_id = user_id_dono
         self._mark_static_items()
-        self.update_buttons_state("geral")
+        self.update_buttons_state(SheetSection.GENERAL)
 
     def _mark_static_items(self):
         for item in self.children:
             item.is_static = True
 
-    def update_buttons_state(self, mode: str):
+    def update_buttons_state(self, mode: SheetSection):
         for item in self.children:
             if isinstance(item, ui.Button) and item.label:
                 if item.label == "Geral":
-                    is_active = (mode == "geral")
+                    is_active = (mode == SheetSection.GENERAL)
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Combate":
-                    is_active = (mode == "combate")
+                    is_active = (mode == SheetSection.COMBAT)
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Atributos":
-                    is_active = (mode == "atributos")
+                    is_active = (mode == SheetSection.ATTRIBUTES)
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Magia/Alquimia":
-                    is_active = (mode == "magia")
+                    is_active = (mode == SheetSection.MAGIC)
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Inventário":
-                    is_active = (mode == "inventario")
+                    is_active = (mode == SheetSection.INVENTORY)
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Buscar Perícia":
-                    item.disabled = (mode != "geral")
-                    item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
+                    item.disabled = (mode != SheetSection.GENERAL)
+                    item.style = discord.ButtonStyle.primary if mode == SheetSection.GENERAL else discord.ButtonStyle.secondary
                 elif item.label in {"Nova Skill", "Gerenciar"}:
-                    item.disabled = (mode != "magia")
-                    item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
+                    item.disabled = (mode != SheetSection.MAGIC)
+                    item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == SheetSection.MAGIC else discord.ButtonStyle.secondary
+
+    async def _tem_role_mestre(self, interaction: discord.Interaction) -> bool:
+        if not interaction.guild:
+            return False
+
+        db = interaction.client.db
+        async with db.execute(
+            "SELECT mestre_role_id FROM configuracoes_guilda WHERE guild_id = ?",
+            (interaction.guild.id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+
+        if not row or row[0] is None:
+            return False
+
+        role = interaction.guild.get_role(row[0])
+        return role in interaction.user.roles if role else False
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # ============================================================
         # ALTERAÇÃO: Permite Dono OU Administrador (Mestre)
         # ============================================================
         is_dono = interaction.user.id == self.dono_id
-        is_mestre = interaction.user.guild_permissions.administrator
+        is_mestre = interaction.user.guild_permissions.administrator or await self._tem_role_mestre(interaction)
 
         if is_dono or is_mestre:
             return True
@@ -672,7 +690,7 @@ class FichaView(ui.View):
     # --- MÉTODOS DE EXIBIÇÃO ---
     
     async def mostrar_info_geral(self, interaction: discord.Interaction):
-        self.update_buttons_state("geral")
+        self.update_buttons_state(SheetSection.GENERAL)
         
         db = interaction.client.db
         embed = await construir_embed_ficha(db, self.personagem_id, interaction.user.id)
@@ -683,7 +701,7 @@ class FichaView(ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
-        self.update_buttons_state("magia")
+        self.update_buttons_state(SheetSection.MAGIC)
         self.clear_dynamic_buttons()
 
         db = interaction.client.db
@@ -752,7 +770,7 @@ class FichaView(ui.View):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def mostrar_combate(self, interaction: discord.Interaction):
-        self.update_buttons_state("combate")
+        self.update_buttons_state(SheetSection.COMBAT)
         self.clear_dynamic_buttons()
 
         db = interaction.client.db
@@ -806,7 +824,7 @@ class FichaView(ui.View):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def mostrar_inventario(self, interaction: discord.Interaction):
-        self.update_buttons_state("inventario")
+        self.update_buttons_state(SheetSection.INVENTORY)
         self.clear_dynamic_buttons()
 
         db = interaction.client.db
@@ -844,7 +862,7 @@ class FichaView(ui.View):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_atributos(self, interaction: discord.Interaction):
-        self.update_buttons_state("atributos")
+        self.update_buttons_state(SheetSection.ATTRIBUTES)
         self.clear_dynamic_buttons()
 
         db = interaction.client.db

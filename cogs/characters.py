@@ -2,18 +2,20 @@ import aiosqlite
 import discord
 import io
 import json
+import math
 from typing import Optional
 from discord.ext import commands
 from discord import app_commands
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
+from enums import BodyPart
 
 DB_NAME = "bestiario.db"
 LOCALIZACOES_ARMADURA = {
-    "Cabeça": "cabeca",
-    "Torso": "torso",
-    "Braços": "bracos",
-    "Pernas": "pernas",
+    "Cabeça": BodyPart.HEAD.value,
+    "Torso": BodyPart.TORSO.value,
+    "Braços": BodyPart.ARMS.value,
+    "Pernas": BodyPart.LEGS.value,
 }
 LOCALIZACOES_ARMADURA_CHOICES = [
     app_commands.Choice(name=nome, value=valor)
@@ -78,20 +80,18 @@ class Characters(commands.Cog):
         nivel, xp_atual, hp_max, hp_atual, ataque = dados
         if hp_atual is None: hp_atual = hp_max
 
-        xp_atual += xp
-        niveis_subidos = 0
-        
-        while True:
-            xp_necessario = nivel * 1000
-            if xp_atual >= xp_necessario:
-                xp_atual -= xp_necessario
-                nivel += 1
-                hp_max += 5
-                hp_atual += 5 
-                ataque += 1
-                niveis_subidos += 1
-            else:
-                break
+        xp_total = xp_atual + xp + (nivel - 1) * nivel * 500
+        xp_total = max(0, xp_total)
+        xp_total_unidades = xp_total // 1000
+        novo_nivel = max(1, (1 + math.isqrt(1 + 8 * xp_total_unidades)) // 2)
+        niveis_subidos = max(0, novo_nivel - nivel)
+        nivel = novo_nivel
+        xp_atual = max(0, xp_total - (nivel - 1) * nivel * 500)
+
+        if niveis_subidos:
+            hp_max += 5 * niveis_subidos
+            hp_atual += 5 * niveis_subidos
+            ataque += 1 * niveis_subidos
         
         await db.execute("""
             UPDATE personagens 
