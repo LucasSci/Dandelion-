@@ -17,6 +17,11 @@ class AIHandler(commands.Cog):
             except Exception as e:
                 print(f"❌ Erro ao conectar OpenAI: {e}")
 
+    def _split_discord_message(self, text: str, limit: int = 2000) -> list[str]:
+        if len(text) <= limit:
+            return [text]
+        return [text[i : i + limit] for i in range(0, len(text), limit)]
+
     def safe_int(self, text: str) -> int:
         """Converte texto em int de forma segura, retornando 0 se falhar"""
         try:
@@ -212,7 +217,8 @@ class AIHandler(commands.Cog):
         )
 
         resposta = await self.get_response(prompt)
-        await interaction.followup.send(resposta)
+        for chunk in self._split_discord_message(resposta):
+            await interaction.followup.send(chunk)
 
 async def setup(bot):
     await bot.add_cog(AIHandler(bot))
