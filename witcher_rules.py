@@ -47,12 +47,18 @@ def rolar_d10_explosivo(roller: Roller = random.randint) -> Tuple[int, List[int]
     while roll in (1, 10):
         roll = roller(1, 10)
         rolls.append(roll)
-        total += direction * roll
 
         if roll == 10:
+            total += roll
             direction = 1
-        elif roll == 1:
+            continue
+        if roll == 1:
+            total -= roll
             direction = -1
+            continue
+
+        total += direction * roll
+        break
 
     return total, rolls
 
