@@ -6,9 +6,10 @@ import io
 from typing import Optional
 from discord.ext import commands
 from discord import app_commands
-from ui.combat_view import CombateView, MestreView, gerar_barra
+from ui.combat_view import CombateView, MestreView, Roll20LinkView, gerar_barra
 from vtt_engine.grid_system import GridMap
 from utils import rolar_dados
+from config import settings
 
 DB_NAME = "bestiario.db"
 DEFAULT_MONSTER_HP = 50
@@ -198,7 +199,10 @@ class Combat(commands.Cog):
             "🟩 livre • 🟥 bloqueado • 🟫 difícil"
         )
         embed = discord.Embed(title="🗺️ Tabletop", description=descricao, color=0x1f8b4c)
-        await channel.send(embed=embed)
+        view = None
+        if settings.roll20_campaign_url:
+            view = Roll20LinkView(settings.roll20_campaign_url)
+        await channel.send(embed=embed, view=view)
         session["battlemap_enviado"] = True
 
     @app_commands.command(name="combate_criar", description="Cria uma sala de batalha")
