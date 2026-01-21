@@ -279,7 +279,12 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
         resultados = await skill_repo.search_skills(self.personagem_id, termo, limit=5)
 
         if not resultados:
-            return await interaction.response.send_message("🔎 Nenhuma perícia encontrada.", ephemeral=True)
+            embed = discord.Embed(
+                title="🔎 Nenhuma perícia encontrada",
+                description=f"Não encontramos nada com **'{self.termo.value}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
+                color=0xED4245
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         linhas = []
         for nome, dado, descricao in resultados:
