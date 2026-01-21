@@ -1,8 +1,12 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import aiosqlite
 from typing import Optional
+from data_cache import (
+    clear_world_location_caches,
+    get_world_location_details,
+    get_world_location_names,
+)
 
 class Campaign(commands.Cog):
     def __init__(self, bot):
@@ -26,12 +30,11 @@ class Campaign(commands.Cog):
         return interaction.user.guild_permissions.administrator
 
     async def localizacao_autocomplete(self, interaction: discord.Interaction, current: str):
-        async with self.bot.db.execute(
-            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome LIMIT 25",
-            (f"%{current}%",),
-        ) as cursor:
-            rows = await cursor.fetchall()
-        return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
+        nomes = await get_world_location_names(self.bot.db)
+        termo = current.strip().lower()
+        if termo:
+            nomes = [nome for nome in nomes if termo in nome.lower()]
+        return [app_commands.Choice(name=nome, value=nome) for nome in nomes[:25]]
 
     @app_commands.command(name="diario_ver", description="📖 Vê a Linha do Tempo atual da campanha (O que a IA sabe)")
     @app_commands.check(is_mestre)
@@ -225,6 +228,7 @@ class Campaign(commands.Cog):
         await self.bot.db.commit()
 
         if cursor.rowcount > 0:
+            clear_world_location_caches()
             await interaction.response.send_message(
                 f"✅ {local} atualizado para **{biome}** / **{clima}**.", ephemeral=True
             )
@@ -242,11 +246,7 @@ class Campaign(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        async with self.bot.db.execute(
-            "SELECT descricao, biome, clima FROM world_locations WHERE nome = ?",
-            (local,),
-        ) as cursor:
-            row = await cursor.fetchone()
+        row = await get_world_location_details(self.bot.db, local)
 
         if not row:
             return await interaction.followup.send("❌ Localização não encontrada.")

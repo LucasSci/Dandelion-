@@ -4,6 +4,7 @@ import json
 from typing import Optional
 from discord.ext import commands
 from discord import app_commands
+from data_cache import get_world_location_names
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
 from data.repositories import CharacterRepository, SkillRepository
@@ -41,6 +42,11 @@ class Characters(commands.Cog):
         return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
 
     async def localizacao_autocomplete(self, interaction: discord.Interaction, current: str):
+        nomes = await get_world_location_names(self.bot.db)
+        termo = current.strip().lower()
+        if termo:
+            nomes = [nome for nome in nomes if termo in nome.lower()]
+        return [app_commands.Choice(name=nome, value=nome) for nome in nomes[:25]]
         rows = await self.character_repo.list_location_names(current)
         return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
 
