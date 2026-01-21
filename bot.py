@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from contextlib import suppress
 
@@ -7,8 +6,6 @@ import aiosqlite
 import discord
 from discord import app_commands
 from discord.ext import commands
-from google import genai
-from google.genai import types
 
 from config import settings
 from database import DB_NAME, init_db
@@ -16,11 +13,6 @@ from cogs.characters import Characters
 from cogs.dice import Dice
 from cogs.inventory import Inventory
 from cogs.skills import Skills
-
-# ======================
-# CARREGA O .env E CONFIGURA IA
-# ======================
-client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
 
 init_db()
 
