@@ -42,13 +42,6 @@ def rolar_pericia_explosiva(stat: int, skill: int):
     direcao_explosao: 1 (cima), -1 (baixo) ou 0 (sem explosão).
     """
     total_d10, rolagens = rolar_d10_explosivo(roller=random.randint)
-    direcao = 0
-    if rolagens:
-        if rolagens[0] == 10:
-            direcao = 1
-        elif rolagens[0] == 1:
-            direcao = -1
-
     direcao = 1 if rolagens and rolagens[0] == 10 else -1 if rolagens and rolagens[0] == 1 else 0
     total = total_d10 + stat + skill
     return rolagens, total, direcao

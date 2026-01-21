@@ -12,16 +12,24 @@ class Settings:
     discord_token: Optional[str]
     gemini_api_key: Optional[str]
     roll20_campaign_url: Optional[str]
+    log_level: str
+    http_timeout_seconds: float
+    sync_commands: bool
     extensions: Tuple[str, ...]
     optional_extensions: Tuple[str, ...]
 
 
 def load_settings() -> Settings:
+    sync_commands = os.getenv("SYNC_COMMANDS", "true").strip().lower() in {"1", "true", "yes", "on"}
     return Settings(
         discord_token=os.getenv("DISCORD_TOKEN"),
         gemini_api_key=os.getenv("GEMINI_API_KEY"),
         roll20_campaign_url=os.getenv("ROLL20_CAMPAIGN_URL"),
+        log_level=os.getenv("LOG_LEVEL", "INFO"),
+        http_timeout_seconds=float(os.getenv("HTTP_TIMEOUT_SECONDS", "20")),
+        sync_commands=sync_commands,
         extensions=(
+            "cogs.system",
             "cogs.ai_handler",
             "cogs.bestiary",
             "cogs.combat",
