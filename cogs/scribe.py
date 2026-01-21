@@ -15,10 +15,14 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 DB_NAME = "bestiario.db"
 
+def is_mestre(interaction: discord.Interaction) -> bool:
+    return interaction.user.guild_permissions.administrator
+
 class Scribe(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_sessions = set() # IDs dos canais que estão sendo gravados
+        self.voice_sessions = {} # voice_channel_id -> text_channel_id
 
     # --- Comandos de Controle ---
 
@@ -51,6 +55,59 @@ class Scribe(commands.Cog):
             await interaction.response.send_message("⏸️ *Dandelion para de escrever.* (Leitura pausada)")
         else:
             await interaction.response.send_message("❌ Não estou anotando nada neste canal.", ephemeral=True)
+
+    @app_commands.command(name="call_entrar", description="🔊 (Mestre) Dandelion entra na call e registra os eventos.")
+    @app_commands.check(is_mestre)
+    async def call_entrar(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return await interaction.response.send_message("❌ Este comando só pode ser usado em um servidor.", ephemeral=True)
+
+        voice_state = interaction.user.voice
+        if not voice_state or not voice_state.channel:
+            return await interaction.response.send_message("❌ Você precisa estar em uma call para me chamar.", ephemeral=True)
+
+        target_channel = voice_state.channel
+        voice_client = interaction.guild.voice_client
+
+        if voice_client and voice_client.channel and voice_client.channel.id == target_channel.id:
+            return await interaction.response.send_message("🔊 Já estou na sua call.", ephemeral=True)
+
+        if voice_client:
+            await voice_client.move_to(target_channel)
+        else:
+            await target_channel.connect()
+
+        self.voice_sessions[target_channel.id] = interaction.channel_id
+        await self._log_voice_event(
+            interaction.channel_id,
+            f"EVENTO DA CALL: Dandelion entrou na call **{target_channel.name}**."
+        )
+
+        await interaction.response.send_message(
+            f"🔊 *Dandelion afina o alaúde e se junta à call* (**{target_channel.name}**)."
+        )
+
+    @app_commands.command(name="call_sair", description="🔇 (Mestre) Dandelion sai da call e encerra os registros.")
+    @app_commands.check(is_mestre)
+    async def call_sair(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return await interaction.response.send_message("❌ Este comando só pode ser usado em um servidor.", ephemeral=True)
+
+        voice_client = interaction.guild.voice_client
+        if not voice_client or not voice_client.channel:
+            return await interaction.response.send_message("❌ Não estou em nenhuma call neste servidor.", ephemeral=True)
+
+        voice_channel = voice_client.channel
+        text_channel_id = self.voice_sessions.pop(voice_channel.id, None)
+        await voice_client.disconnect()
+
+        if text_channel_id:
+            await self._log_voice_event(
+                text_channel_id,
+                f"EVENTO DA CALL: Dandelion saiu da call **{voice_channel.name}**."
+            )
+
+        await interaction.response.send_message("🔇 *Dandelion fecha o pergaminho da call e sai.*")
 
     @app_commands.command(name="sessao_finalizar", description="📕 Encerra a sessão e escreve o Diário.")
     async def sessao_finalizar(self, interaction: discord.Interaction):
@@ -151,6 +208,56 @@ class Scribe(commands.Cog):
             await self.bot.db.commit()
         except Exception as e:
             print(f"Erro ao salvar log: {e}")
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        voice_client = member.guild.voice_client if member.guild else None
+        if not voice_client or not voice_client.channel:
+            return
+
+        monitored_channel_id = voice_client.channel.id
+        text_channel_id = self.voice_sessions.get(monitored_channel_id)
+        if not text_channel_id:
+            return
+
+        events = []
+        if before.channel != after.channel:
+            if after.channel and after.channel.id == monitored_channel_id:
+                events.append(f"EVENTO DA CALL: {member.display_name} entrou na call.")
+            elif before.channel and before.channel.id == monitored_channel_id:
+                events.append(f"EVENTO DA CALL: {member.display_name} saiu da call.")
+
+        if before.self_mute != after.self_mute:
+            estado = "mutou o microfone" if after.self_mute else "tirou o mute do microfone"
+            events.append(f"EVENTO DA CALL: {member.display_name} {estado}.")
+        if before.mute != after.mute:
+            estado = "foi silenciado" if after.mute else "teve o silêncio removido"
+            events.append(f"EVENTO DA CALL: {member.display_name} {estado}.")
+        if before.self_deaf != after.self_deaf:
+            estado = "ativou o surdo" if after.self_deaf else "desativou o surdo"
+            events.append(f"EVENTO DA CALL: {member.display_name} {estado}.")
+        if before.deaf != after.deaf:
+            estado = "foi ensurdecido" if after.deaf else "teve a audição liberada"
+            events.append(f"EVENTO DA CALL: {member.display_name} {estado}.")
+        if before.self_stream != after.self_stream:
+            estado = "começou a transmitir a tela" if after.self_stream else "parou de transmitir a tela"
+            events.append(f"EVENTO DA CALL: {member.display_name} {estado}.")
+        if before.self_video != after.self_video:
+            estado = "ligou a câmera" if after.self_video else "desligou a câmera"
+            events.append(f"EVENTO DA CALL: {member.display_name} {estado}.")
+
+        for event in events:
+            await self._log_voice_event(text_channel_id, event)
+
+    async def _log_voice_event(self, channel_id: int, content: str) -> None:
+        try:
+            await self.bot.db.execute(
+                "INSERT INTO session_logs (channel_id, user_name, content, is_bot) VALUES (?, ?, ?, ?)",
+                (channel_id, "Sistema", content, True)
+            )
+            await self.bot.db.commit()
+        except Exception as e:
+            print(f"Erro ao salvar evento da call: {e}")
 
 async def setup(bot):
     await bot.add_cog(Scribe(bot))
