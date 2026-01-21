@@ -107,6 +107,13 @@ class CharacterRepository:
             row = await cursor.fetchone()
         return row[0] if row else None
 
+    async def fetch_character_id_and_location(self, user_id: int) -> Optional[tuple[int, Optional[int]]]:
+        async with self.db.execute(
+            "SELECT id, localizacao_id FROM personagens WHERE user_id = ?",
+            (user_id,),
+        ) as cursor:
+            return await cursor.fetchone()
+
     async def update_location(self, user_id: int, location_id: int) -> int:
         cursor = await self.db.execute(
             "UPDATE personagens SET localizacao_id = ? WHERE user_id = ?",

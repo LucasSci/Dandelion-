@@ -67,6 +67,36 @@ CREATE TABLE IF NOT EXISTS memoria_campanha (
     conteudo TEXT,
     data_registro TEXT DEFAULT (datetime('now'))
 );
+
+-- CAMPANHA SOLO --
+CREATE TABLE IF NOT EXISTS solo_campaigns (
+    user_id INTEGER PRIMARY KEY,
+    personagem_id INTEGER NOT NULL,
+    capitulo INTEGER DEFAULT 1,
+    progresso INTEGER DEFAULT 0,
+    gancho TEXT,
+    ultima_localizacao_id INTEGER,
+    ultima_acao_em TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+    FOREIGN KEY(ultima_localizacao_id) REFERENCES world_locations(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS solo_story_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    capitulo INTEGER DEFAULT 1,
+    entrada TEXT NOT NULL,
+    criado_em TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS solo_resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    nome TEXT NOT NULL,
+    quantidade INTEGER DEFAULT 0,
+    atualizado_em TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, nome)
+);
 CREATE TABLE IF NOT EXISTS habilidades_personagem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     personagem_id INTEGER,
