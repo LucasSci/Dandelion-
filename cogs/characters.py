@@ -60,8 +60,21 @@ class Characters(commands.Cog):
 
     @app_commands.command(name="mestre_add_xp", description="🔒 (Mestre) Dá XP ao jogador e processa Level Up")
     @app_commands.check(is_mestre)
-    async def mestre_add_xp(self, interaction: discord.Interaction, usuario: discord.Member, xp: int):
+    async def mestre_add_xp(
+        self,
+        interaction: discord.Interaction,
+        xp: int,
+        usuario: Optional[discord.Member] = None,
+    ):
         await interaction.response.defer()
+
+        target = usuario or interaction.user
+        db = self.bot.db
+        async with db.execute(
+            "SELECT nivel, xp_atual, hp_max, hp_atual, ataque FROM personagens WHERE user_id = ?",
+            (target.id,),
+        ) as cursor:
+            dados = await cursor.fetchone()
         
         dados = await self.character_repo.fetch_progress_by_user(usuario.id)
         
@@ -86,9 +99,15 @@ class Characters(commands.Cog):
             else:
                 break
         
+        await db.execute("""
+            UPDATE personagens 
+            SET nivel=?, xp_atual=?, hp_max=?, hp_atual=?, ataque=? 
+            WHERE user_id=?
+        """, (nivel, xp_atual, hp_max, hp_atual, ataque, target.id))
+        await db.commit()
         await self.character_repo.update_progress(usuario.id, nivel, xp_atual, hp_max, hp_atual, ataque)
 
-        msg = f"✨ **{usuario.display_name}** ganhou {xp} XP!"
+        msg = f"✨ **{target.display_name}** ganhou {xp} XP!"
         if niveis_subidos > 0:
             msg += f"\n🎉 **LEVEL UP!** Subiu {niveis_subidos} nível(is)!\nAgora Nível **{nivel}** (HP: {hp_max}, Atk: {ataque})"
         else:
@@ -98,6 +117,16 @@ class Characters(commands.Cog):
 
     @app_commands.command(name="mestre_levelup", description="🔒 (Mestre) Força a subida de 1 nível")
     @app_commands.check(is_mestre)
+    async def mestre_levelup(
+        self, interaction: discord.Interaction, usuario: Optional[discord.Member] = None
+    ):
+        target = usuario or interaction.user
+        db = self.bot.db
+        async with db.execute(
+            "SELECT nivel, hp_max, hp_atual, ataque FROM personagens WHERE user_id = ?",
+            (target.id,),
+        ) as cursor:
+            dados = await cursor.fetchone()
     async def mestre_levelup(self, interaction: discord.Interaction, usuario: discord.Member):
         dados = await self.character_repo.fetch_level_stats_by_user(usuario.id)
         
@@ -111,12 +140,28 @@ class Characters(commands.Cog):
         novo_hp_atual = hp_atual + 5
         novo_ataque = ataque + 1
 
+        await db.execute("""
+            UPDATE personagens SET nivel=?, hp_max=?, hp_atual=?, ataque=? WHERE user_id=?
+        """, (novo_nivel, novo_hp, novo_hp_atual, novo_ataque, target.id))
+        await db.commit()
         await self.character_repo.update_level_stats(usuario.id, novo_nivel, novo_hp, novo_hp_atual, novo_ataque)
 
-        await interaction.response.send_message(f"🆙 **{usuario.display_name}** foi promovido para o Nível **{novo_nivel}**!\n(+5 HP, +1 Atk)")
+        await interaction.response.send_message(
+            f"🆙 **{target.display_name}** foi promovido para o Nível **{novo_nivel}**!\n(+5 HP, +1 Atk)"
+        )
 
     @app_commands.command(name="mestre_leveldown", description="🔒 (Mestre) Remove 1 nível (corrige erro)")
     @app_commands.check(is_mestre)
+    async def mestre_leveldown(
+        self, interaction: discord.Interaction, usuario: Optional[discord.Member] = None
+    ):
+        target = usuario or interaction.user
+        db = self.bot.db
+        async with db.execute(
+            "SELECT nivel, hp_max, hp_atual, ataque FROM personagens WHERE user_id = ?",
+            (target.id,),
+        ) as cursor:
+            dados = await cursor.fetchone()
     async def mestre_leveldown(self, interaction: discord.Interaction, usuario: discord.Member):
         dados = await self.character_repo.fetch_level_stats_by_user(usuario.id)
         
@@ -133,13 +178,33 @@ class Characters(commands.Cog):
         novo_hp_atual = min(hp_atual, novo_hp) 
         novo_ataque = max(1, ataque - 1)
 
+        await db.execute("""
+            UPDATE personagens SET nivel=?, hp_max=?, hp_atual=?, ataque=? WHERE user_id=?
+        """, (novo_nivel, novo_hp, novo_hp_atual, novo_ataque, target.id))
+        await db.commit()
         await self.character_repo.update_level_stats(usuario.id, novo_nivel, novo_hp, novo_hp_atual, novo_ataque)
 
-        await interaction.response.send_message(f"🔻 **{usuario.display_name}** retornou para o Nível **{novo_nivel}**.\nStatus revertidos.")
+        await interaction.response.send_message(
+            f"🔻 **{target.display_name}** retornou para o Nível **{novo_nivel}**.\nStatus revertidos."
+        )
 
     # --- NOVO COMANDO: GERENCIAR OURO ---
     @app_commands.command(name="mestre_ouro", description="🔒 (Mestre) Adiciona ou remove ouro (Use negativo para remover)")
     @app_commands.check(is_mestre)
+    async def mestre_ouro(
+        self,
+        interaction: discord.Interaction,
+        quantidade: int,
+        usuario: Optional[discord.Member] = None,
+    ):
+        target = usuario or interaction.user
+        db = self.bot.db
+        async with db.execute(
+            "SELECT ouro FROM personagens WHERE user_id = ?", (target.id,)
+        ) as cursor:
+            dados = await cursor.fetchone()
+
+        if not dados:
     async def mestre_ouro(self, interaction: discord.Interaction, usuario: discord.Member, quantidade: int):
         ouro_atual = await self.character_repo.fetch_gold_by_user(usuario.id)
         if ouro_atual is None:
@@ -147,13 +212,21 @@ class Characters(commands.Cog):
         # Garante que o ouro não fique negativo
         novo_ouro = max(0, ouro_atual + quantidade)
 
+        await db.execute(
+            "UPDATE personagens SET ouro = ? WHERE user_id = ?", (novo_ouro, target.id)
+        )
+        await db.commit()
         await self.character_repo.update_gold_by_user(usuario.id, novo_ouro)
 
         if quantidade > 0:
-            await interaction.response.send_message(f"💰 **{usuario.display_name}** recebeu **{quantidade}** moedas de ouro!\n(Total: {novo_ouro})")
+            await interaction.response.send_message(
+                f"💰 **{target.display_name}** recebeu **{quantidade}** moedas de ouro!\n(Total: {novo_ouro})"
+            )
         else:
             perda = abs(quantidade)
-            await interaction.response.send_message(f"💸 **{usuario.display_name}** perdeu **{perda}** moedas de ouro.\n(Total: {novo_ouro})")
+            await interaction.response.send_message(
+                f"💸 **{target.display_name}** perdeu **{perda}** moedas de ouro.\n(Total: {novo_ouro})"
+            )
 
     # --- LOCALIZACAO / MUNDO ---
     @app_commands.command(name="localizacao", description="Mostra a localização atual do personagem")
@@ -501,6 +574,25 @@ class Characters(commands.Cog):
     @app_commands.command(name="mestre_vincular", description="🔒 (Mestre) Transfere ficha")
     @app_commands.check(is_mestre)
     @app_commands.autocomplete(nome_personagem=todos_personagens_autocomplete)
+    async def mestre_vincular(
+        self,
+        interaction: discord.Interaction,
+        nome_personagem: str,
+        usuario: Optional[discord.Member] = None,
+    ):
+        target = usuario or interaction.user
+        await self.bot.db.execute(
+            "UPDATE personagens SET user_id = NULL WHERE user_id = ?", (target.id,)
+        )
+        cursor = await self.bot.db.execute(
+            "UPDATE personagens SET user_id = ? WHERE nome = ?",
+            (target.id, nome_personagem),
+        )
+        await self.bot.db.commit()
+        if cursor.rowcount > 0:
+            await interaction.response.send_message(
+                f"✅ **{nome_personagem}** vinculado a {target.mention}."
+            )
     async def mestre_vincular(self, interaction: discord.Interaction, nome_personagem: str, usuario: discord.Member):
         await self.character_repo.clear_user_character(usuario.id)
         rowcount = await self.character_repo.assign_character_to_user(usuario.id, nome_personagem)
@@ -522,7 +614,7 @@ class Characters(commands.Cog):
         if not embed:
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        view = FichaView(personagem_id=char_id, user_id_dono=target.id)
+        view = FichaView(self.bot, personagem_id=char_id, user_id_dono=target.id)
 
         await interaction.response.send_message(embed=embed, view=view)
 
