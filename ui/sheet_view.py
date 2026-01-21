@@ -65,52 +65,7 @@ def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
         embed.set_footer(text=f"Atualizado {timestamp}")
 
 
-def _parse_key_value_blob(blob):
-    if not blob:
-        return []
-    rows = []
-    for line in blob.split("\n"):
-        if not line:
-            continue
-        if "|" in line:
-            key, value = line.split("|", 1)
-        else:
-            key, value = line, ""
-        rows.append((key, value))
-    return rows
-
-
 async def construir_embed_ficha(db, personagem_id, user_id):
-    async with db.execute("""
-        SELECT p.nome, p.raca, p.classe, p.nivel, p.historia, p.imagem_url, p.ouro,
-               p.hp_atual, p.hp_max, p.mp_max, p.ataque, p.defesa, p.xp_atual,
-               p.vigor_atual, p.vigor_max, p.toxicidade_atual, p.toxicidade_max, w.nome,
-               (
-                   SELECT group_concat(nome || '|' || ifnull(valor, ''), '\n')
-                   FROM atributos_personagem
-                   WHERE personagem_id = p.id
-                   ORDER BY nome
-                   LIMIT 12
-               ) AS atributos_blob,
-               (
-                   SELECT group_concat(nome || '|' || ifnull(dado, ''), '\n')
-                   FROM habilidades_personagem
-                   WHERE personagem_id = p.id
-                   ORDER BY nome
-                   LIMIT 10
-               ) AS pericias_blob,
-               (
-                   SELECT group_concat(nome || '|' || ifnull(tipo, ''), '\n')
-                   FROM inventario
-                   WHERE user_id = ?
-                   ORDER BY id DESC
-                   LIMIT 8
-               ) AS itens_blob
-        FROM personagens p
-        LEFT JOIN world_locations w ON w.id = p.localizacao_id
-        WHERE p.id = ?
-    """, (user_id, personagem_id)) as cursor:
-        dados = await cursor.fetchone()
     character_repo = CharacterRepository(db)
     inventory_repo = InventoryRepository(db)
     skill_repo = SkillRepository(db)
@@ -122,8 +77,7 @@ async def construir_embed_ficha(db, personagem_id, user_id):
 
     (
         nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max, mp_max,
-        ataque, defesa, xp_atual, vigor_atual, vigor_max, toxicidade_atual, toxicidade_max, local,
-        atributos_blob, pericias_blob, itens_blob
+        ataque, defesa, xp_atual, vigor_atual, vigor_max, toxicidade_atual, toxicidade_max, local
     ) = dados
     if hp_atual is None:
         hp_atual = hp_max
@@ -132,9 +86,6 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     if toxicidade_atual is None:
         toxicidade_atual = 0
 
-    atributos = _parse_key_value_blob(atributos_blob)
-    pericias = _parse_key_value_blob(pericias_blob)
-    itens = _parse_key_value_blob(itens_blob)
     atributos = await character_repo.list_attributes(personagem_id, limit=12)
 
     pericias = await skill_repo.list_skills_for_sheet(personagem_id, limit=10, order_by_name=True)
@@ -309,6 +260,8 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         embed.add_field(name="Total", value=f"# **{total}**", inline=False)
 
         await interaction.response.send_message(embed=embed)
+
+
 class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
     def __init__(self, personagem_id):
         super().__init__()
@@ -561,6 +514,8 @@ class AtributoButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(RolarPericiaModal(self.nome_atributo, self.valor_atributo))
+
+
 class RolagemCombateButton(ui.Button):
     def __init__(self, label, emoji, personagem_id, formula_template):
         super().__init__(style=discord.ButtonStyle.primary, label=label, emoji=emoji, row=2)
@@ -801,7 +756,6 @@ class FichaView(BaseRPGView):
         nivel = nivel if nivel is not None else 1
 
         if not itens:
-            descricao = "_Sua bolsa está leve..._\nVisite a `/loja` para comprar itens ou conquiste espólios em suas aventuras."
             descricao = "🎒 Seu inventário está vazio.\n\nVisite a **/loja** para comprar equipamentos ou explore o mundo para encontrar tesouros!"
         else:
             descricao = "\n".join([
