@@ -84,7 +84,18 @@ class Combat(commands.Cog):
     async def ac_criatura(self, interaction: discord.Interaction, current: str):
         termo = current.strip()
         if not termo:
-            return []
+            async with self.bot.db.execute(
+                """
+                SELECT nome FROM (
+                    SELECT nome AS nome FROM criaturas
+                    UNION
+                    SELECT name AS nome FROM monsters
+                )
+                ORDER BY nome COLLATE NOCASE LIMIT 25
+                """
+            ) as cursor:
+                rows = await cursor.fetchall()
+            return [app_commands.Choice(name=row[0], value=row[0]) for row in rows]
         async with self.bot.db.execute(
             """
             SELECT nome AS nome FROM criaturas WHERE nome LIKE ? COLLATE NOCASE
