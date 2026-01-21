@@ -50,7 +50,7 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
         ]
 
         # Instantiate View
-        view = FichaView(personagem_id=1, user_id_dono=123)
+        view = FichaView(mock_client, personagem_id=1, user_id_dono=123)
 
         # Call the method WITHOUT patching add_item.
         await view.atualizar_botoes_habilidade(mock_interaction)

@@ -4,6 +4,7 @@ import discord
 from discord import ui
 from data.repositories import CharacterRepository, InventoryRepository, SkillRepository
 from utils import rolar_dados, rolar_pericia_explosiva
+from ui.base_view import BaseRPGView
 from ui.views import ConfirmarExclusaoView
 
 # ==============================================================================
@@ -537,11 +538,10 @@ class RolagemCombateButton(ui.Button):
         )
         await interaction.response.send_message(embed=embed)
 
-class FichaView(ui.View):
-    def __init__(self, personagem_id, user_id_dono):
-        super().__init__(timeout=None)
+class FichaView(BaseRPGView):
+    def __init__(self, bot, personagem_id, user_id_dono):
+        super().__init__(bot, user_id_dono, timeout=None)
         self.personagem_id = personagem_id
-        self.dono_id = user_id_dono
         self._mark_static_items()
         self.update_buttons_state("geral")
 
@@ -578,19 +578,6 @@ class FichaView(ui.View):
                 elif item.label in {"Nova Skill", "Gerenciar"}:
                     item.disabled = (mode != "magia")
                     item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # ============================================================
-        # ALTERAÇÃO: Permite Dono OU Administrador (Mestre)
-        # ============================================================
-        is_dono = interaction.user.id == self.dono_id
-        is_mestre = interaction.user.guild_permissions.administrator
-
-        if is_dono or is_mestre:
-            return True
-            
-        await interaction.response.send_message("⛔ Esta ficha não é sua.", ephemeral=True)
-        return False
 
     # --- NAVEGAÇÃO (ROW 0) ---
     @ui.button(label="Geral", emoji="📜", style=discord.ButtonStyle.secondary, row=0)

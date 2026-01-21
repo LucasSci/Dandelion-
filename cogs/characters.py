@@ -608,7 +608,7 @@ class Characters(commands.Cog):
         if not embed:
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        view = FichaView(personagem_id=char_id, user_id_dono=target.id)
+        view = FichaView(self.bot, personagem_id=char_id, user_id_dono=target.id)
 
         await interaction.response.send_message(embed=embed, view=view)
 
