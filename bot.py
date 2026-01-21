@@ -1,4 +1,6 @@
 import asyncio
+import logging
+from contextlib import suppress
 
 import aiohttp
 import aiosqlite
@@ -22,6 +24,12 @@ client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_ke
 
 init_db()
 
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger("dandelion.bot")
+
 # ======================
 # CLASSE DO BOT
 # ======================
@@ -32,8 +40,12 @@ class DandelionBot(commands.Bot):
             intents=discord.Intents.all()
         )
         self.db = None
+        self.http_session = None
 
     async def setup_hook(self):
+        timeout = aiohttp.ClientTimeout(total=settings.http_timeout_seconds)
+        self.http_session = aiohttp.ClientSession(timeout=timeout)
+
         # Conexão persistente com banco de dados
         self.db = await aiosqlite.connect(DB_NAME)
         await self.db.execute("PRAGMA foreign_keys = ON")
@@ -46,25 +58,30 @@ class DandelionBot(commands.Bot):
         for ext in settings.optional_extensions:
             try:
                 await self.load_extension(ext)
-                print(f"✅ Extensão carregada: {ext}")
+                logger.info("Extensão opcional carregada: %s", ext)
             except Exception as e:
-                print(f"❌ Falha ao carregar {ext}: {e}")
+                logger.warning("Falha ao carregar extensão opcional %s: %s", ext, e)
 
         # Carregamento seguro de extensões
         for ext in settings.extensions:
             try:
                 await self.load_extension(ext)
-                print(f"✅ Extensão carregada: {ext}")
+                logger.info("Extensão carregada: %s", ext)
             except Exception as e:
-                print(f"❌ Falha ao carregar {ext}: {e}")
+                logger.exception("Falha ao carregar extensão %s", ext)
 
         # Sincroniza os slash commands
-        await self.tree.sync()
-        print("✅ Bot pronto e comandos sincronizados.")
+        if settings.sync_commands:
+            await self.tree.sync()
+            logger.info("Bot pronto e comandos sincronizados.")
+        else:
+            logger.info("Bot pronto. Sincronização de comandos desativada.")
 
     async def close(self):
         if hasattr(self, 'db') and self.db:
             await self.db.close()
+        if self.http_session:
+            await self.http_session.close()
         await super().close()
 
 bot = DandelionBot()
@@ -79,14 +96,15 @@ async def teste_gerar_prompt(interaction: discord.Interaction, url_imagem: str):
 
     if not client:
         return await interaction.followup.send("❌ Gemini API não configurada.")
+    if not bot.http_session:
+        return await interaction.followup.send("❌ Sessão HTTP indisponível.")
 
     try:
         # 1. Baixar a imagem da URL para a memória
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url_imagem) as resp:
-                if resp.status != 200:
-                    return await interaction.followup.send("❌ Não consegui acessar a imagem na URL fornecida.")
-                image_data = await resp.read()
+        async with bot.http_session.get(url_imagem) as resp:
+            if resp.status != 200:
+                return await interaction.followup.send("❌ Não consegui acessar a imagem na URL fornecida.")
+            image_data = await resp.read()
 
         # 2. Enviar para o Gemini Vision
         prompt_text = """
@@ -121,14 +139,15 @@ async def teste_gerar_prompt(interaction: discord.Interaction, url_imagem: str):
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.followup.send(f"❌ Erro na análise da IA: {e}")
+        logger.exception("Falha no comando teste_gerar_prompt")
+        await interaction.followup.send("❌ Erro na análise da IA. Consulte os logs.")
 
 # ======================
 # EVENTOS
 # ======================
 @bot.event
 async def on_ready():
-    print(f"🚀 Dandelion online como {bot.user}")
+    logger.info("Dandelion online como %s", bot.user)
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
@@ -137,7 +156,9 @@ async def on_app_command_error(interaction: discord.Interaction, error):
             f"⏳ **Aguarde {error.retry_after:.1f}s.**", ephemeral=True
         )
     else:
-        print(f"Erro no comando: {error}")
+        logger.exception("Erro no comando", exc_info=error)
+        with suppress(discord.InteractionResponded):
+            await interaction.response.send_message("❌ Ocorreu um erro inesperado.", ephemeral=True)
 
 if __name__ == "__main__":
     if not settings.discord_token:
