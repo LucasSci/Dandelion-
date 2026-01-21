@@ -1,8 +1,14 @@
+import asyncio
+import os
+
 import discord
 from discord import app_commands
 from discord.ext import commands
+from google import genai
+from google.genai import types
 from openai import AsyncOpenAI
-import os
+
+from config import settings
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -10,6 +16,7 @@ class AIHandler(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.client = None
+        self.gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
         if API_KEY:
             try:
                 self.client = AsyncOpenAI(api_key=API_KEY)
@@ -194,6 +201,60 @@ class AIHandler(commands.Cog):
         raw = await self.get_response(f"Gere um item {raridade} formato: NOME|TIPO|EFEITO")
         p = raw.split('|')
         return {"nome": p[0], "tipo": p[1], "efeito": p[2]} if len(p)>=3 else None
+
+    @app_commands.command(name="teste_gerar_prompt", description="[DEV] Gera um prompt de imagem baseado em uma URL")
+    @app_commands.describe(url_imagem="A URL da imagem de referência da Fandom")
+    async def teste_gerar_prompt(self, interaction: discord.Interaction, url_imagem: str):
+        await interaction.response.defer()
+
+        if not self.gemini_client:
+            return await interaction.followup.send("❌ Gemini API não configurada.")
+        if not self.bot.http_session:
+            return await interaction.followup.send("❌ Sessão HTTP indisponível.")
+
+        try:
+            async with self.bot.http_session.get(url_imagem) as resp:
+                if resp.status != 200:
+                    return await interaction.followup.send("❌ Não consegui acessar a imagem na URL fornecida.")
+                image_data = await resp.read()
+
+            prompt_text = """
+            Analise esta imagem de uma criatura.
+            Crie um prompt de geração de imagem (text-to-image) altamente detalhado para recriar esta criatura.
+            O estilo deve ser: "Dark fantasy RPG concept art, estilo The Witcher 3, alta resolução, 8k, texturas realistas, iluminação dramática".
+            Descreva a anatomia, a pose, as texturas da pele/pelo e o ambiente com base na imagem de referência.
+            Retorne APENAS o prompt em inglês.
+            """
+
+            contents = [
+                types.Content(
+                    parts=[
+                        types.Part.from_text(text=prompt_text),
+                        types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
+                    ]
+                )
+            ]
+
+            response = await asyncio.to_thread(
+                self.gemini_client.models.generate_content,
+                model="gemini-2.0-flash",
+                contents=contents,
+            )
+
+            prompt_gerado = response.text
+
+            embed = discord.Embed(
+                title="🎨 Prompt Gerado pelo Gemini",
+                description=prompt_gerado[:4000],
+                color=0x00FF00,
+            )
+            embed.set_thumbnail(url=url_imagem)
+            embed.set_footer(text="Copie este prompt e use no Midjourney/Leonardo.ai")
+
+            await interaction.followup.send(embed=embed)
+        except Exception:
+            print("Falha no comando teste_gerar_prompt")
+            await interaction.followup.send("❌ Erro na análise da IA. Consulte os logs.")
 
     @app_commands.command(
         name="dandelion",

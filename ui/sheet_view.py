@@ -2,6 +2,7 @@ import time
 
 import discord
 from discord import ui
+from data.repositories import CharacterRepository, InventoryRepository, SkillRepository
 from utils import rolar_dados, rolar_pericia_explosiva
 from ui.views import ConfirmarExclusaoView
 
@@ -64,15 +65,11 @@ def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
 
 
 async def construir_embed_ficha(db, personagem_id, user_id):
-    async with db.execute("""
-        SELECT p.nome, p.raca, p.classe, p.nivel, p.historia, p.imagem_url, p.ouro,
-               p.hp_atual, p.hp_max, p.mp_max, p.ataque, p.defesa, p.xp_atual,
-               p.vigor_atual, p.vigor_max, p.toxicidade_atual, p.toxicidade_max, w.nome
-        FROM personagens p
-        LEFT JOIN world_locations w ON w.id = p.localizacao_id
-        WHERE p.id = ?
-    """, (personagem_id,)) as cursor:
-        dados = await cursor.fetchone()
+    character_repo = CharacterRepository(db)
+    inventory_repo = InventoryRepository(db)
+    skill_repo = SkillRepository(db)
+
+    dados = await character_repo.fetch_embed_details(personagem_id)
 
     if not dados:
         return None
@@ -88,23 +85,11 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     if toxicidade_atual is None:
         toxicidade_atual = 0
 
-    async with db.execute(
-        "SELECT nome, valor FROM atributos_personagem WHERE personagem_id = ? ORDER BY nome LIMIT 12",
-        (personagem_id,)
-    ) as cursor:
-        atributos = await cursor.fetchall()
+    atributos = await character_repo.list_attributes(personagem_id, limit=12)
 
-    async with db.execute(
-        "SELECT nome, dado FROM habilidades_personagem WHERE personagem_id = ? ORDER BY nome LIMIT 10",
-        (personagem_id,)
-    ) as cursor:
-        pericias = await cursor.fetchall()
+    pericias = await skill_repo.list_skills_for_sheet(personagem_id, limit=10, order_by_name=True)
 
-    async with db.execute(
-        "SELECT nome, tipo FROM inventario WHERE user_id = ? ORDER BY id DESC LIMIT 8",
-        (user_id,)
-    ) as cursor:
-        itens = await cursor.fetchall()
+    itens = await inventory_repo.list_recent_items(user_id, limit=8)
 
     pericias_formatadas = [(nome, dado or "—") for nome, dado in pericias]
     itens_formatados = [
@@ -190,13 +175,8 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
             if detalhes is None:
                 return await interaction.response.send_message("❌ Fórmula inválida. Use ex: `1d20+5` ou `10`", ephemeral=True)
 
-        db = interaction.client.db
-        
-        await db.execute("""
-            INSERT INTO habilidades_personagem (personagem_id, nome, descricao, dado)
-            VALUES (?, ?, ?, ?)
-        """, (self.personagem_id, self.nome.value, self.descricao.value, self.dado.value))
-        await db.commit()
+        skill_repo = SkillRepository(interaction.client.db)
+        await skill_repo.add_skill(self.personagem_id, self.nome.value, self.descricao.value, self.dado.value)
         
         await interaction.response.send_message(f"✅ Habilidade **{self.nome.value}** aprendida!", ephemeral=True)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
@@ -221,13 +201,8 @@ class EditarHabilidadeModal(ui.Modal, title="✏️ Editar Habilidade"):
             if detalhes is None:
                 return await interaction.response.send_message("❌ Fórmula inválida.", ephemeral=True)
 
-        db = interaction.client.db
-        await db.execute("""
-            UPDATE habilidades_personagem 
-            SET nome=?, dado=?, descricao=? 
-            WHERE id=?
-        """, (self.nome_input.value, self.dado_input.value, self.desc_input.value, self.skill_id))
-        await db.commit()
+        skill_repo = SkillRepository(interaction.client.db)
+        await skill_repo.update_skill(self.skill_id, self.nome_input.value, self.dado_input.value, self.desc_input.value)
         
         await interaction.response.send_message(f"✅ Habilidade **{self.nome_input.value}** atualizada!", ephemeral=True)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
@@ -296,19 +271,9 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        db = interaction.client.db
         termo = f"%{self.termo.value.strip()}%"
-        async with db.execute(
-            """
-            SELECT nome, dado, descricao
-            FROM habilidades_personagem
-            WHERE personagem_id = ? AND nome LIKE ?
-            ORDER BY nome ASC
-            LIMIT 5
-            """,
-            (self.personagem_id, termo)
-        ) as cursor:
-            resultados = await cursor.fetchall()
+        skill_repo = SkillRepository(interaction.client.db)
+        resultados = await skill_repo.search_skills(self.personagem_id, termo, limit=5)
 
         if not resultados:
             return await interaction.response.send_message("🔎 Nenhuma perícia encontrada.", ephemeral=True)
@@ -343,9 +308,8 @@ class AcoesHabilidadeView(ui.View):
     @ui.button(label="🗑️ Excluir", style=discord.ButtonStyle.danger)
     async def btn_excluir(self, interaction: discord.Interaction, button: ui.Button):
         async def confirmar(itx: discord.Interaction):
-            db = itx.client.db
-            await db.execute("DELETE FROM habilidades_personagem WHERE id = ?", (self.skill_id,))
-            await db.commit()
+            skill_repo = SkillRepository(itx.client.db)
+            await skill_repo.delete_skill(self.skill_id)
 
             await itx.response.edit_message(content=f"🗑️ Habilidade **{self.nome}** removida.", view=None)
             await self.view_ficha.atualizar_botoes_habilidade(itx)
@@ -458,13 +422,9 @@ class PocaoSelect(ui.Select):
             return await interaction.response.send_message("❌ Poção não encontrada.", ephemeral=True)
 
         _, nome, efeito = potion
-        db = interaction.client.db
-
-        async with db.execute(
-            "SELECT toxicidade_atual, toxicidade_max FROM personagens WHERE id = ?",
-            (self.personagem_id,)
-        ) as cursor:
-            row = await cursor.fetchone()
+        character_repo = CharacterRepository(interaction.client.db)
+        inventory_repo = InventoryRepository(interaction.client.db)
+        row = await character_repo.fetch_toxicity(self.personagem_id)
 
         if not row:
             return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
@@ -473,12 +433,8 @@ class PocaoSelect(ui.Select):
         custo_toxicidade = 10
         nova_toxicidade = min((toxicidade_atual or 0) + custo_toxicidade, toxicidade_max or 100)
 
-        await db.execute(
-            "UPDATE personagens SET toxicidade_atual = ? WHERE id = ?",
-            (nova_toxicidade, self.personagem_id)
-        )
-        await db.execute("DELETE FROM inventario WHERE id = ?", (item_id,))
-        await db.commit()
+        await character_repo.update_toxicity(self.personagem_id, nova_toxicidade)
+        await inventory_repo.delete_item(item_id)
 
         embed = discord.Embed(
             title=f"🧪 {interaction.user.display_name} consumiu {nome}",
@@ -517,12 +473,8 @@ class HabilidadeButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         if self.personagem_id and self.vigor_cost:
-            db = interaction.client.db
-            async with db.execute(
-                "SELECT vigor_atual, vigor_max FROM personagens WHERE id = ?",
-                (self.personagem_id,)
-            ) as cursor:
-                row = await cursor.fetchone()
+            character_repo = CharacterRepository(interaction.client.db)
+            row = await character_repo.fetch_vigor(self.personagem_id)
 
             if not row:
                 return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
@@ -538,11 +490,7 @@ class HabilidadeButton(ui.Button):
                 )
 
             novo_vigor = max(vigor_atual - self.vigor_cost, 0)
-            await db.execute(
-                "UPDATE personagens SET vigor_atual = ? WHERE id = ?",
-                (novo_vigor, self.personagem_id)
-            )
-            await db.commit()
+            await character_repo.update_vigor(self.personagem_id, novo_vigor)
 
         embed = discord.Embed(title=f"⚔️ {interaction.user.display_name} usou {self.nome_habilidade}", color=0xFF5500)
         embed.description = self.desc_habilidade or "..."
@@ -570,17 +518,13 @@ class RolagemCombateButton(ui.Button):
         self.formula_template = formula_template
 
     async def callback(self, interaction: discord.Interaction):
-        db = interaction.client.db
-        async with db.execute(
-            "SELECT ataque FROM personagens WHERE id = ?",
-            (self.personagem_id,)
-        ) as cursor:
-            row = await cursor.fetchone()
+        character_repo = CharacterRepository(interaction.client.db)
+        ataque = await character_repo.fetch_attack(self.personagem_id)
 
-        if not row:
+        if ataque is None:
             return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
 
-        ataque = row[0] or 0
+        ataque = ataque or 0
         formula = self.formula_template.format(ataque=ataque)
         detalhes, total = rolar_dados(formula)
         if detalhes is None:
@@ -680,9 +624,8 @@ class FichaView(ui.View):
 
     @ui.button(label="Gerenciar", emoji="⚙️", style=discord.ButtonStyle.secondary, row=1)
     async def btn_gerenciar(self, interaction: discord.Interaction, button: ui.Button):
-        db = interaction.client.db
-        async with db.execute("SELECT id, nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?", (self.personagem_id,)) as cursor:
-            skills = await cursor.fetchall()
+        skill_repo = SkillRepository(interaction.client.db)
+        skills = await skill_repo.list_skills(self.personagem_id)
 
         if not skills:
             return await interaction.response.send_message("❌ Você não tem habilidades para gerenciar.", ephemeral=True)
@@ -707,13 +650,10 @@ class FichaView(ui.View):
         self.update_buttons_state("magia")
         self.clear_dynamic_buttons()
 
-        db = interaction.client.db
-        async with db.execute("""
-            SELECT p.vigor_atual, p.vigor_max, p.toxicidade_atual, p.toxicidade_max
-            FROM personagens p
-            WHERE p.id = ?
-        """, (self.personagem_id,)) as cursor:
-            recursos = await cursor.fetchone()
+        character_repo = CharacterRepository(interaction.client.db)
+        inventory_repo = InventoryRepository(interaction.client.db)
+        skill_repo = SkillRepository(interaction.client.db)
+        recursos = await character_repo.fetch_resources(self.personagem_id)
 
         if not recursos:
             return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
@@ -722,17 +662,8 @@ class FichaView(ui.View):
         if vigor_atual is None: vigor_atual = vigor_max
         if toxicidade_atual is None: toxicidade_atual = 0
 
-        async with db.execute(
-            "SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ? LIMIT 15",
-            (self.personagem_id,)
-        ) as cursor:
-            skills = await cursor.fetchall()
-
-        async with db.execute(
-            "SELECT id, nome, tipo, efeito FROM inventario WHERE user_id = ?",
-            (interaction.user.id,)
-        ) as cursor:
-            itens = await cursor.fetchall()
+        skills = await skill_repo.list_skills_for_sheet(self.personagem_id, limit=15)
+        itens = await inventory_repo.list_potions(interaction.user.id)
 
         potions = [
             (item_id, nome, efeito)
@@ -778,12 +709,9 @@ class FichaView(ui.View):
         self.update_buttons_state("combate")
         self.clear_dynamic_buttons()
 
-        db = interaction.client.db
-        async with db.execute(
-            "SELECT hp_atual, hp_max, ataque, defesa FROM personagens WHERE id = ?",
-            (self.personagem_id,)
-        ) as cursor:
-            dados = await cursor.fetchone()
+        character_repo = CharacterRepository(interaction.client.db)
+        inventory_repo = InventoryRepository(interaction.client.db)
+        dados = await character_repo.fetch_combat_stats(self.personagem_id)
 
         if not dados:
             return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
@@ -791,11 +719,7 @@ class FichaView(ui.View):
         hp_atual, hp_max, ataque, defesa = dados
         if hp_atual is None: hp_atual = hp_max
 
-        async with db.execute(
-            "SELECT nome, tipo, efeito FROM inventario WHERE user_id = ?",
-            (interaction.user.id,)
-        ) as cursor:
-            itens = await cursor.fetchall()
+        itens = await inventory_repo.list_items_with_effects(interaction.user.id)
 
         armas = []
         armaduras = []
@@ -834,19 +758,11 @@ class FichaView(ui.View):
         self.update_buttons_state("inventario")
         self.clear_dynamic_buttons()
 
-        db = interaction.client.db
-        async with db.execute(
-            "SELECT nome, tipo, valor, efeito FROM inventario WHERE user_id = ?",
-            (interaction.user.id,)
-        ) as cursor:
-            itens = await cursor.fetchall()
-
-        async with db.execute(
-            "SELECT nivel FROM personagens WHERE id = ?",
-            (self.personagem_id,)
-        ) as cursor:
-            row = await cursor.fetchone()
-        nivel = row[0] if row else 1
+        character_repo = CharacterRepository(interaction.client.db)
+        inventory_repo = InventoryRepository(interaction.client.db)
+        itens = await inventory_repo.list_items(interaction.user.id)
+        nivel = await character_repo.fetch_level(self.personagem_id)
+        nivel = nivel if nivel is not None else 1
 
         if not itens:
             descricao = "_Sua bolsa está leve..._\nVisite a `/loja` para comprar itens ou conquiste espólios em suas aventuras."
@@ -872,12 +788,8 @@ class FichaView(ui.View):
         self.update_buttons_state("atributos")
         self.clear_dynamic_buttons()
 
-        db = interaction.client.db
-        async with db.execute(
-            "SELECT nome, valor FROM atributos_personagem WHERE personagem_id = ? ORDER BY nome",
-            (self.personagem_id,)
-        ) as cursor:
-            atributos = await cursor.fetchall()
+        character_repo = CharacterRepository(interaction.client.db)
+        atributos = await character_repo.list_attributes(self.personagem_id)
 
         embed = discord.Embed(title="🎯 Atributos", color=0x5865f2)
         if not atributos:
