@@ -1,11 +1,11 @@
 import discord
-import aiosqlite
 import random
 import asyncio
 import io
 from typing import Optional
 from discord.ext import commands
 from discord import app_commands
+from data_cache import get_world_location_names
 from ui.combat_view import CombateView, MestreView, Roll20LinkView, gerar_barra
 from vtt_engine.grid_system import GridMap
 from utils import rolar_dados
@@ -109,12 +109,11 @@ class Combat(commands.Cog):
         return [app_commands.Choice(name=row[0], value=row[0]) for row in rows]
 
     async def regiao_autocomplete(self, interaction: discord.Interaction, current: str):
-        async with self.bot.db.execute(
-            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome LIMIT 25",
-            (f"%{current}%",),
-        ) as cursor:
-            rows = await cursor.fetchall()
-        return [app_commands.Choice(name=row[0], value=row[0]) for row in rows]
+        nomes = await get_world_location_names(self.bot.db)
+        termo = current.strip().lower()
+        if termo:
+            nomes = [nome for nome in nomes if termo in nome.lower()]
+        return [app_commands.Choice(name=nome, value=nome) for nome in nomes[:25]]
 
     async def _buscar_criatura(self, nome: str):
         async with self.bot.db.execute(

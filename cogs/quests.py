@@ -1,9 +1,9 @@
 import discord
-import aiosqlite
 from discord.ext import commands
 from discord import app_commands, ui
 from typing import Optional
 from scripts.contract_gen import gerar_imagem_contrato
+from data_cache import get_world_location_names
 
 # ==============================================================================
 # VIEW DO FÓRUM (Jogadores aceitam aqui)
@@ -153,12 +153,11 @@ class Quests(commands.Cog):
             return [app_commands.Choice(name=f"{x[1]}", value=str(x[0])) for x in await r.fetchall()]
 
     async def regiao_autocomplete(self, interaction: discord.Interaction, current: str):
-        async with self.bot.db.execute(
-            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome LIMIT 25",
-            (f'%{current}%',)
-        ) as cursor:
-            rows = await cursor.fetchall()
-        return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
+        nomes = await get_world_location_names(self.bot.db)
+        termo = current.strip().lower()
+        if termo:
+            nomes = [nome for nome in nomes if termo in nome.lower()]
+        return [app_commands.Choice(name=nome, value=nome) for nome in nomes[:25]]
 
     async def classes_autocomplete(self, interaction: discord.Interaction, current: str):
         opcoes = ["Todas", "Bruxo", "Feiticeira", "Bardo", "Guerreiro", "Ladino", "Bruxo,Feiticeira", "Guerreiro,Arqueiro"]

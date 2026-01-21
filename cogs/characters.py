@@ -1,10 +1,10 @@
-import aiosqlite
 import discord
 import io
 import json
 from typing import Optional
 from discord.ext import commands
 from discord import app_commands
+from data_cache import get_world_location_names
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
 
@@ -44,12 +44,11 @@ class Characters(commands.Cog):
             return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
 
     async def localizacao_autocomplete(self, interaction: discord.Interaction, current: str):
-        async with self.bot.db.execute(
-            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome LIMIT 25",
-            (f'%{current}%',)
-        ) as cursor:
-            rows = await cursor.fetchall()
-            return [app_commands.Choice(name=r[0], value=r[0]) for r in rows]
+        nomes = await get_world_location_names(self.bot.db)
+        termo = current.strip().lower()
+        if termo:
+            nomes = [nome for nome in nomes if termo in nome.lower()]
+        return [app_commands.Choice(name=nome, value=nome) for nome in nomes[:25]]
 
     async def _buscar_personagem(self, user_id: int):
         async with self.bot.db.execute(

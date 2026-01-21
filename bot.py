@@ -99,12 +99,19 @@ async def teste_gerar_prompt(interaction: discord.Interaction, url_imagem: str):
     if not bot.http_session:
         return await interaction.followup.send("❌ Sessão HTTP indisponível.")
 
+    max_image_bytes = 5 * 1024 * 1024
+
     try:
         # 1. Baixar a imagem da URL para a memória
         async with bot.http_session.get(url_imagem) as resp:
             if resp.status != 200:
                 return await interaction.followup.send("❌ Não consegui acessar a imagem na URL fornecida.")
-            image_data = await resp.read()
+            content_length = resp.content_length
+            if content_length is not None and content_length > max_image_bytes:
+                return await interaction.followup.send("❌ A imagem excede 5MB. Use uma imagem menor.")
+            image_data = await resp.content.read(max_image_bytes + 1)
+            if len(image_data) > max_image_bytes:
+                return await interaction.followup.send("❌ A imagem excede 5MB. Use uma imagem menor.")
 
         # 2. Enviar para o Gemini Vision
         prompt_text = """
