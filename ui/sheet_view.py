@@ -302,13 +302,13 @@ class AcoesHabilidadeView(ui.View):
         self.desc = desc
         self.view_ficha = view_ficha
 
-    @ui.button(label="✏️ Editar", style=discord.ButtonStyle.primary)
+    @ui.button(label="Editar", emoji="✏️", style=discord.ButtonStyle.primary)
     async def btn_editar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(
             EditarHabilidadeModal(self.skill_id, self.nome, self.dado, self.desc, self.view_ficha)
         )
 
-    @ui.button(label="🗑️ Excluir", style=discord.ButtonStyle.danger)
+    @ui.button(label="Excluir", emoji="🗑️", style=discord.ButtonStyle.danger)
     async def btn_excluir(self, interaction: discord.Interaction, button: ui.Button):
         async def confirmar(itx: discord.Interaction):
             skill_repo = SkillRepository(itx.client.db)
