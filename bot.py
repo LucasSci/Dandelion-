@@ -97,7 +97,9 @@ async def teste_gerar_prompt(interaction: discord.Interaction, url_imagem: str):
     if not client:
         return await interaction.followup.send("❌ Gemini API não configurada.")
     if not bot.http_session:
-        return await interaction.followup.send("❌ Sessão HTTP indisponível.")
+        return await interaction.followup.send(
+            "❌ O sistema de comunicação está offline no momento. Tente novamente mais tarde."
+        )
 
     try:
         # 1. Baixar a imagem da URL para a memória
