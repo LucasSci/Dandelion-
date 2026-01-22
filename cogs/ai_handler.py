@@ -18,6 +18,13 @@ class AIHandler(commands.Cog):
         self.bot = bot
         self.client = None
         self.gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+        self._skip_teste_gerar_prompt = self.bot.tree.get_command("teste_gerar_prompt") is not None
+        if self._skip_teste_gerar_prompt:
+            self.__cog_app_commands__ = [
+                command
+                for command in self.__cog_app_commands__
+                if command.name != "teste_gerar_prompt"
+            ]
         if API_KEY:
             try:
                 self.client = AsyncOpenAI(api_key=API_KEY)

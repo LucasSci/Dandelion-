@@ -7,6 +7,13 @@ python-dotenv
 # Integração com a Inteligência Artificial do Google
 google-genai
 
+# Integração com a API da OpenAI
+openai
+
+# Áudio/voz no Discord
+pynacl
+discord-ext-voice-recv
+
 # Banco de dados assíncrono SQLite
 aiosqlite
 
