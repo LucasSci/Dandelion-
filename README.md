@@ -282,20 +282,21 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 
 ### 🗺️ Campanha, Lore & Memória
 
-* `/diario_ver`: Exibe a linha do tempo atual.
-* `/diario_adicionar`: Registra um evento no diário.
-* `/diario_consequencia`: Registra consequência persistente.
-* `/diario_importar_txt`: Importa um resumo longo via `.txt`.
-* `/diario_editar`: Corrige um evento salvo.
-* `/diario_apagar`: Remove um evento.
-* `/diario_limpar_tudo`: Reseta toda a memória.
-* `/lore_ver`: Lista fatos de mundo salvos.
-* `/lore_adicionar`: Registra um novo fato para a IA.
-* `/lore_importar_txt`: Importa lore via `.txt`.
-* `/lore_editar`: Corrige um lore.
-* `/lore_apagar`: Remove um lore.
-* `/lore_limpar_tudo`: Apaga todo o banco de lore.
-* `/ambientacao_gerar`: Gera ambientação por bioma/clima.
+* `/diario ver`: Exibe a linha do tempo atual.
+* `/diario adicionar`: Registra um evento no diário.
+* `/diario consequencia`: Registra consequência persistente.
+* `/diario importar_txt`: Importa um resumo longo via `.txt`.
+* `/diario editar`: Corrige um evento salvo.
+* `/diario apagar`: Remove um evento.
+* `/diario limpar_tudo`: Reseta toda a memória.
+* `/lore ver`: Lista fatos de mundo salvos.
+* `/lore adicionar`: Registra um novo fato para a IA.
+* `/lore importar_txt`: Importa lore via `.txt`.
+* `/lore editar`: Corrige um lore.
+* `/lore apagar`: Remove um lore.
+* `/lore limpar_tudo`: Apaga todo o banco de lore.
+* `/mundo definir_bioma`: Define bioma e clima de uma região.
+* `/mundo ambientacao`: Gera ambientação por bioma/clima.
 
 ### 📜 Quests & Contratos
 
