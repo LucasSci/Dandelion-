@@ -1,3 +1,5 @@
+import asyncio
+from http import client
 import logging
 from contextlib import suppress
 
@@ -13,6 +15,7 @@ from cogs.characters import Characters
 from cogs.dice import Dice
 from cogs.inventory import Inventory
 from cogs.skills import Skills
+from pathlib import types
 
 init_db()
 
@@ -90,11 +93,7 @@ async def teste_gerar_prompt(interaction: discord.Interaction, url_imagem: str):
         return await interaction.followup.send("❌ Gemini API não configurada.")
     if not bot.http_session:
         return await interaction.followup.send("❌ Sessão HTTP indisponível.")
-
-    max_image_bytes = 5 * 1024 * 1024
-        return await interaction.followup.send(
-            "❌ O sistema de comunicação está offline no momento. Tente novamente mais tarde."
-        )
+    max_image_bytes = 5 *1024 * 1024
 
     try:
         # 1. Baixar a imagem da URL para a memória
