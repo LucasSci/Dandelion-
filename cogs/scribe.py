@@ -71,10 +71,39 @@ class Scribe(commands.Cog):
         self.bot = bot
         self.active_sessions = set() # IDs dos canais que estão sendo gravados
         self.voice_sessions = {} # voice_channel_id -> text_channel_id
+        self.voice_summary_channels = {} # voice_channel_id -> summary_channel_id
         self.voice_sinks = {} # voice_channel_id -> sink
         self.voice_tasks = {} # voice_channel_id -> asyncio.Task
         self.voice_transcripts = {} # voice_channel_id -> list[str]
         self._pcm_chunk_bytes = 48000 * 2 * 2 * 5
+
+    async def _get_transcription_settings(self, guild_id: int) -> tuple[int | None, int | None]:
+        async with self.bot.db.execute(
+            "SELECT transcription_channel_id, summary_channel_id FROM transcription_settings WHERE guild_id = ?",
+            (guild_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        if not row:
+            return None, None
+        return row[0], row[1]
+
+    async def _set_transcription_settings(
+        self,
+        guild_id: int,
+        transcription_channel_id: int | None,
+        summary_channel_id: int | None,
+    ) -> None:
+        await self.bot.db.execute(
+            """
+            INSERT INTO transcription_settings (guild_id, transcription_channel_id, summary_channel_id)
+            VALUES (?, ?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET
+                transcription_channel_id = excluded.transcription_channel_id,
+                summary_channel_id = excluded.summary_channel_id
+            """,
+            (guild_id, transcription_channel_id, summary_channel_id),
+        )
+        await self.bot.db.commit()
 
     async def _transcrever_pcm(self, pcm_bytes: bytes) -> str | None:
         if not client:
@@ -239,11 +268,16 @@ class Scribe(commands.Cog):
         voice_client.listen(sink)
         self.voice_sinks[target_channel.id] = sink
 
-        self.voice_sessions[target_channel.id] = interaction.channel_id
+        transcription_channel_id, summary_channel_id = await self._get_transcription_settings(interaction.guild_id)
+        target_transcription_channel_id = transcription_channel_id or interaction.channel_id
+        target_summary_channel_id = summary_channel_id or target_transcription_channel_id
+
+        self.voice_sessions[target_channel.id] = target_transcription_channel_id
+        self.voice_summary_channels[target_channel.id] = target_summary_channel_id
         self.voice_transcripts[target_channel.id] = []
-        self._start_transcription_task(target_channel.id, interaction.channel_id)
+        self._start_transcription_task(target_channel.id, target_transcription_channel_id)
         await self._log_voice_event(
-            interaction.channel_id,
+            target_transcription_channel_id,
             f"EVENTO DA CALL: Dandelion entrou na call **{target_channel.name}**."
         )
 
@@ -267,6 +301,7 @@ class Scribe(commands.Cog):
 
         voice_channel = voice_client.channel
         text_channel_id = self.voice_sessions.pop(voice_channel.id, None)
+        summary_channel_id = self.voice_summary_channels.pop(voice_channel.id, None)
         sink = self.voice_sinks.pop(voice_channel.id, None)
         task = self.voice_tasks.pop(voice_channel.id, None)
         if task:
@@ -293,7 +328,8 @@ class Scribe(commands.Cog):
             self.voice_transcripts.pop(voice_channel.id, None)
             return
 
-        channel = self.bot.get_channel(text_channel_id)
+        target_summary_channel_id = summary_channel_id or text_channel_id
+        channel = self.bot.get_channel(target_summary_channel_id) if target_summary_channel_id else None
         transcricoes = self.voice_transcripts.pop(voice_channel.id, [])
         restante = sink.drain_all()
         for user_id, audio in restante.items():
@@ -347,6 +383,59 @@ class Scribe(commands.Cog):
             await interaction.response.send_message("⏸️ *Dandelion para de escrever.* (Leitura pausada)")
         else:
             await interaction.response.send_message("❌ Não estou anotando nada neste canal.", ephemeral=True)
+
+    @app_commands.command(
+        name="transcricao_configurar",
+        description="🧭 Configura os canais de transcrição e resumo das calls."
+    )
+    @app_commands.check(is_mestre)
+    @app_commands.describe(
+        canal_transcricao="Canal de texto para receber a transcrição ao vivo",
+        canal_resumo="Canal de texto para receber o resumo da call"
+    )
+    async def transcricao_configurar(
+        self,
+        interaction: discord.Interaction,
+        canal_transcricao: discord.TextChannel | None = None,
+        canal_resumo: discord.TextChannel | None = None,
+    ):
+        if not interaction.guild:
+            return await interaction.response.send_message(
+                "❌ Este comando só pode ser usado em um servidor.",
+                ephemeral=True,
+            )
+
+        existing_transcription_id, existing_summary_id = await self._get_transcription_settings(
+            interaction.guild_id
+        )
+        transcription_channel_id = canal_transcricao.id if canal_transcricao else existing_transcription_id
+        summary_channel_id = canal_resumo.id if canal_resumo else existing_summary_id
+
+        if not transcription_channel_id and not summary_channel_id:
+            return await interaction.response.send_message(
+                "❌ Informe ao menos um canal para transcrição ou resumo.",
+                ephemeral=True,
+            )
+
+        if not transcription_channel_id:
+            transcription_channel_id = summary_channel_id
+        if not summary_channel_id:
+            summary_channel_id = transcription_channel_id
+
+        await self._set_transcription_settings(
+            interaction.guild_id,
+            transcription_channel_id,
+            summary_channel_id,
+        )
+
+        resumo_canal = self.bot.get_channel(summary_channel_id)
+        transcricao_canal = self.bot.get_channel(transcription_channel_id)
+        await interaction.response.send_message(
+            "✅ Canais configurados!\n"
+            f"🎙️ **Transcrição:** {transcricao_canal.mention if transcricao_canal else f'<#{transcription_channel_id}>'}\n"
+            f"📝 **Resumo:** {resumo_canal.mention if resumo_canal else f'<#{summary_channel_id}>'}",
+            ephemeral=True,
+        )
 
     @app_commands.command(name="call_entrar", description="🔊 (Mestre) Dandelion entra na call e registra os eventos.")
     @app_commands.check(is_mestre)
