@@ -15,7 +15,7 @@ from cogs.characters import Characters
 from cogs.dice import Dice
 from cogs.inventory import Inventory
 from cogs.skills import Skills
-from pathlib import types
+import types
 
 init_db()
 
