@@ -22,6 +22,9 @@ if voice_recv:
             super().__init__()
             self.audio_data = {}
             self._lock = threading.Lock()
+            self.sample_rate = 48000
+            self.channels = 2
+            self.sample_width = 2
 
         def wants_opus(self) -> bool:
             return False
@@ -29,9 +32,18 @@ if voice_recv:
         def write(self, user, data):
             if not user:
                 return
+            if hasattr(data, "sample_rate") and data.sample_rate:
+                self.sample_rate = data.sample_rate
+            if hasattr(data, "channels") and data.channels:
+                self.channels = data.channels
+            if hasattr(data, "sample_width") and data.sample_width:
+                self.sample_width = data.sample_width
             with self._lock:
                 buffer = self.audio_data.setdefault(user.id, bytearray())
                 buffer.extend(data.pcm)
+
+        def chunk_size(self, duration_sec: int) -> int:
+            return int(self.sample_rate * self.channels * self.sample_width * duration_sec)
 
         def pop_chunk(self, user_id: int, chunk_size: int) -> bytes | None:
             with self._lock:
@@ -75,7 +87,8 @@ class Scribe(commands.Cog):
         self.voice_sinks = {} # voice_channel_id -> sink
         self.voice_tasks = {} # voice_channel_id -> asyncio.Task
         self.voice_transcripts = {} # voice_channel_id -> list[str]
-        self._pcm_chunk_bytes = 48000 * 2 * 2 * 5
+        self._chunk_duration_sec = 2
+        self._min_chunk_duration_sec = 0.5
 
     async def _get_transcription_settings(self, guild_id: int) -> tuple[int | None, int | None]:
         async with self.bot.db.execute(
@@ -105,17 +118,33 @@ class Scribe(commands.Cog):
         )
         await self.bot.db.commit()
 
-    async def _transcrever_pcm(self, pcm_bytes: bytes) -> str | None:
+    async def _transcrever_pcm(
+        self,
+        pcm_bytes: bytes,
+        sample_rate: int = 48000,
+        channels: int = 2,
+        sample_width: int = 2,
+    ) -> str | None:
         if not client:
             return None
         if not pcm_bytes:
             return None
+        frame_size = channels * sample_width
+        if frame_size <= 0:
+            return None
+        usable_size = len(pcm_bytes) - (len(pcm_bytes) % frame_size)
+        if usable_size <= 0:
+            return None
+        pcm_bytes = pcm_bytes[:usable_size]
+        min_bytes = int(sample_rate * channels * sample_width * self._min_chunk_duration_sec)
+        if len(pcm_bytes) < min_bytes:
+            pcm_bytes = pcm_bytes.ljust(min_bytes, b"\x00")
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_file:
             with wave.open(temp_file, "wb") as wav_file:
-                wav_file.setnchannels(2)
-                wav_file.setsampwidth(2)
-                wav_file.setframerate(48000)
+                wav_file.setnchannels(channels)
+                wav_file.setsampwidth(sample_width)
+                wav_file.setframerate(sample_rate)
                 wav_file.writeframes(pcm_bytes)
             temp_file.flush()
             try:
@@ -164,12 +193,18 @@ class Scribe(commands.Cog):
             channel = self.bot.get_channel(text_channel_id)
             voice_channel = self.bot.get_channel(voice_channel_id)
             guild = voice_channel.guild if voice_channel else (channel.guild if channel else None)
+            chunk_size = sink.chunk_size(self._chunk_duration_sec)
 
             for user_id in sink.user_ids():
-                chunk = sink.pop_chunk(user_id, self._pcm_chunk_bytes)
+                chunk = sink.pop_chunk(user_id, chunk_size)
                 if not chunk:
                     continue
-                texto = await self._transcrever_pcm(chunk)
+                texto = await self._transcrever_pcm(
+                    chunk,
+                    sample_rate=sink.sample_rate,
+                    channels=sink.channels,
+                    sample_width=sink.sample_width,
+                )
                 if not texto:
                     continue
                 member = guild.get_member(user_id) if guild else None
@@ -333,7 +368,12 @@ class Scribe(commands.Cog):
         transcricoes = self.voice_transcripts.pop(voice_channel.id, [])
         restante = sink.drain_all()
         for user_id, audio in restante.items():
-            texto = await self._transcrever_pcm(audio)
+            texto = await self._transcrever_pcm(
+                audio,
+                sample_rate=sink.sample_rate,
+                channels=sink.channels,
+                sample_width=sink.sample_width,
+            )
             if texto:
                 member = interaction.guild.get_member(user_id) if interaction.guild else None
                 nome = member.display_name if member else f"Usuário {user_id}"
