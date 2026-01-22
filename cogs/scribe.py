@@ -24,6 +24,68 @@ class Scribe(commands.Cog):
         self.active_sessions = set() # IDs dos canais que estão sendo gravados
         self.voice_sessions = {} # voice_channel_id -> text_channel_id
 
+    async def _join_voice(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "❌ Este comando só pode ser usado em um servidor.", ephemeral=True
+            )
+            return
+
+        voice_state = interaction.user.voice
+        if not voice_state or not voice_state.channel:
+            await interaction.response.send_message(
+                "❌ Você precisa estar em uma call para me chamar.", ephemeral=True
+            )
+            return
+
+        target_channel = voice_state.channel
+        voice_client = interaction.guild.voice_client
+
+        if voice_client and voice_client.channel and voice_client.channel.id == target_channel.id:
+            await interaction.response.send_message("🔊 Já estou na sua call.", ephemeral=True)
+            return
+
+        if voice_client:
+            await voice_client.move_to(target_channel)
+        else:
+            await target_channel.connect()
+
+        self.voice_sessions[target_channel.id] = interaction.channel_id
+        await self._log_voice_event(
+            interaction.channel_id,
+            f"EVENTO DA CALL: Dandelion entrou na call **{target_channel.name}**."
+        )
+
+        await interaction.response.send_message(
+            f"🔊 *Dandelion afina o alaúde e se junta à call* (**{target_channel.name}**)."
+        )
+
+    async def _leave_voice(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "❌ Este comando só pode ser usado em um servidor.", ephemeral=True
+            )
+            return
+
+        voice_client = interaction.guild.voice_client
+        if not voice_client or not voice_client.channel:
+            await interaction.response.send_message(
+                "❌ Não estou em nenhuma call neste servidor.", ephemeral=True
+            )
+            return
+
+        voice_channel = voice_client.channel
+        text_channel_id = self.voice_sessions.pop(voice_channel.id, None)
+        await voice_client.disconnect()
+
+        if text_channel_id:
+            await self._log_voice_event(
+                text_channel_id,
+                f"EVENTO DA CALL: Dandelion saiu da call **{voice_channel.name}**."
+            )
+
+        await interaction.response.send_message("🔇 *Dandelion fecha o pergaminho da call e sai.*")
+
     # --- Comandos de Controle ---
 
     @app_commands.command(name="sessao_iniciar", description="📝 Dandelion começa a ler o chat e anotar o RP.")
@@ -59,55 +121,28 @@ class Scribe(commands.Cog):
     @app_commands.command(name="call_entrar", description="🔊 (Mestre) Dandelion entra na call e registra os eventos.")
     @app_commands.check(is_mestre)
     async def call_entrar(self, interaction: discord.Interaction):
-        if not interaction.guild:
-            return await interaction.response.send_message("❌ Este comando só pode ser usado em um servidor.", ephemeral=True)
+        await self._join_voice(interaction)
 
-        voice_state = interaction.user.voice
-        if not voice_state or not voice_state.channel:
-            return await interaction.response.send_message("❌ Você precisa estar em uma call para me chamar.", ephemeral=True)
-
-        target_channel = voice_state.channel
-        voice_client = interaction.guild.voice_client
-
-        if voice_client and voice_client.channel and voice_client.channel.id == target_channel.id:
-            return await interaction.response.send_message("🔊 Já estou na sua call.", ephemeral=True)
-
-        if voice_client:
-            await voice_client.move_to(target_channel)
-        else:
-            await target_channel.connect()
-
-        self.voice_sessions[target_channel.id] = interaction.channel_id
-        await self._log_voice_event(
-            interaction.channel_id,
-            f"EVENTO DA CALL: Dandelion entrou na call **{target_channel.name}**."
-        )
-
-        await interaction.response.send_message(
-            f"🔊 *Dandelion afina o alaúde e se junta à call* (**{target_channel.name}**)."
-        )
+    @app_commands.command(
+        name="voz_entrar",
+        description="🔊 (Mestre) Dandelion entra na call para registrar a conversa."
+    )
+    @app_commands.check(is_mestre)
+    async def voz_entrar(self, interaction: discord.Interaction):
+        await self._join_voice(interaction)
 
     @app_commands.command(name="call_sair", description="🔇 (Mestre) Dandelion sai da call e encerra os registros.")
     @app_commands.check(is_mestre)
     async def call_sair(self, interaction: discord.Interaction):
-        if not interaction.guild:
-            return await interaction.response.send_message("❌ Este comando só pode ser usado em um servidor.", ephemeral=True)
+        await self._leave_voice(interaction)
 
-        voice_client = interaction.guild.voice_client
-        if not voice_client or not voice_client.channel:
-            return await interaction.response.send_message("❌ Não estou em nenhuma call neste servidor.", ephemeral=True)
-
-        voice_channel = voice_client.channel
-        text_channel_id = self.voice_sessions.pop(voice_channel.id, None)
-        await voice_client.disconnect()
-
-        if text_channel_id:
-            await self._log_voice_event(
-                text_channel_id,
-                f"EVENTO DA CALL: Dandelion saiu da call **{voice_channel.name}**."
-            )
-
-        await interaction.response.send_message("🔇 *Dandelion fecha o pergaminho da call e sai.*")
+    @app_commands.command(
+        name="voz_sair",
+        description="🔇 (Mestre) Dandelion sai da call e encerra os registros."
+    )
+    @app_commands.check(is_mestre)
+    async def voz_sair(self, interaction: discord.Interaction):
+        await self._leave_voice(interaction)
 
     @app_commands.command(name="sessao_finalizar", description="📕 Encerra a sessão e escreve o Diário.")
     async def sessao_finalizar(self, interaction: discord.Interaction):
