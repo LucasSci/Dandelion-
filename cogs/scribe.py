@@ -131,6 +131,11 @@ class Scribe(commands.Cog):
                     await voice_client.move_to(target_channel)
             else:
                 voice_client = await target_channel.connect(cls=voice_recv.VoiceRecvClient)
+        try:
+            if voice_client:
+                await voice_client.move_to(target_channel)
+            else:
+                await target_channel.connect()
         except RuntimeError as exc:
             if "PyNaCl" in str(exc):
                 await interaction.response.send_message(
