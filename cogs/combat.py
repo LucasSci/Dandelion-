@@ -22,6 +22,9 @@ TERRAIN_EMOJI = {
     1: "🟥",
     2: "🟫",
 }
+STATUS_EFFECTS = {
+    "Sangrando": {"dano": 2, "duracao": 3, "descricao": "Perde vida no início do turno."},
+}
 
 # --- HELPER: SISTEMA DE XP ---
 async def aplicar_xp(db, user_id, xp_ganho, channel):
@@ -143,6 +146,100 @@ class Combat(commands.Cog):
         existentes = [m for m in session["monstros"] if m["nome_base"] == nome_base]
         return len(existentes) + 1
 
+    def _status_key(self, alvo: dict) -> str:
+        if alvo["tipo"] == "MONSTRO":
+            return f"monstro:{alvo.get('monstro_id')}"
+        return f"jogador:{alvo.get('user_id')}"
+
+    async def _emitir_evento_vtt(self, evento: str, payload: dict) -> None:
+        if not settings.vtt_api_url or not self.bot.http_session:
+            return
+        url = settings.vtt_api_url.rstrip("/") + "/vtt/event"
+        try:
+            async with self.bot.http_session.post(
+                url, json={"event_type": evento, "payload": payload}
+            ) as resp:
+                resp.release()
+        except Exception:
+            return
+
+    def _gerar_ordem_iniciativa(self, session):
+        ordem = []
+        log_iniciativa = []
+        for p in session["jogadores"]:
+            if p["hp"] <= 0:
+                continue
+            roll = random.randint(1, 20)
+            ordem.append({**p, "tipo": "JOGADOR", "roll": roll})
+            log_iniciativa.append(f"{p['nome']}: 🎲 {roll}")
+
+        for monstro in session["monstros"]:
+            if monstro["hp_atual"] <= 0:
+                continue
+            roll_monstro = random.randint(1, 20) + (monstro["ini"] or 0)
+            ordem.append(
+                {
+                    "tipo": "MONSTRO",
+                    "nome": monstro["nome"],
+                    "monstro_id": monstro["id"],
+                    "roll": roll_monstro,
+                }
+            )
+            log_iniciativa.append(f"{monstro['nome']}: 🎲 {roll_monstro}")
+
+        ordem.sort(key=lambda x: x["roll"], reverse=True)
+        return ordem, log_iniciativa
+
+    async def _aplicar_status_inicio_turno(self, session, atual):
+        key = self._status_key(atual)
+        efeitos = session["status_effects"].get(key, [])
+        if not efeitos:
+            return
+        total_dano = 0
+        mensagens = []
+        for efeito in efeitos:
+            dano = efeito.get("dano", 0)
+            if dano:
+                total_dano += dano
+            efeito["duracao"] -= 1
+            mensagens.append(f"{efeito['nome']} ({max(0, efeito['duracao'])} turnos)")
+
+        if atual["tipo"] == "MONSTRO":
+            monstro = self._obter_monstro(session, atual.get("monstro_id"))
+            if monstro:
+                monstro["hp_atual"] -= total_dano
+        else:
+            jogador = next(
+                (p for p in session["jogadores"] if p["user_id"] == atual["user_id"]),
+                None,
+            )
+            if jogador:
+                jogador["hp"] -= total_dano
+                for p in session["ordem"]:
+                    if p.get("user_id") == jogador["user_id"]:
+                        p["hp"] = jogador["hp"]
+
+        efeitos[:] = [e for e in efeitos if e["duracao"] > 0]
+        if mensagens and total_dano > 0:
+            session["log"].append(
+                f"🩸 {atual.get('nome', 'Alvo')} sofre efeitos: {', '.join(mensagens)} (-{total_dano} HP)"
+            )
+
+        if not efeitos:
+            session["status_effects"].pop(key, None)
+
+        if atual["tipo"] == "MONSTRO":
+            monstro = self._obter_monstro(session, atual.get("monstro_id"))
+            if monstro and monstro["hp_atual"] <= 0:
+                session["log"].append(f"💀 {monstro['nome']} sucumbiu aos efeitos!")
+        else:
+            jogador = next(
+                (p for p in session["jogadores"] if p["user_id"] == atual["user_id"]),
+                None,
+            )
+            if jogador and jogador["hp"] <= 0:
+                session["log"].append(f"💀 {jogador['nome']} caiu pelos efeitos!")
+
     def _criar_instancia_monstro(self, session, nome, hp, img, ini, dano_base):
         session["contador_monstros"] += 1
         indice = self._proximo_indice_monstro(session, nome)
@@ -235,6 +332,8 @@ class Combat(commands.Cog):
             'log': [f"Combate iniciado em {regiao}."],
             'contador_monstros': 0,
             'battlemap_enviado': False,
+            'status_effects': {},
+            'round': 1,
         }
         session = self.sessions[interaction.channel_id]
 
@@ -311,27 +410,7 @@ class Combat(commands.Cog):
         session['status'] = 'RODANDO'
         
         # Rola Iniciativa
-        ordem = []
-        log_iniciativa = []
-        
-        for p in session['jogadores']:
-            roll = random.randint(1, 20)
-            ordem.append({**p, 'tipo': 'JOGADOR', 'roll': roll})
-            log_iniciativa.append(f"{p['nome']}: 🎲 {roll}")
-        
-        for monstro in session["monstros"]:
-            roll_monstro = random.randint(1, 20) + (monstro['ini'] or 0)
-            ordem.append(
-                {
-                    'tipo': 'MONSTRO',
-                    'nome': monstro['nome'],
-                    'monstro_id': monstro['id'],
-                    'roll': roll_monstro
-                }
-            )
-            log_iniciativa.append(f"{monstro['nome']}: 🎲 {roll_monstro}")
-        
-        ordem.sort(key=lambda x: x['roll'], reverse=True)
+        ordem, log_iniciativa = self._gerar_ordem_iniciativa(session)
         session['ordem'] = ordem
         
         session['log'].append("--- 🎲 INICIATIVAS ---")
@@ -345,6 +424,84 @@ class Combat(commands.Cog):
         # Gera a primeira interface e SALVA o ID
         await self.atualizar_interface(interaction.channel, nova_mensagem=True)
         await self._enviar_battlemap(interaction.channel, session)
+        await self._emitir_evento_vtt(
+            "initiative_order",
+            {"ordem": [{"nome": o.get("nome"), "tipo": o["tipo"], "roll": o["roll"]} for o in ordem]},
+        )
+
+    @app_commands.command(name="combate_status_jogador", description="🔒 (Mestre) Aplica um status em um jogador.")
+    @app_commands.describe(
+        alvo="Jogador alvo",
+        status="Status (ex: Sangrando)",
+    )
+    @app_commands.check(lambda i: i.user.guild_permissions.administrator)
+    async def combate_status_jogador(
+        self, interaction: discord.Interaction, alvo: discord.Member, status: str
+    ):
+        session = self.sessions.get(interaction.channel_id)
+        if not session:
+            return await interaction.response.send_message(
+                "❌ Nenhum combate em andamento.", ephemeral=True
+            )
+        efeito = STATUS_EFFECTS.get(status)
+        if not efeito:
+            return await interaction.response.send_message(
+                f"❌ Status inválido. Disponíveis: {', '.join(STATUS_EFFECTS.keys())}",
+                ephemeral=True,
+            )
+        key = f"jogador:{alvo.id}"
+        session["status_effects"].setdefault(key, []).append(
+            {"nome": status, **efeito}
+        )
+        await interaction.response.send_message(
+            f"✅ {status} aplicado em {alvo.display_name}.", ephemeral=True
+        )
+
+    @app_commands.command(name="combate_status_monstro", description="🔒 (Mestre) Aplica um status em um monstro.")
+    @app_commands.describe(
+        monstro_id="ID do monstro no combate",
+        status="Status (ex: Sangrando)",
+    )
+    @app_commands.check(lambda i: i.user.guild_permissions.administrator)
+    async def combate_status_monstro(
+        self, interaction: discord.Interaction, monstro_id: int, status: str
+    ):
+        session = self.sessions.get(interaction.channel_id)
+        if not session:
+            return await interaction.response.send_message(
+                "❌ Nenhum combate em andamento.", ephemeral=True
+            )
+        monstro = self._obter_monstro(session, monstro_id)
+        if not monstro:
+            return await interaction.response.send_message(
+                "❌ Monstro não encontrado.", ephemeral=True
+            )
+        efeito = STATUS_EFFECTS.get(status)
+        if not efeito:
+            return await interaction.response.send_message(
+                f"❌ Status inválido. Disponíveis: {', '.join(STATUS_EFFECTS.keys())}",
+                ephemeral=True,
+            )
+        key = f"monstro:{monstro_id}"
+        session["status_effects"].setdefault(key, []).append(
+            {"nome": status, **efeito}
+        )
+        await interaction.response.send_message(
+            f"✅ {status} aplicado em {monstro['nome']}.", ephemeral=True
+        )
+
+    @app_commands.command(name="combate_mover", description="🔒 (Mestre) Move um token no VTT.")
+    @app_commands.describe(token_id="ID do token", x="Nova posição X", y="Nova posição Y")
+    @app_commands.check(lambda i: i.user.guild_permissions.administrator)
+    async def combate_mover(
+        self, interaction: discord.Interaction, token_id: str, x: int, y: int
+    ):
+        await self._emitir_evento_vtt(
+            "token_move", {"token_id": token_id, "position": [x, y]}
+        )
+        await interaction.response.send_message(
+            f"📡 Movimento enviado: Token {token_id} → ({x}, {y}).", ephemeral=True
+        )
 
     @app_commands.command(name="combate_exportar", description="📄 Exporta o log de combate em Markdown.")
     async def combate_exportar(self, interaction: discord.Interaction):
@@ -379,6 +536,24 @@ class Combat(commands.Cog):
         try: await interaction.message.delete()
         except: pass
         
+        await self._aplicar_status_inicio_turno(session, atual)
+        if atual["tipo"] == "MONSTRO":
+            monstro = self._obter_monstro(session, atual.get("monstro_id"))
+            if monstro and monstro["hp_atual"] <= 0:
+                await self.avancar_indice_turno(session)
+                session["bloqueado"] = True
+                await self.atualizar_interface(interaction.channel)
+                return
+        else:
+            jogador = next(
+                (p for p in session["jogadores"] if p["user_id"] == atual["user_id"]), None
+            )
+            if jogador and jogador["hp"] <= 0:
+                await self.avancar_indice_turno(session)
+                session["bloqueado"] = True
+                await self.atualizar_interface(interaction.channel)
+                return
+
         if atual['tipo'] == 'MONSTRO':
             await self.atualizar_interface(interaction.channel)
             await self.turno_ia_monstro(interaction.channel)
@@ -464,6 +639,19 @@ class Combat(commands.Cog):
 
         monstro['hp_atual'] -= dano
         session['log'].append(narrativa)
+        if dano > 0:
+            ai = self.bot.get_cog("AIHandler")
+            if ai:
+                arma = detalhes_skill['nome'] if detalhes_skill else "Ataque básico"
+                try:
+                    resposta = await asyncio.wait_for(
+                        ai.gerar_narrativa_combate(jogador['nome'], monstro['nome'], arma, dano),
+                        timeout=4,
+                    )
+                    if resposta:
+                        session['log'].append(f"🎭 {resposta}")
+                except asyncio.TimeoutError:
+                    pass
 
         await interaction.response.defer()
         
@@ -487,10 +675,11 @@ class Combat(commands.Cog):
                 msg_vitoria += "\n💀 Mas todos morreram..."
 
             await interaction.channel.send(msg_vitoria)
+            await self._atualizar_economia_regional(session)
             del self.sessions[channel_id]
             return
 
-        self.avancar_indice_turno(session)
+        await self.avancar_indice_turno(session)
         session['bloqueado'] = True
         await self.atualizar_interface(interaction.channel)
 
@@ -500,7 +689,7 @@ class Combat(commands.Cog):
         atual = session['ordem'][session['turno_index']]
         monstro = self._obter_monstro(session, atual.get("monstro_id"))
         if not monstro or monstro["hp_atual"] <= 0:
-            self.avancar_indice_turno(session)
+            await self.avancar_indice_turno(session)
             session['bloqueado'] = True
             await self.atualizar_interface(channel)
             return
@@ -514,26 +703,96 @@ class Combat(commands.Cog):
 
         alvo['hp'] -= dano
         session['log'].append(f"🔥 {monstro['nome']} atacou {alvo['nome']}! ({detalhes}) -> **{dano} dano**")
+        ai = self.bot.get_cog("AIHandler")
+        if ai and dano > 0:
+            try:
+                resposta = await asyncio.wait_for(
+                    ai.gerar_narrativa_combate(monstro['nome'], alvo['nome'], monstro['dano_base'], dano),
+                    timeout=4,
+                )
+                if resposta:
+                    session['log'].append(f"🎭 {resposta}")
+            except asyncio.TimeoutError:
+                pass
         
         for p in session['ordem']:
             if p.get('user_id') == alvo['user_id']: p['hp'] = alvo['hp']
 
-        self.avancar_indice_turno(session)
+        await self.avancar_indice_turno(session)
         session['bloqueado'] = True
         await self.atualizar_interface(channel)
 
-    def avancar_indice_turno(self, session):
-        for _ in range(len(session['ordem'])):
-            session['turno_index'] = (session['turno_index'] + 1) % len(session['ordem'])
+    async def avancar_indice_turno(self, session):
+        total = len(session['ordem'])
+        for _ in range(total):
+            session['turno_index'] = (session['turno_index'] + 1) % total
+            if session['turno_index'] == 0:
+                session['round'] += 1
+                ordem, log_iniciativa = self._gerar_ordem_iniciativa(session)
+                session['ordem'] = ordem
+                total = len(session['ordem'])
+                session['log'].append(f"--- 🔄 NOVA RODADA {session['round']} ---")
+                session['log'].extend(log_iniciativa)
+                await self._emitir_evento_vtt(
+                    "initiative_order",
+                    {
+                        "ordem": [
+                            {"nome": o.get("nome"), "tipo": o["tipo"], "roll": o["roll"]}
+                            for o in ordem
+                        ]
+                    },
+                )
             atual = session['ordem'][session['turno_index']]
-            
+
             if atual['tipo'] == 'MONSTRO':
                 monstro = self._obter_monstro(session, atual.get("monstro_id"))
                 if monstro and monstro['hp_atual'] > 0:
                     return
-            
-            jogador_real = next((p for p in session['jogadores'] if p['user_id'] == atual['user_id']), None)
-            if jogador_real and jogador_real['hp'] > 0: return
+
+            jogador_real = next(
+                (p for p in session['jogadores'] if p['user_id'] == atual['user_id']), None
+            )
+            if jogador_real and jogador_real['hp'] > 0:
+                return
+
+    async def _atualizar_economia_regional(self, session):
+        regiao = session.get("regiao")
+        if not regiao:
+            return
+        async with self.bot.db.execute(
+            "SELECT id FROM world_locations WHERE nome LIKE ? LIMIT 1",
+            (f"%{regiao}%",),
+        ) as cursor:
+            row = await cursor.fetchone()
+        if not row:
+            return
+        localizacao_id = row[0]
+        ajustes = {
+            "Ingredientes de Monstro": -0.05,
+            "Comida": 0.05,
+        }
+        for categoria, delta in ajustes.items():
+            async with self.bot.db.execute(
+                """
+                SELECT modificador
+                FROM economia_regional
+                WHERE localizacao_id = ? AND categoria = ?
+                """,
+                (localizacao_id, categoria),
+            ) as cursor:
+                atual = await cursor.fetchone()
+            valor_atual = atual[0] if atual else 1.0
+            novo = min(1.3, max(0.7, valor_atual + delta))
+            await self.bot.db.execute(
+                """
+                INSERT INTO economia_regional (localizacao_id, categoria, modificador)
+                VALUES (?, ?, ?)
+                ON CONFLICT(localizacao_id, categoria)
+                DO UPDATE SET modificador = excluded.modificador, atualizado_em = datetime('now')
+                """,
+                (localizacao_id, categoria, novo),
+            )
+        await self.bot.db.commit()
 
 async def setup(bot):
     await bot.add_cog(Combat(bot))
