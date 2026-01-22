@@ -1,6 +1,7 @@
 import asyncio
 import os
 import tempfile
+import threading
 import wave
 
 import aiosqlite
@@ -20,6 +21,7 @@ if voice_recv:
         def __init__(self):
             super().__init__()
             self.audio_data = {}
+            self._lock = threading.Lock()
 
         def wants_opus(self) -> bool:
             return False
@@ -27,8 +29,28 @@ if voice_recv:
         def write(self, user, data):
             if not user:
                 return
-            buffer = self.audio_data.setdefault(user.id, bytearray())
-            buffer.extend(data.pcm)
+            with self._lock:
+                buffer = self.audio_data.setdefault(user.id, bytearray())
+                buffer.extend(data.pcm)
+
+        def pop_chunk(self, user_id: int, chunk_size: int) -> bytes | None:
+            with self._lock:
+                buffer = self.audio_data.get(user_id)
+                if not buffer or len(buffer) < chunk_size:
+                    return None
+                chunk = bytes(buffer[:chunk_size])
+                del buffer[:chunk_size]
+                return chunk
+
+        def drain_all(self) -> dict[int, bytes]:
+            with self._lock:
+                drained = {user_id: bytes(audio) for user_id, audio in self.audio_data.items() if audio}
+                self.audio_data.clear()
+                return drained
+
+        def user_ids(self) -> list[int]:
+            with self._lock:
+                return list(self.audio_data.keys())
 
         def cleanup(self) -> None:
             self.audio_data.clear()
@@ -50,6 +72,9 @@ class Scribe(commands.Cog):
         self.active_sessions = set() # IDs dos canais que estão sendo gravados
         self.voice_sessions = {} # voice_channel_id -> text_channel_id
         self.voice_sinks = {} # voice_channel_id -> sink
+        self.voice_tasks = {} # voice_channel_id -> asyncio.Task
+        self.voice_transcripts = {} # voice_channel_id -> list[str]
+        self._pcm_chunk_bytes = 48000 * 2 * 2 * 5
 
     async def _transcrever_pcm(self, pcm_bytes: bytes) -> str | None:
         if not client:
@@ -99,6 +124,41 @@ class Scribe(commands.Cog):
         except Exception:
             return None
         return response.choices[0].message.content.strip()
+
+    async def _transcription_loop(self, voice_channel_id: int, text_channel_id: int) -> None:
+        while voice_channel_id in self.voice_sessions:
+            sink = self.voice_sinks.get(voice_channel_id)
+            if not sink or not client:
+                await asyncio.sleep(1)
+                continue
+
+            channel = self.bot.get_channel(text_channel_id)
+            voice_channel = self.bot.get_channel(voice_channel_id)
+            guild = voice_channel.guild if voice_channel else (channel.guild if channel else None)
+
+            for user_id in sink.user_ids():
+                chunk = sink.pop_chunk(user_id, self._pcm_chunk_bytes)
+                if not chunk:
+                    continue
+                texto = await self._transcrever_pcm(chunk)
+                if not texto:
+                    continue
+                member = guild.get_member(user_id) if guild else None
+                nome = member.display_name if member else f"Usuário {user_id}"
+                linha = f"{nome}: {texto}"
+                self.voice_transcripts.setdefault(voice_channel_id, []).append(linha)
+                if channel:
+                    await channel.send(f"🎙️ **{nome}:** {texto}")
+
+            await asyncio.sleep(1)
+
+    def _start_transcription_task(self, voice_channel_id: int, text_channel_id: int) -> None:
+        existing_task = self.voice_tasks.pop(voice_channel_id, None)
+        if existing_task:
+            existing_task.cancel()
+        self.voice_tasks[voice_channel_id] = asyncio.create_task(
+            self._transcription_loop(voice_channel_id, text_channel_id)
+        )
 
     async def _join_voice(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
@@ -180,6 +240,8 @@ class Scribe(commands.Cog):
         self.voice_sinks[target_channel.id] = sink
 
         self.voice_sessions[target_channel.id] = interaction.channel_id
+        self.voice_transcripts[target_channel.id] = []
+        self._start_transcription_task(target_channel.id, interaction.channel_id)
         await self._log_voice_event(
             interaction.channel_id,
             f"EVENTO DA CALL: Dandelion entrou na call **{target_channel.name}**."
@@ -206,6 +268,9 @@ class Scribe(commands.Cog):
         voice_channel = voice_client.channel
         text_channel_id = self.voice_sessions.pop(voice_channel.id, None)
         sink = self.voice_sinks.pop(voice_channel.id, None)
+        task = self.voice_tasks.pop(voice_channel.id, None)
+        if task:
+            task.cancel()
         if sink and hasattr(voice_client, "stop_listening"):
             voice_client.stop_listening()
         await voice_client.disconnect()
@@ -219,24 +284,29 @@ class Scribe(commands.Cog):
         await interaction.response.send_message("🔇 *Dandelion fecha o pergaminho da call e sai.*")
 
         if not sink or not text_channel_id:
+            self.voice_transcripts.pop(voice_channel.id, None)
             return
         if not client:
             channel = self.bot.get_channel(text_channel_id)
             if channel:
                 await channel.send("⚠️ Não consegui transcrever a call porque a OpenAI não está configurada.")
+            self.voice_transcripts.pop(voice_channel.id, None)
             return
 
         channel = self.bot.get_channel(text_channel_id)
-        if not channel:
-            return
-
-        transcricoes = []
-        for user_id, audio in sink.audio_data.items():
-            texto = await self._transcrever_pcm(bytes(audio))
+        transcricoes = self.voice_transcripts.pop(voice_channel.id, [])
+        restante = sink.drain_all()
+        for user_id, audio in restante.items():
+            texto = await self._transcrever_pcm(audio)
             if texto:
                 member = interaction.guild.get_member(user_id) if interaction.guild else None
                 nome = member.display_name if member else f"Usuário {user_id}"
                 transcricoes.append(f"{nome}: {texto}")
+                if channel:
+                    await channel.send(f"🎙️ **{nome}:** {texto}")
+
+        if not channel:
+            return
 
         resumo = await self._resumir_conversa(transcricoes)
         if resumo:
