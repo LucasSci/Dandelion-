@@ -10,6 +10,9 @@ google-genai
 # Integração com a API da OpenAI
 openai
 
+# Áudio/voz no Discord
+pynacl
+
 # Banco de dados assíncrono SQLite
 aiosqlite
 

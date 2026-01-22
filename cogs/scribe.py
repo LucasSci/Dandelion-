@@ -45,10 +45,20 @@ class Scribe(commands.Cog):
             await interaction.response.send_message("🔊 Já estou na sua call.", ephemeral=True)
             return
 
-        if voice_client:
-            await voice_client.move_to(target_channel)
-        else:
-            await target_channel.connect()
+        try:
+            if voice_client:
+                await voice_client.move_to(target_channel)
+            else:
+                await target_channel.connect()
+        except RuntimeError as exc:
+            if "PyNaCl" in str(exc):
+                await interaction.response.send_message(
+                    "❌ Para usar comandos de voz, instale a biblioteca PyNaCl "
+                    "(`pip install pynacl`) e reinicie o bot.",
+                    ephemeral=True,
+                )
+                return
+            raise
 
         self.voice_sessions[target_channel.id] = interaction.channel_id
         await self._log_voice_event(
