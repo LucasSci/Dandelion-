@@ -9,6 +9,10 @@ from data_cache import (
 )
 
 class Campaign(commands.Cog):
+    diario = app_commands.Group(name="diario", description="Comandos do diário da campanha.")
+    lore = app_commands.Group(name="lore", description="Comandos de lore do mundo.")
+    mundo = app_commands.Group(name="mundo", description="Comandos de mundo, bioma e ambientação.")
+
     def __init__(self, bot):
         self.bot = bot
 
@@ -36,7 +40,7 @@ class Campaign(commands.Cog):
             nomes = [nome for nome in nomes if termo in nome.lower()]
         return [app_commands.Choice(name=nome, value=nome) for nome in nomes[:25]]
 
-    @app_commands.command(name="diario_ver", description="📖 Vê a Linha do Tempo atual da campanha (O que a IA sabe)")
+    @diario.command(name="ver", description="📖 Vê a Linha do Tempo atual da campanha (O que a IA sabe)")
     @app_commands.check(is_mestre)
     async def ver_diario(self, interaction: discord.Interaction):
         # Busca tudo ordenado por ID (Ordem de inserção = Ordem Cronológica)
@@ -59,7 +63,7 @@ class Campaign(commands.Cog):
         embed.set_footer(text="A IA usará APENAS estes fatos para gerar missões.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="diario_adicionar", description="➕ Adiciona um evento HOJE na linha do tempo")
+    @diario.command(name="adicionar", description="➕ Adiciona um evento HOJE na linha do tempo")
     @app_commands.describe(evento="Ex: 'O grupo chegou em Zerrikania e irritou o sultão.'")
     @app_commands.check(is_mestre)
     async def add_evento(self, interaction: discord.Interaction, evento: str):
@@ -67,7 +71,7 @@ class Campaign(commands.Cog):
         await self.bot.db.commit()
         await interaction.response.send_message(f"✅ Evento registrado no fim da fila.", ephemeral=True)
 
-    @app_commands.command(name="diario_consequencia", description="➕ Registra consequência persistente de uma ação")
+    @diario.command(name="consequencia", description="➕ Registra consequência persistente de uma ação")
     @app_commands.describe(consequencia="Ex: 'A vila agora teme bruxos e recusa abrigo.'")
     @app_commands.check(is_mestre)
     async def add_consequencia(self, interaction: discord.Interaction, consequencia: str):
@@ -78,7 +82,7 @@ class Campaign(commands.Cog):
         await self.bot.db.commit()
         await interaction.response.send_message("✅ Consequência registrada.", ephemeral=True)
 
-    @app_commands.command(name="diario_importar_txt", description="📂 Importa um resumo longo via arquivo .txt")
+    @diario.command(name="importar_txt", description="📂 Importa um resumo longo via arquivo .txt")
     @app_commands.check(is_mestre)
     async def import_txt(self, interaction: discord.Interaction, arquivo: discord.Attachment):
         if not arquivo.filename.endswith('.txt'): return await interaction.response.send_message("Apenas .txt", ephemeral=True)
@@ -91,8 +95,8 @@ class Campaign(commands.Cog):
         
         await interaction.followup.send(f"✅ Resumo importado! A IA agora conhece esse contexto.")
 
-    @app_commands.command(name="diario_editar", description="✏️ Corrige um evento errado na memória")
-    @app_commands.describe(id_evento="Número do ID (veja no /diario_ver)", novo_texto="O texto correto")
+    @diario.command(name="editar", description="✏️ Corrige um evento errado na memória")
+    @app_commands.describe(id_evento="Número do ID (veja no /diario ver)", novo_texto="O texto correto")
     @app_commands.check(is_mestre)
     async def edit_evento(self, interaction: discord.Interaction, id_evento: int, novo_texto: str):
         cursor = await self.bot.db.execute("UPDATE memoria_campanha SET conteudo = ? WHERE id = ?", (novo_texto, id_evento))
@@ -103,21 +107,21 @@ class Campaign(commands.Cog):
         else:
             await interaction.response.send_message("❌ ID não encontrado.", ephemeral=True)
 
-    @app_commands.command(name="diario_apagar", description="🗑️ Remove um evento da memória")
+    @diario.command(name="apagar", description="🗑️ Remove um evento da memória")
     @app_commands.check(is_mestre)
     async def del_evento(self, interaction: discord.Interaction, id_evento: int):
         await self.bot.db.execute("DELETE FROM memoria_campanha WHERE id = ?", (id_evento,))
         await self.bot.db.commit()
         await interaction.response.send_message(f"🗑️ Evento [{id_evento}] removido da linha do tempo.", ephemeral=True)
 
-    @app_commands.command(name="diario_limpar_tudo", description="⚠️ APAGA TODA A MEMÓRIA (Reset)")
+    @diario.command(name="limpar_tudo", description="⚠️ APAGA TODA A MEMÓRIA (Reset)")
     @app_commands.check(is_mestre)
     async def wipe_memory(self, interaction: discord.Interaction):
         await self.bot.db.execute("DELETE FROM memoria_campanha")
         await self.bot.db.commit()
         await interaction.response.send_message("🔥 **TABULA RASA!** O Dandelion esqueceu tudo sobre a campanha.", ephemeral=True)
 
-    @app_commands.command(name="lore_ver", description="📚 Vê o conhecimento de mundo registrado pelo mestre")
+    @lore.command(name="ver", description="📚 Vê o conhecimento de mundo registrado pelo mestre")
     @app_commands.check(is_mestre)
     async def lore_ver(self, interaction: discord.Interaction):
         async with self.bot.db.execute(
@@ -127,7 +131,7 @@ class Campaign(commands.Cog):
 
         if not rows:
             return await interaction.response.send_message(
-                "📭 Nenhum lore registrado ainda. Use /lore_adicionar ou /lore_importar_txt.",
+                "📭 Nenhum lore registrado ainda. Use /lore adicionar ou /lore importar_txt.",
                 ephemeral=True,
             )
 
@@ -149,7 +153,7 @@ class Campaign(commands.Cog):
         for embed in embeds[1:]:
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="lore_adicionar", description="➕ Registra um fato do mundo para a IA usar")
+    @lore.command(name="adicionar", description="➕ Registra um fato do mundo para a IA usar")
     @app_commands.describe(titulo="Título curto do lore", conteudo="Texto completo do conhecimento")
     @app_commands.check(is_mestre)
     async def lore_adicionar(self, interaction: discord.Interaction, titulo: str, conteudo: str):
@@ -161,7 +165,7 @@ class Campaign(commands.Cog):
         await self.bot.db.commit()
         await interaction.response.send_message("✅ Lore registrado com sucesso.", ephemeral=True)
 
-    @app_commands.command(name="lore_importar_txt", description="📂 Importa lore longo via arquivo .txt")
+    @lore.command(name="importar_txt", description="📂 Importa lore longo via arquivo .txt")
     @app_commands.describe(titulo="Título do lore", arquivo="Arquivo .txt com o conteúdo")
     @app_commands.check(is_mestre)
     async def lore_importar_txt(self, interaction: discord.Interaction, titulo: str, arquivo: discord.Attachment):
@@ -178,8 +182,8 @@ class Campaign(commands.Cog):
         await self.bot.db.commit()
         await interaction.followup.send("✅ Lore importado! A IA agora conhece esse conteúdo.")
 
-    @app_commands.command(name="lore_editar", description="✏️ Corrige um lore existente")
-    @app_commands.describe(id_lore="ID do lore (veja em /lore_ver)", novo_titulo="Novo título", novo_conteudo="Novo texto")
+    @lore.command(name="editar", description="✏️ Corrige um lore existente")
+    @app_commands.describe(id_lore="ID do lore (veja em /lore ver)", novo_titulo="Novo título", novo_conteudo="Novo texto")
     @app_commands.check(is_mestre)
     async def lore_editar(
         self,
@@ -200,21 +204,21 @@ class Campaign(commands.Cog):
         else:
             await interaction.response.send_message("❌ ID não encontrado.", ephemeral=True)
 
-    @app_commands.command(name="lore_apagar", description="🗑️ Remove um lore do banco de conhecimento")
+    @lore.command(name="apagar", description="🗑️ Remove um lore do banco de conhecimento")
     @app_commands.check(is_mestre)
     async def lore_apagar(self, interaction: discord.Interaction, id_lore: int):
         await self.bot.db.execute("DELETE FROM lore_entries WHERE id = ?", (id_lore,))
         await self.bot.db.commit()
         await interaction.response.send_message(f"🗑️ Lore [{id_lore}] removido.", ephemeral=True)
 
-    @app_commands.command(name="lore_limpar_tudo", description="⚠️ Apaga TODO o banco de conhecimento do mundo")
+    @lore.command(name="limpar_tudo", description="⚠️ Apaga TODO o banco de conhecimento do mundo")
     @app_commands.check(is_mestre)
     async def lore_limpar_tudo(self, interaction: discord.Interaction):
         await self.bot.db.execute("DELETE FROM lore_entries")
         await self.bot.db.commit()
         await interaction.response.send_message("🔥 Todo o lore foi apagado.", ephemeral=True)
 
-    @app_commands.command(name="localizacao_definir_bioma", description="🔒 Define bioma e clima de uma região.")
+    @mundo.command(name="definir_bioma", description="🔒 Define bioma e clima de uma região.")
     @app_commands.describe(local="Nome da localização", biome="Bioma principal", clima="Clima dominante")
     @app_commands.autocomplete(local=localizacao_autocomplete)
     @app_commands.check(is_mestre)
@@ -235,7 +239,7 @@ class Campaign(commands.Cog):
         else:
             await interaction.response.send_message("❌ Localização não encontrada.", ephemeral=True)
 
-    @app_commands.command(name="ambientacao_gerar", description="🌦️ Gera ambientação por bioma/clima.")
+    @mundo.command(name="ambientacao", description="🌦️ Gera ambientação por bioma/clima.")
     @app_commands.describe(local="Nome da localização", foco="Foco opcional (ex: tensão, mistério)")
     @app_commands.autocomplete(local=localizacao_autocomplete)
     async def ambientacao_gerar(
