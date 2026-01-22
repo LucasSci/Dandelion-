@@ -143,6 +143,46 @@ CREATE TABLE IF NOT EXISTS inventario (
     efeito TEXT
 );
 
+-- ALQUIMIA & CRAFTING --
+CREATE TABLE IF NOT EXISTS alchemy_ingredients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT UNIQUE NOT NULL,
+    tipo TEXT NOT NULL,
+    biome TEXT,
+    raridade INTEGER DEFAULT 1,
+    qualidade_min INTEGER DEFAULT 40,
+    qualidade_max INTEGER DEFAULT 100,
+    descricao TEXT
+);
+
+CREATE TABLE IF NOT EXISTS alchemy_recipes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT UNIQUE NOT NULL,
+    base_alcoolica TEXT NOT NULL,
+    efeito TEXT NOT NULL,
+    toxicidade_base INTEGER DEFAULT 10,
+    qualidade_min INTEGER DEFAULT 50
+);
+
+CREATE TABLE IF NOT EXISTS alchemy_recipe_ingredients (
+    recipe_id INTEGER NOT NULL,
+    ingredient_id INTEGER NOT NULL,
+    quantidade INTEGER DEFAULT 1,
+    PRIMARY KEY (recipe_id, ingredient_id),
+    FOREIGN KEY(recipe_id) REFERENCES alchemy_recipes(id) ON DELETE CASCADE,
+    FOREIGN KEY(ingredient_id) REFERENCES alchemy_ingredients(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS alchemy_user_ingredients (
+    user_id INTEGER NOT NULL,
+    ingredient_id INTEGER NOT NULL,
+    quantidade INTEGER DEFAULT 0,
+    qualidade INTEGER DEFAULT 0,
+    atualizado_em TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, ingredient_id),
+    FOREIGN KEY(ingredient_id) REFERENCES alchemy_ingredients(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS session_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     channel_id INTEGER,
@@ -224,6 +264,15 @@ CREATE TABLE IF NOT EXISTS loja_itens (
     estoque INTEGER DEFAULT 1,
     efeito TEXT,
     descricao TEXT
+);
+
+CREATE TABLE IF NOT EXISTS economia_regional (
+    localizacao_id INTEGER NOT NULL,
+    categoria TEXT NOT NULL,
+    modificador REAL DEFAULT 1.0,
+    atualizado_em TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (localizacao_id, categoria),
+    FOREIGN KEY(localizacao_id) REFERENCES world_locations(id) ON DELETE CASCADE
 );
 
 -- BESTIÁRIO (SIMPLIFICADO) --

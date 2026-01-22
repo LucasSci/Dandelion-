@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 
 import discord
 from discord import app_commands
@@ -37,6 +38,101 @@ class AIHandler(commands.Cog):
             return int(digits) if digits else 0
         except:
             return 0
+
+    def _extrair_keywords(self, texto: str) -> list[str]:
+        tokens = re.findall(r"\w+", texto.lower())
+        stopwords = {
+            "de",
+            "da",
+            "do",
+            "dos",
+            "das",
+            "a",
+            "o",
+            "as",
+            "os",
+            "em",
+            "no",
+            "na",
+            "que",
+            "quem",
+            "qual",
+            "quando",
+            "onde",
+            "como",
+            "por",
+            "para",
+            "com",
+        }
+        filtradas = [t for t in tokens if t not in stopwords and len(t) > 3]
+        return filtradas[:6]
+
+    async def buscar_contexto_rag(self, pergunta: str) -> str:
+        """Busca fatos relevantes em lore e NPCs para enriquecer a resposta."""
+        termos = self._extrair_keywords(pergunta)
+        if not termos:
+            return ""
+
+        likes = " OR ".join(["titulo LIKE ? OR resumo LIKE ? OR conteudo LIKE ?"] * len(termos))
+        params = []
+        for termo in termos:
+            like = f"%{termo}%"
+            params.extend([like, like, like])
+
+        async with self.bot.db.execute(
+            f"""
+            SELECT titulo, resumo, conteudo
+            FROM lore_entries
+            WHERE {likes}
+            ORDER BY atualizado_em DESC
+            LIMIT 5
+            """,
+            params,
+        ) as cursor:
+            lore_rows = await cursor.fetchall()
+
+        npc_likes = " OR ".join(
+            ["nome LIKE ? OR personalidade LIKE ? OR humor LIKE ? OR habitos LIKE ? OR observacoes LIKE ?"] * len(termos)
+        )
+        npc_params = []
+        for termo in termos:
+            like = f"%{termo}%"
+            npc_params.extend([like, like, like, like, like])
+
+        async with self.bot.db.execute(
+            f"""
+            SELECT nome, personalidade, humor, observacoes
+            FROM npc_profiles
+            WHERE {npc_likes}
+            ORDER BY nome
+            LIMIT 5
+            """,
+            npc_params,
+        ) as cursor:
+            npc_rows = await cursor.fetchall()
+
+        partes = []
+        if lore_rows:
+            lore_txt = []
+            for titulo, resumo, conteudo in lore_rows:
+                base = (resumo or conteudo or "").strip()
+                if len(base) > 200:
+                    base = f"{base[:200]}..."
+                lore_txt.append(f"- {titulo}: {base}")
+            partes.append("LORE RELEVANTE:\n" + "\n".join(lore_txt))
+
+        if npc_rows:
+            npc_txt = []
+            for nome, personalidade, humor, observacoes in npc_rows:
+                obs = observacoes or ""
+                if len(obs) > 120:
+                    obs = f"{obs[:120]}..."
+                npc_txt.append(
+                    f"- {nome}: {personalidade} | Humor: {humor} | {obs}".strip()
+                )
+            partes.append("NPCS & RUMORES:\n" + "\n".join(npc_txt))
+
+        return "\n\n".join(partes)
 
     async def ler_cronologia_estrita(self):
         """Lê TODOS os eventos na ordem correta"""
@@ -183,6 +279,36 @@ class AIHandler(commands.Cog):
         except Exception as e:
             print(f"Erro IA diálogo NPC: {e}")
             return "⚠️ Não consegui gerar a resposta do NPC."
+
+    async def gerar_narrativa_combate(
+        self,
+        atacante: str,
+        alvo: str,
+        arma: str,
+        dano: int,
+        contexto: str | None = None,
+    ) -> str:
+        if not self.client:
+            return ""
+        prompt = (
+            "Você é um narrador de combate em um RPG estilo The Witcher.\n"
+            f"Atacante: {atacante}\n"
+            f"Alvo: {alvo}\n"
+            f"Arma/Técnica: {arma}\n"
+            f"Dano causado: {dano}\n"
+        )
+        if contexto:
+            prompt += f"Contexto adicional: {contexto}\n"
+        prompt += "Crie uma frase curta e visceral descrevendo o golpe e seu impacto."
+
+        try:
+            r = await self.client.chat.completions.create(
+                model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}]
+            )
+            return r.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"Erro IA narrativa combate: {e}")
+            return ""
         
     async def get_response(self, prompt: str) -> str:
         """Chat genérico"""
@@ -268,11 +394,13 @@ class AIHandler(commands.Cog):
 
         cronologia = await self.ler_cronologia_estrita()
         lore = await self.ler_lore_mundo()
+        rag = await self.buscar_contexto_rag(solicitacao)
         prompt = (
             "Você é Dandelion, o bardo narrador de The Witcher.\n"
             "Use a cronologia e o lore abaixo como contexto real.\n\n"
             f"CRONOLOGIA:\n{cronologia}\n\n"
             f"LORE:\n{lore}\n\n"
+            f"CONTEXTO ENCONTRADO (RAG):\n{rag or 'Nenhuma entrada relevante encontrada.'}\n\n"
             f"SOLICITAÇÃO DO MESTRE/JOGADOR:\n{solicitacao}\n\n"
             "Responda em português brasileiro, com narrativa evocativa e objetiva."
         )
