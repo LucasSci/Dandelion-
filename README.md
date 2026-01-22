@@ -4,19 +4,19 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 
 ## 🚀 Funcionalidades
 
-* **📜 Sistema de Personagens:** Criação, armazenamento e visualização de fichas de personagens com atributos, história e imagens.
-* **⚔️ Sistema de Combate:** Gerenciamento de batalha com iniciativa, turnos travados, barras de vida e log de combate.
-* **🧠 Narrador IA (Dandelion):** Integração com OpenAI para narrar cenas, NPCs e resultados de ações complexas.
-* **📚 Bestiário Automático:** Importação de monstros via seeds e geração de artes em estilo Witcher.
-* **🗺️ Banco de Lore Autoral:** Estrutura dedicada para registrar lore do seu universo com fontes em textos, arquivos e imagens.
+* **📜 Sistema de Personagens:** Criação de fichas, pool de personagens, exportação JSON, atributos, armaduras por localização, XP/nível, ouro e localização atual.
+* **⚔️ Sistema de Combate:** Criação de sala, entrada de jogadores, iniciativa, avanço de turnos, aplicação de dano e exportação do log em Markdown.
+* **🧠 Narrador IA (Dandelion):** Integração com OpenAI para narrar cenas, gerar missões cronológicas, diálogos de NPC e itens.
+* **📚 Bestiário Automático:** Seeds de criaturas, consulta com teste de Monster Lore, edição de monstros e geração de arte estilo Witcher.
+* **🗺️ Lore & Memória de Campanha:** Diário de campanha, banco de lore com importação de `.txt` e eventos com consequências.
 * **🎲 Rolagem de Dados:** Suporte a fórmulas de dados (ex: `1d20+5`, `2d6`).
-* **🎒 Inventário & Habilidades:** Gerenciamento de itens e skills equipáveis.
-* **📜 Quests & Contratos:** Criação manual/IA, publicação em fórum e progressão com recompensas.
-* **🧠 Memória de Campanha:** Registro de eventos, consequências e resumos para IA.
-* **🧑‍🤝‍🧑 NPCs e Rumores:** Perfis com personalidade dinâmica e ganchos narrativos.
-* **🏪 Economia & Loja:** Itens com estoque, preços e geração por IA.
-* **🏅 Progressão Social:** Facções, reputação, conquistas e legados.
-* **📝 Escriba de Sessão:** Registro automático do chat e resumo narrativo da sessão.
+* **🎒 Inventário & Habilidades:** Visualização de inventário e uso de habilidades rápidas.
+* **📜 Quests & Contratos:** Criação manual/IA, publicação em fórum, atribuição a jogadores e conclusão com recompensas.
+* **🧑‍🤝‍🧑 NPCs e Rumores:** Cadastro de NPCs com personalidade, interação por IA e sorteio de rumores.
+* **🏪 Economia & Loja:** Loja com estoque, geração de itens por IA e controle de preços.
+* **🏅 Progressão Social:** Facções, reputação, conquistas, legados e comparação de builds.
+* **🧭 Campanha Solo:** Progresso individual, diário e recursos coletados.
+* **🛠️ Utilitários:** Status do bot e minijogo de Gwent.
 
 ---
 
@@ -255,30 +255,46 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 * `/listar_fichas`: Lista todos os personagens no banco de dados.
 * `/devolver_ficha`: Devolve seu personagem para o "Pool" (útil para trocar de char).
 * `/assumir_personagem`: Pega um personagem livre do "Pool".
+* `/ficha_exportar`: Exporta a ficha em JSON.
+* `/localizacao`: Mostra a localização atual do personagem.
+* `/viajar`: Define a localização atual do personagem.
+* `/atributo_definir`: Define o valor de um atributo.
+* `/atributo_listar`: Lista atributos cadastrados.
+* `/armadura_definir`: Define o SP da armadura por localização.
+* `/armadura_modificador`: Define modificadores de dano por localização.
+* `/receber_dano`: Aplica dano com SP e modificadores de armadura.
 * **(Mestre)** `/mestre_criar`: Cria uma ficha sem dono (NPC ou Player futuro).
 * **(Mestre)** `/mestre_vincular`: Força a vinculação de uma ficha a um jogador.
+* **(Mestre)** `/mestre_add_xp`: Dá XP ao jogador e processa Level Up.
+* **(Mestre)** `/mestre_levelup`: Força a subida de 1 nível.
+* **(Mestre)** `/mestre_leveldown`: Remove 1 nível (corrige erro).
+* **(Mestre)** `/mestre_ouro`: Adiciona ou remove ouro.
 
 ### ⚔️ Combate
 
 * `/combate_criar [monstro]`: Cria uma sala de combate contra um monstro do bestiário.
+* `/combate_adicionar`: Adiciona criaturas ao combate.
 * `/combate_entrar`: Jogadores entram na batalha atual.
 * `/combate_iniciar`: Rola iniciativa e trava o turno para o início.
+* `/combate_exportar`: Exporta o log de combate em Markdown.
 * **(Botão)** `Atacar/Defender/Skill`: Ações dentro da interface de combate.
 * **(Mestre)** `Destravar/Próximo`: Avança o turno (apenas o Mestre vê esse botão quando o jogo pausa).
 
 ### 📚 Bestiário & IA
 
-* `/ver [nome]`: Exibe a ficha técnica e lore de uma criatura.
+* `/ver [nome]`: Exibe a ficha técnica e lore de uma criatura (com teste de Monster Lore).
 * `/alimentar_bestiario`: Reaplica seeds e atualiza tabelas base do bestiário.
-* `/monstro_editar`: Ajusta HP, iniciativa e dano de um monstro importado.
+* `/monstro_editar`: Ajusta HP, iniciativa, dano e CD de Monster Lore.
 * `/gerar_imagem`: Gera arte estilo *Witcher 3 Journal*.
 * `/dandelion [solicitacao]`: Pede ao Mestre IA para narrar uma cena ou resultado.
+* `/teste_gerar_prompt`: [DEV] Gera prompt de imagem baseado em uma URL (Gemini).
 
 ### 🎲 Utilitários
 
 * `/rolar [formula]`: Rola dados (ex: `1d20+3`).
-* `/inventario`: Abre seu inventário para visualização ou venda de itens.
+* `/inventario`: Abre seu inventário para visualização.
 * `/usar_habilidade [slot]`: Usa uma habilidade equipada em um slot específico.
+* `/status`: Mostra status do bot e integrações.
 
 ### 🗺️ Campanha, Lore & Memória
 
@@ -297,6 +313,7 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 * `/lore limpar_tudo`: Apaga todo o banco de lore.
 * `/mundo definir_bioma`: Define bioma e clima de uma região.
 * `/mundo ambientacao`: Gera ambientação por bioma/clima.
+* `/memoria_importar`: Upload de `.txt` para memória de campanha.
 
 ### 📜 Quests & Contratos
 
@@ -318,6 +335,8 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 * `/rumor_usar`: Marca rumor como usado.
 * `/sessao_iniciar`: Inicia gravação do chat.
 * `/sessao_pausar`: Pausa as anotações.
+* `/call_entrar`: Dandelion entra na call e registra eventos.
+* `/call_sair`: Dandelion sai da call e encerra registros.
 * `/sessao_finalizar`: Gera o diário narrativo da sessão.
 
 ### 🏪 Economia, Progresso & Extras
@@ -339,6 +358,13 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 * `/comparar_builds`: Compara atributos entre personagens.
 * `/atributos_sugerir`: Sugere pesos de atributos por papel.
 * `/gwent`: Batalha de cartas em rounds com clima, linhas e turnos automáticos.
+
+### 🧭 Campanha Solo
+
+* `/solo_iniciar`: Inicia campanha solo com progresso individual.
+* `/solo_avancar`: Avança capítulos e ganha XP/recursos.
+* `/solo_diario`: Exibe entradas recentes do diário solo.
+* `/solo_recursos`: Lista recursos coletados.
 
 ---
 
