@@ -1,11 +1,31 @@
-import discord
-import aiosqlite
-from discord.ext import commands
-from discord import app_commands
-import os
 import asyncio
-from openai import OpenAI
+import os
+import tempfile
+import wave
+
+import aiosqlite
+import discord
+from discord import app_commands
+from discord.ext import commands
 from dotenv import load_dotenv
+from openai import OpenAI
+
+try:
+    from discord.ext import voice_recv
+except ImportError:
+    voice_recv = None
+
+if voice_recv:
+    class TranscriptionSink(voice_recv.AudioSink):
+        def __init__(self):
+            super().__init__()
+            self.audio_data = {}
+
+        def write(self, user, data):
+            if not user:
+                return
+            buffer = self.audio_data.setdefault(user.id, bytearray())
+            buffer.extend(data.pcm)
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -23,6 +43,56 @@ class Scribe(commands.Cog):
         self.bot = bot
         self.active_sessions = set() # IDs dos canais que estão sendo gravados
         self.voice_sessions = {} # voice_channel_id -> text_channel_id
+        self.voice_sinks = {} # voice_channel_id -> sink
+
+    async def _transcrever_pcm(self, pcm_bytes: bytes) -> str | None:
+        if not client:
+            return None
+        if not pcm_bytes:
+            return None
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_file:
+            with wave.open(temp_file, "wb") as wav_file:
+                wav_file.setnchannels(2)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(48000)
+                wav_file.writeframes(pcm_bytes)
+            temp_file.flush()
+            try:
+                with open(temp_file.name, "rb") as audio_file:
+                    response = await asyncio.to_thread(
+                        client.audio.transcriptions.create,
+                        model="gpt-4o-mini-transcribe",
+                        file=audio_file,
+                        language="pt",
+                    )
+            except Exception:
+                return None
+        return getattr(response, "text", None)
+
+    async def _resumir_conversa(self, transcricoes: list[str]) -> str | None:
+        if not client:
+            return None
+        if not transcricoes:
+            return None
+
+        prompt = (
+            "Você é Dandelion, o bardo narrador de The Witcher.\n"
+            "Crie um resumo curto e objetivo do que foi conversado na call.\n"
+            "Use português brasileiro e destaque decisões importantes, dúvidas ou próximos passos.\n\n"
+            "TRANSCRIÇÃO:\n"
+            + "\n".join(transcricoes)
+        )
+        try:
+            response = await asyncio.to_thread(
+                client.chat.completions.create,
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.4,
+            )
+        except Exception:
+            return None
+        return response.choices[0].message.content.strip()
 
     async def _join_voice(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
@@ -45,10 +115,35 @@ class Scribe(commands.Cog):
             await interaction.response.send_message("🔊 Já estou na sua call.", ephemeral=True)
             return
 
-        if voice_client:
-            await voice_client.move_to(target_channel)
-        else:
-            await target_channel.connect()
+        if voice_recv is None:
+            await interaction.response.send_message(
+                "❌ Para transcrever a call, instale `discord-ext-voice-recv` e reinicie o bot.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            if voice_client:
+                if not hasattr(voice_client, "listen"):
+                    await voice_client.disconnect()
+                    voice_client = await target_channel.connect(cls=voice_recv.VoiceRecvClient)
+                else:
+                    await voice_client.move_to(target_channel)
+            else:
+                voice_client = await target_channel.connect(cls=voice_recv.VoiceRecvClient)
+        except RuntimeError as exc:
+            if "PyNaCl" in str(exc):
+                await interaction.response.send_message(
+                    "❌ Para usar comandos de voz, instale a biblioteca PyNaCl "
+                    "(`pip install pynacl`) e reinicie o bot.",
+                    ephemeral=True,
+                )
+                return
+            raise
+
+        sink = TranscriptionSink()
+        voice_client.listen(sink)
+        self.voice_sinks[target_channel.id] = sink
 
         self.voice_sessions[target_channel.id] = interaction.channel_id
         await self._log_voice_event(
@@ -76,6 +171,9 @@ class Scribe(commands.Cog):
 
         voice_channel = voice_client.channel
         text_channel_id = self.voice_sessions.pop(voice_channel.id, None)
+        sink = self.voice_sinks.pop(voice_channel.id, None)
+        if sink and hasattr(voice_client, "stop_listening"):
+            voice_client.stop_listening()
         await voice_client.disconnect()
 
         if text_channel_id:
@@ -85,6 +183,34 @@ class Scribe(commands.Cog):
             )
 
         await interaction.response.send_message("🔇 *Dandelion fecha o pergaminho da call e sai.*")
+
+        if not sink or not text_channel_id:
+            return
+        if not client:
+            channel = self.bot.get_channel(text_channel_id)
+            if channel:
+                await channel.send("⚠️ Não consegui transcrever a call porque a OpenAI não está configurada.")
+            return
+
+        channel = self.bot.get_channel(text_channel_id)
+        if not channel:
+            return
+
+        transcricoes = []
+        for user_id, audio in sink.audio_data.items():
+            texto = await self._transcrever_pcm(bytes(audio))
+            if texto:
+                member = interaction.guild.get_member(user_id) if interaction.guild else None
+                nome = member.display_name if member else f"Usuário {user_id}"
+                transcricoes.append(f"{nome}: {texto}")
+
+        resumo = await self._resumir_conversa(transcricoes)
+        if resumo:
+            await channel.send(f"📝 **Resumo da call:**\n{resumo}")
+        elif transcricoes:
+            await channel.send("⚠️ A transcrição foi gerada, mas não consegui resumir o conteúdo.")
+        else:
+            await channel.send("⚠️ Não consegui capturar áudio suficiente para transcrever.")
 
     # --- Comandos de Controle ---
 
