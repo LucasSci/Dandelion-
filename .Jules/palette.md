@@ -21,3 +21,7 @@
 ## 2026-01-20 - Destructive Action Confirmation Pattern
 **Learning:** Users often click buttons accidentally on mobile. Immediate destruction without confirmation leads to frustration and data loss.
 **Action:** Implement `ConfirmarExclusaoView` (or similar confirmation dialog) for all delete/destructive actions. Replace the current view with the confirmation view, offering "Confirm" (Danger) and "Cancel" (Secondary) options.
+
+## 2024-05-24 - Semantic Button Icons
+**Learning:** Embedding emojis in button label strings (e.g., "🗑️ Excluir") creates inconsistent rendering and hampers accessibility compared to using the dedicated `emoji` parameter.
+**Action:** Always separate the icon into the `emoji` parameter and keep the `label` text clean for better screen reader support and UI consistency.
