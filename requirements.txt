@@ -7,6 +7,9 @@ python-dotenv
 # Integração com a Inteligência Artificial do Google
 google-genai
 
+# Integração com a API da OpenAI
+openai
+
 # Banco de dados assíncrono SQLite
 aiosqlite
 
