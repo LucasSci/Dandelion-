@@ -111,6 +111,22 @@ class Scribe(commands.Cog):
         target_channel = voice_state.channel
         voice_client = interaction.guild.voice_client
 
+        bot_member = interaction.guild.me or interaction.guild.get_member(interaction.client.user.id)
+        if not bot_member:
+            await interaction.response.send_message(
+                "❌ Não consegui localizar meu usuário no servidor para validar permissões.",
+                ephemeral=True
+            )
+            return
+
+        permissions = target_channel.permissions_for(bot_member)
+        if not permissions.connect or not permissions.speak:
+            await interaction.response.send_message(
+                "❌ Não tenho permissão para entrar e falar neste canal de voz.",
+                ephemeral=True
+            )
+            return
+
         if voice_client and voice_client.channel and voice_client.channel.id == target_channel.id:
             await interaction.response.send_message("🔊 Já estou na sua call.", ephemeral=True)
             return
@@ -136,6 +152,18 @@ class Scribe(commands.Cog):
                 await voice_client.move_to(target_channel)
             else:
                 await target_channel.connect()
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ Não consegui entrar na call por falta de permissões.",
+                ephemeral=True
+            )
+            return
+        except discord.HTTPException:
+            await interaction.response.send_message(
+                "❌ Houve um problema ao entrar na call. Tente novamente.",
+                ephemeral=True
+            )
+            return
         except RuntimeError as exc:
             if "PyNaCl" in str(exc):
                 await interaction.response.send_message(
@@ -216,6 +244,81 @@ class Scribe(commands.Cog):
             await channel.send("⚠️ A transcrição foi gerada, mas não consegui resumir o conteúdo.")
         else:
             await channel.send("⚠️ Não consegui capturar áudio suficiente para transcrever.")
+
+    # --- Comandos de Controle ---
+
+    @app_commands.command(name="sessao_iniciar", description="📝 Dandelion começa a ler o chat e anotar o RP.")
+    async def sessao_iniciar(self, interaction: discord.Interaction):
+        if interaction.channel_id in self.active_sessions:
+            return await interaction.response.send_message("⚠️ Já estou com o pergaminho aberto neste canal!", ephemeral=True)
+        
+        self.active_sessions.add(interaction.channel_id)
+        
+        # Opcional: Limpar logs antigos deste canal ao iniciar nova sessão
+        async with self.bot.db.execute("DELETE FROM session_logs WHERE channel_id = ?", (interaction.channel_id,)):
+            await self.bot.db.commit()
+
+        embed = discord.Embed(
+            title="📝 O Escriba está Lendo", 
+            description=(
+                "*Dandelion puxa um pergaminho novo e afia sua pena.*\n\n"
+                "Estou lendo todo o **TEXTO** enviado neste canal (RP e Combates).\n"
+                "Ao final, use `/sessao_finalizar` para eu escrever o diário."
+            ), 
+            color=0xFFA500
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="sessao_pausar", description="⏸️ Pausa as anotações temporariamente.")
+    async def sessao_pausar(self, interaction: discord.Interaction):
+        if interaction.channel_id in self.active_sessions:
+            self.active_sessions.remove(interaction.channel_id)
+            await interaction.response.send_message("⏸️ *Dandelion para de escrever.* (Leitura pausada)")
+        else:
+            await interaction.response.send_message("❌ Não estou anotando nada neste canal.", ephemeral=True)
+
+    @app_commands.command(name="call_entrar", description="🔊 (Mestre) Dandelion entra na call e registra os eventos.")
+    @app_commands.check(is_mestre)
+    async def call_entrar(self, interaction: discord.Interaction):
+        await self._join_voice(interaction)
+        if voice_client:
+            await voice_client.move_to(target_channel)
+        else:
+            await target_channel.connect()
+
+    @app_commands.command(
+        name="voz_entrar",
+        description="🔊 (Mestre) Dandelion entra na call para registrar a conversa."
+    )
+    @app_commands.check(is_mestre)
+    async def voz_entrar(self, interaction: discord.Interaction):
+        await self._join_voice(interaction)
+
+    @app_commands.command(name="call_sair", description="🔇 (Mestre) Dandelion sai da call e encerra os registros.")
+    @app_commands.check(is_mestre)
+    async def call_sair(self, interaction: discord.Interaction):
+        await self._leave_voice(interaction)
+    async def _leave_voice(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "❌ Este comando só pode ser usado em um servidor.", ephemeral=True
+            )
+            return
+
+        voice_client = interaction.guild.voice_client
+        if not voice_client or not voice_client.channel:
+            await interaction.response.send_message(
+                "❌ Não estou em nenhuma call neste servidor.", ephemeral=True
+            )
+            return
+
+    @app_commands.command(
+        name="voz_sair",
+        description="🔇 (Mestre) Dandelion sai da call e encerra os registros."
+    )
+    @app_commands.check(is_mestre)
+    async def voz_sair(self, interaction: discord.Interaction):
+        await self._leave_voice(interaction)
 
     # --- Comandos de Controle ---
 
