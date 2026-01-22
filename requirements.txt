@@ -12,6 +12,7 @@ openai
 
 # Áudio/voz no Discord
 pynacl
+discord-ext-voice-recv
 
 # Banco de dados assíncrono SQLite
 aiosqlite
