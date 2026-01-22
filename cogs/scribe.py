@@ -21,11 +21,17 @@ if voice_recv:
             super().__init__()
             self.audio_data = {}
 
+        def wants_opus(self) -> bool:
+            return False
+
         def write(self, user, data):
             if not user:
                 return
             buffer = self.audio_data.setdefault(user.id, bytearray())
             buffer.extend(data.pcm)
+
+        def cleanup(self) -> None:
+            self.audio_data.clear()
 
 # Carrega variáveis de ambiente
 load_dotenv()
