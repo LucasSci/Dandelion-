@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from vtt_engine.grid_system import GridMap
@@ -13,6 +13,34 @@ from witcher_rules import rolar_d10_explosivo
 router = APIRouter()
 app = FastAPI(title="Witcher TTRPG Integration")
 MAP_SCALE_METERS_PER_SQUARE = 2
+
+
+class VTTEvent(BaseModel):
+    event_type: str
+    payload: dict[str, Any]
+
+
+class WebSocketManager:
+    def __init__(self) -> None:
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket) -> None:
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict[str, Any]) -> None:
+        for websocket in list(self.active_connections):
+            try:
+                await websocket.send_json(message)
+            except Exception:
+                self.disconnect(websocket)
+
+
+ws_manager = WebSocketManager()
 
 
 class RollSkillRequest(BaseModel):
@@ -84,6 +112,22 @@ def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
         grid_type=grid_map.grid_type,
         scale_meters=grid_map.scale_meters,
     )
+
+
+@router.post("/vtt/event", response_model=None)
+async def vtt_event(payload: VTTEvent) -> dict[str, str]:
+    await ws_manager.broadcast({"event": payload.event_type, "data": payload.payload})
+    return {"status": "ok"}
+
+
+@router.websocket("/ws/vtt")
+async def vtt_ws(websocket: WebSocket) -> None:
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
 
 
 class MapGenerateRequest(BaseModel):

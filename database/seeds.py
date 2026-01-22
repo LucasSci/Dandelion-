@@ -118,6 +118,44 @@ FROM monsters m, weaknesses w
 WHERE m.category='Necrophage' AND w.key IN ('necrophage_oil','igni','aard','quen','silver');
 """
 
+SEED_ALCHEMY_SQL = """
+INSERT OR IGNORE INTO alchemy_ingredients (nome, tipo, biome, raridade, qualidade_min, qualidade_max, descricao) VALUES
+('Álcool base', 'Base', 'Qualquer', 1, 60, 100, 'Destilado neutro usado como base de poções.'),
+('Arenária', 'Erva', 'Planície', 1, 40, 100, 'Erva comum de planícies ventosas.'),
+('Verbena', 'Erva', 'Floresta', 2, 45, 100, 'Folhas usadas para estabilizar misturas.'),
+('Ranúnculo do pântano', 'Erva', 'Pântano', 3, 35, 90, 'Flores viscosas com aroma acre.'),
+('Cogumelo da gruta', 'Erva', 'Caverna', 2, 40, 95, 'Fungo fosforescente, ótimo para cataplasmas.'),
+('Sangue de monstro', 'Ingrediente de Monstro', 'Qualquer', 3, 30, 85, 'Essência vital de criaturas perigosas.'),
+('Garra de monstro', 'Ingrediente de Monstro', 'Qualquer', 4, 25, 80, 'Fragmentos usados em decoctos.'),
+('Raiz amarga', 'Erva', 'Floresta', 2, 40, 95, 'Raiz que dá potência a poções de resistência.');
+
+INSERT OR IGNORE INTO alchemy_recipes (nome, base_alcoolica, efeito, toxicidade_base, qualidade_min) VALUES
+('Andorinha', 'Álcool base', 'Recupera vitalidade ao longo de alguns turnos.', 15, 55),
+('Gato', 'Álcool base', 'Aumenta visão em baixa luz por algumas horas.', 12, 50),
+('Relâmpago', 'Álcool base', 'Eleva vigor e reflexos por pouco tempo.', 20, 60);
+
+INSERT OR IGNORE INTO alchemy_recipe_ingredients (recipe_id, ingredient_id, quantidade)
+SELECT r.id, i.id, 2
+FROM alchemy_recipes r JOIN alchemy_ingredients i ON r.nome = 'Andorinha' AND i.nome = 'Verbena';
+INSERT OR IGNORE INTO alchemy_recipe_ingredients (recipe_id, ingredient_id, quantidade)
+SELECT r.id, i.id, 1
+FROM alchemy_recipes r JOIN alchemy_ingredients i ON r.nome = 'Andorinha' AND i.nome = 'Raiz amarga';
+
+INSERT OR IGNORE INTO alchemy_recipe_ingredients (recipe_id, ingredient_id, quantidade)
+SELECT r.id, i.id, 2
+FROM alchemy_recipes r JOIN alchemy_ingredients i ON r.nome = 'Gato' AND i.nome = 'Arenária';
+INSERT OR IGNORE INTO alchemy_recipe_ingredients (recipe_id, ingredient_id, quantidade)
+SELECT r.id, i.id, 1
+FROM alchemy_recipes r JOIN alchemy_ingredients i ON r.nome = 'Gato' AND i.nome = 'Cogumelo da gruta';
+
+INSERT OR IGNORE INTO alchemy_recipe_ingredients (recipe_id, ingredient_id, quantidade)
+SELECT r.id, i.id, 2
+FROM alchemy_recipes r JOIN alchemy_ingredients i ON r.nome = 'Relâmpago' AND i.nome = 'Ranúnculo do pântano';
+INSERT OR IGNORE INTO alchemy_recipe_ingredients (recipe_id, ingredient_id, quantidade)
+SELECT r.id, i.id, 1
+FROM alchemy_recipes r JOIN alchemy_ingredients i ON r.nome = 'Relâmpago' AND i.nome = 'Sangue de monstro';
+"""
+
 
 def seed_bestiary(conn) -> None:
     """Aplica seeds de arquivos externos e strings internas de forma segura."""
@@ -153,6 +191,7 @@ def seed_bestiary(conn) -> None:
         cur.executescript(SEED_LOCATIONS_SQL)
         cur.executescript(SEED_MONSTERS_SQL)
         cur.executescript(SEED_RELATIONS_SQL)
+        cur.executescript(SEED_ALCHEMY_SQL)
         conn.commit()
     except Exception as e:
         print(f"⚠️ Erro nos seeds internos: {e}")
