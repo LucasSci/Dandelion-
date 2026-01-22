@@ -158,6 +158,11 @@ async def on_app_command_error(interaction: discord.Interaction, error):
         await interaction.response.send_message(
             f"⏳ **Aguarde {error.retry_after:.1f}s.**", ephemeral=True
         )
+    elif isinstance(error, app_commands.CheckFailure):
+        with suppress(discord.InteractionResponded):
+            await interaction.response.send_message(
+                "❌ Você não tem permissão para usar este comando.", ephemeral=True
+            )
     else:
         logger.exception("Erro no comando", exc_info=error)
         with suppress(discord.InteractionResponded):
