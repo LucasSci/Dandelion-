@@ -5,7 +5,15 @@ from discord import ui
 def gerar_barra(atual, maximo, tamanho=10):
     pct = max(0, atual / maximo)
     cheios = int(pct * tamanho)
-    return "🟩" * cheios + "⬛" * (tamanho - cheios)
+
+    if pct > 0.6:
+        cor = "🟩"
+    elif pct > 0.3:
+        cor = "🟨"
+    else:
+        cor = "🟥"
+
+    return cor * cheios + "⬛" * (tamanho - cheios)
 
 # --- LINK EXTERNO (ROLL20) ---
 class Roll20LinkView(ui.View):
