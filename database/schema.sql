@@ -192,6 +192,12 @@ CREATE TABLE IF NOT EXISTS session_logs (
     timestamp TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS transcription_settings (
+    guild_id INTEGER PRIMARY KEY,
+    transcription_channel_id INTEGER,
+    summary_channel_id INTEGER
+);
+
 -- RUMORES / GANCHOS --
 CREATE TABLE IF NOT EXISTS rumores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

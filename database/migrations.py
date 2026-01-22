@@ -198,6 +198,17 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             """
         )
 
+    if not _table_exists(cursor, "transcription_settings"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS transcription_settings (
+                guild_id INTEGER PRIMARY KEY,
+                transcription_channel_id INTEGER,
+                summary_channel_id INTEGER
+            );
+            """
+        )
+
     if not _table_exists(cursor, "economia_regional"):
         cursor.execute(
             """
