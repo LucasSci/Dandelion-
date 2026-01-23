@@ -13,5 +13,8 @@ class BaseRPGView(ui.View):
             return True
         if interaction.user.guild_permissions.administrator:
             return True
-        await interaction.response.send_message("⛔ Apenas o dono ou Mestre podem interagir.", ephemeral=True)
+        await interaction.response.send_message(
+            f"⛔ **Você não pode interagir aqui!**\n\nEsta ficha pertence a <@{self.dono_id}>. Use `/criar_ficha` para criar o seu personagem.",
+            ephemeral=True
+        )
         return False
