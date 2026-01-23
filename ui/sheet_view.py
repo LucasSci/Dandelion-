@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import discord
@@ -86,13 +87,15 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     if toxicidade_atual is None:
         toxicidade_atual = 0
 
-    atributos = await character_repo.list_attributes(personagem_id, limit=12)
+    atributos, pericias, itens = await asyncio.gather(
+        character_repo.list_attributes(personagem_id, limit=12),
+        skill_repo.list_skills_for_sheet(personagem_id, limit=10, order_by_name=True),
+        inventory_repo.list_recent_items(user_id, limit=8),
+    )
 
-    pericias = await skill_repo.list_skills_for_sheet(personagem_id, limit=10, order_by_name=True)
+    # Using indexing to handle potential extra columns (description) from the repo
+    pericias_formatadas = [(p[0], p[1] or "—") for p in pericias]
 
-    itens = await inventory_repo.list_recent_items(user_id, limit=8)
-
-    pericias_formatadas = [(nome, dado or "—") for nome, dado in pericias]
     itens_formatados = [
         f"**{nome}** ({tipo})" if tipo else f"**{nome}**"
         for nome, tipo in itens
