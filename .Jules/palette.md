@@ -25,3 +25,7 @@
 ## 2024-05-24 - Semantic Button Icons
 **Learning:** Embedding emojis in button label strings (e.g., "🗑️ Excluir") creates inconsistent rendering and hampers accessibility compared to using the dedicated `emoji` parameter.
 **Action:** Always separate the icon into the `emoji` parameter and keep the `label` text clean for better screen reader support and UI consistency.
+
+## 2026-01-20 - Dynamic Status Bar Colors
+**Learning:** Fixed-color health bars (always green) fail to convey urgency. Using color-coded emojis based on health percentage improves at-a-glance readability.
+**Action:** Use Green (🟩) for >60%, Yellow (🟨) for 31-60%, and Red (🟥) for <=30% in all text-based status bars.
