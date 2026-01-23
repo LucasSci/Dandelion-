@@ -652,7 +652,13 @@ class FichaView(BaseRPGView):
         character_repo = CharacterRepository(interaction.client.db)
         inventory_repo = InventoryRepository(interaction.client.db)
         skill_repo = SkillRepository(interaction.client.db)
-        recursos = await character_repo.fetch_resources(self.personagem_id)
+
+        # Optimization: Parallelize independent DB queries
+        recursos, skills, itens = await asyncio.gather(
+            character_repo.fetch_resources(self.personagem_id),
+            skill_repo.list_skills_for_sheet(self.personagem_id, limit=15),
+            inventory_repo.list_potions(interaction.user.id)
+        )
 
         if not recursos:
             return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
@@ -660,9 +666,6 @@ class FichaView(BaseRPGView):
         vigor_atual, vigor_max, toxicidade_atual, toxicidade_max = recursos
         if vigor_atual is None: vigor_atual = vigor_max
         if toxicidade_atual is None: toxicidade_atual = 0
-
-        skills = await skill_repo.list_skills_for_sheet(self.personagem_id, limit=15)
-        itens = await inventory_repo.list_potions(interaction.user.id)
 
         potions = [
             (item_id, nome, efeito)
@@ -710,15 +713,18 @@ class FichaView(BaseRPGView):
 
         character_repo = CharacterRepository(interaction.client.db)
         inventory_repo = InventoryRepository(interaction.client.db)
-        dados = await character_repo.fetch_combat_stats(self.personagem_id)
+
+        # Optimization: Parallelize independent DB queries
+        dados, itens = await asyncio.gather(
+            character_repo.fetch_combat_stats(self.personagem_id),
+            inventory_repo.list_items_with_effects(interaction.user.id)
+        )
 
         if not dados:
             return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
 
         hp_atual, hp_max, ataque, defesa = dados
         if hp_atual is None: hp_atual = hp_max
-
-        itens = await inventory_repo.list_items_with_effects(interaction.user.id)
 
         armas = []
         armaduras = []
@@ -759,8 +765,12 @@ class FichaView(BaseRPGView):
 
         character_repo = CharacterRepository(interaction.client.db)
         inventory_repo = InventoryRepository(interaction.client.db)
-        itens = await inventory_repo.list_items(interaction.user.id)
-        nivel = await character_repo.fetch_level(self.personagem_id)
+
+        # Optimization: Parallelize independent DB queries
+        itens, nivel = await asyncio.gather(
+            inventory_repo.list_items(interaction.user.id),
+            character_repo.fetch_level(self.personagem_id)
+        )
         nivel = nivel if nivel is not None else 1
 
         if not itens:
