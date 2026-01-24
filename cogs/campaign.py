@@ -9,7 +9,9 @@ from data_cache import (
 )
 
 class Campaign(commands.Cog):
-    diario = app_commands.Group(name="diario", description="Comandos do diário da campanha.")
+    diario_campanha = app_commands.Group(
+        name="diario_campanha", description="Comandos do diário da campanha."
+    )
     lore = app_commands.Group(name="lore", description="Comandos de lore do mundo.")
     mundo = app_commands.Group(name="mundo", description="Comandos de mundo, bioma e ambientação.")
 
@@ -40,7 +42,9 @@ class Campaign(commands.Cog):
             nomes = [nome for nome in nomes if termo in nome.lower()]
         return [app_commands.Choice(name=nome, value=nome) for nome in nomes[:25]]
 
-    @diario.command(name="ver", description="📖 Vê a Linha do Tempo atual da campanha (O que a IA sabe)")
+    @diario_campanha.command(
+        name="ver", description="📖 Vê a Linha do Tempo atual da campanha (O que a IA sabe)"
+    )
     @app_commands.check(is_mestre)
     async def ver_diario(self, interaction: discord.Interaction):
         # Busca tudo ordenado por ID (Ordem de inserção = Ordem Cronológica)
@@ -63,7 +67,7 @@ class Campaign(commands.Cog):
         embed.set_footer(text="A IA usará APENAS estes fatos para gerar missões.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @diario.command(name="adicionar", description="➕ Adiciona um evento HOJE na linha do tempo")
+    @diario_campanha.command(name="adicionar", description="➕ Adiciona um evento HOJE na linha do tempo")
     @app_commands.describe(evento="Ex: 'O grupo chegou em Zerrikania e irritou o sultão.'")
     @app_commands.check(is_mestre)
     async def add_evento(self, interaction: discord.Interaction, evento: str):
@@ -71,7 +75,9 @@ class Campaign(commands.Cog):
         await self.bot.db.commit()
         await interaction.response.send_message(f"✅ Evento registrado no fim da fila.", ephemeral=True)
 
-    @diario.command(name="consequencia", description="➕ Registra consequência persistente de uma ação")
+    @diario_campanha.command(
+        name="consequencia", description="➕ Registra consequência persistente de uma ação"
+    )
     @app_commands.describe(consequencia="Ex: 'A vila agora teme bruxos e recusa abrigo.'")
     @app_commands.check(is_mestre)
     async def add_consequencia(self, interaction: discord.Interaction, consequencia: str):
@@ -82,7 +88,9 @@ class Campaign(commands.Cog):
         await self.bot.db.commit()
         await interaction.response.send_message("✅ Consequência registrada.", ephemeral=True)
 
-    @diario.command(name="importar_txt", description="📂 Importa um resumo longo via arquivo .txt")
+    @diario_campanha.command(
+        name="importar_txt", description="📂 Importa um resumo longo via arquivo .txt"
+    )
     @app_commands.check(is_mestre)
     async def import_txt(self, interaction: discord.Interaction, arquivo: discord.Attachment):
         if not arquivo.filename.endswith('.txt'): return await interaction.response.send_message("Apenas .txt", ephemeral=True)
@@ -95,7 +103,7 @@ class Campaign(commands.Cog):
         
         await interaction.followup.send(f"✅ Resumo importado! A IA agora conhece esse contexto.")
 
-    @diario.command(name="editar", description="✏️ Corrige um evento errado na memória")
+    @diario_campanha.command(name="editar", description="✏️ Corrige um evento errado na memória")
     @app_commands.describe(id_evento="Número do ID (veja no /diario ver)", novo_texto="O texto correto")
     @app_commands.check(is_mestre)
     async def edit_evento(self, interaction: discord.Interaction, id_evento: int, novo_texto: str):
@@ -107,14 +115,14 @@ class Campaign(commands.Cog):
         else:
             await interaction.response.send_message("❌ ID não encontrado.", ephemeral=True)
 
-    @diario.command(name="apagar", description="🗑️ Remove um evento da memória")
+    @diario_campanha.command(name="apagar", description="🗑️ Remove um evento da memória")
     @app_commands.check(is_mestre)
     async def del_evento(self, interaction: discord.Interaction, id_evento: int):
         await self.bot.db.execute("DELETE FROM memoria_campanha WHERE id = ?", (id_evento,))
         await self.bot.db.commit()
         await interaction.response.send_message(f"🗑️ Evento [{id_evento}] removido da linha do tempo.", ephemeral=True)
 
-    @diario.command(name="limpar_tudo", description="⚠️ APAGA TODA A MEMÓRIA (Reset)")
+    @diario_campanha.command(name="limpar_tudo", description="⚠️ APAGA TODA A MEMÓRIA (Reset)")
     @app_commands.check(is_mestre)
     async def wipe_memory(self, interaction: discord.Interaction):
         await self.bot.db.execute("DELETE FROM memoria_campanha")

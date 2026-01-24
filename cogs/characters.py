@@ -197,6 +197,49 @@ class Characters(commands.Cog):
         local = local or "Desconhecida"
         await interaction.response.send_message(f"📍 **{personagem}** está em **{local}**.")
 
+    @app_commands.command(
+        name="diario",
+        description="📖 Mostra os últimos 5 fatos registrados sobre o personagem",
+    )
+    async def diario(self, interaction: discord.Interaction, usuario: Optional[discord.Member] = None):
+        if not self._permitir_alvo(interaction, usuario):
+            return await interaction.response.send_message("❌ Você não pode ver o diário desse personagem.", ephemeral=True)
+
+        target = usuario or interaction.user
+        dados = await self.character_repo.fetch_character_summary_by_user(target.id)
+        if not dados:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, nome, _, _ = dados
+        async with self.bot.db.execute(
+            """
+            SELECT mc.conteudo, mc.data_registro
+            FROM personagem_memorias pm
+            JOIN memoria_campanha mc ON mc.id = pm.sessao_id
+            WHERE pm.personagem_id = ?
+            ORDER BY pm.id DESC
+            LIMIT 5
+            """,
+            (personagem_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+        if not rows:
+            return await interaction.response.send_message(
+                f"📭 Não há fatos registrados para **{nome}** ainda.",
+                ephemeral=True,
+            )
+
+        texto = "\n\n".join(
+            f"**{data_registro}**\n{conteudo}" for conteudo, data_registro in rows
+        )
+        embed = discord.Embed(
+            title=f"📖 Diário de {nome}",
+            description=texto,
+            color=0x7A0000,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @app_commands.command(name="viajar", description="Define a localização atual do personagem")
     @app_commands.autocomplete(destino=localizacao_autocomplete)
     async def viajar(self, interaction: discord.Interaction, destino: str, usuario: discord.Member = None):
