@@ -1,16 +1,20 @@
 import asyncio
+import io
 import time
 
 import discord
 from discord import ui
-from data.repositories import CharacterRepository, InventoryRepository, SkillRepository
+from data.repositories import CharacterRepository, InventoryRepository, SkillRepository, SoloRepository
 from utils import rolar_dados, rolar_pericia_explosiva
+from utils.dc_table import DEFAULT_DC_THRESHOLDS, classificar_resultado
 from ui.base_view import BaseRPGView
 from ui.views import ConfirmarExclusaoView
 
 # ==============================================================================
 # 0. HELPERS (LAYOUT)
 # ==============================================================================
+
+DEFAULT_THUMBNAIL_URL = "https://placehold.co/256x256/png?text=Ficha"
 
 def _format_dual_column(items, name_width=12, value_width=5):
     if not items:
@@ -79,6 +83,17 @@ async def _table_exists(db, table: str) -> bool:
         (table,),
     ) as cursor:
         return await cursor.fetchone() is not None
+def _apply_embed_identity(
+    embed: discord.Embed,
+    titulo: str | None,
+    imagem_url: str | None,
+    footer_text: str,
+) -> None:
+    embed.set_author(name=titulo or "Sem título")
+    thumbnail_url = imagem_url or DEFAULT_THUMBNAIL_URL
+    if thumbnail_url:
+        embed.set_thumbnail(url=thumbnail_url)
+    _set_footer_timestamp(embed, footer_text)
 
 
 async def construir_embed_ficha(db, personagem_id, user_id):
@@ -92,7 +107,7 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         return None
 
     (
-        nome, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max, mp_max,
+        nome, titulo, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max, mp_max,
         ataque, defesa, xp_atual, vigor_atual, vigor_max, toxicidade_atual, toxicidade_max, local
     ) = dados
     if hp_atual is None:
@@ -164,9 +179,12 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         inline=False
     )
 
-    if img:
-        embed.set_thumbnail(url=img)
-    _set_footer_timestamp(embed, "Ficha estilo pergaminho • Visual inspirado em crônicas de bruxos")
+    _apply_embed_identity(
+        embed,
+        titulo,
+        img,
+        "Ficha do personagem • Estilo pergaminho inspirado em crônicas de bruxos",
+    )
     return embed
 
 # ==============================================================================
@@ -239,19 +257,35 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         )
         self.pericia_valor = ui.TextInput(
             label="Valor da Perícia",
-            placeholder="Ex: 4",
+            placeholder="Ex: 4 (Deixe vazio para 0)",
+            required=False
+        )
+        self.dc_valor = ui.TextInput(
+            label="DC (opcional)",
+            placeholder="Ex: 15 (deixe vazio para tabela padrão)",
+            required=False,
         )
 
         self.add_item(self.pericia_nome)
         self.add_item(self.pericia_valor)
+        self.add_item(self.dc_valor)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            pericia_valor = int(self.pericia_valor.value)
+            val_str = self.pericia_valor.value
+            pericia_valor = int(val_str) if val_str else 0
         except ValueError:
             return await interaction.response.send_message("❌ Valor da perícia inválido.", ephemeral=True)
 
+        dc = None
+        if self.dc_valor.value:
+            try:
+                dc = int(self.dc_valor.value)
+            except ValueError:
+                return await interaction.response.send_message("❌ DC inválido. Use um número inteiro.", ephemeral=True)
+
         rolagens, total, direcao = rolar_pericia_explosiva(self.atributo_valor, pericia_valor)
+        classificacao = classificar_resultado(total, dc)
 
         etiqueta = self.pericia_nome.value.strip() if self.pericia_nome.value else "Perícia"
         detalhes_rolagem = ", ".join(map(str, rolagens))
@@ -275,7 +309,13 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             value=f"1d10 + Stat({self.atributo_valor}) + Skill({pericia_valor})",
             inline=False
         )
+        if dc is not None:
+            embed.add_field(name="DC", value=str(dc), inline=True)
+        else:
+            tabela_txt = "/".join(map(str, DEFAULT_DC_THRESHOLDS))
+            embed.add_field(name="Tabela de Dificuldade", value=tabela_txt, inline=True)
         embed.add_field(name="Total", value=f"# **{total}**", inline=False)
+        embed.add_field(name="Classificação", value=classificacao, inline=False)
 
         await interaction.response.send_message(embed=embed)
 
@@ -685,7 +725,14 @@ class FichaView(BaseRPGView):
                     is_active = (mode == "inventario")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+                elif item.label == "Crônicas":
+                    is_active = (mode == "cronicas")
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Buscar Perícia":
+                    item.disabled = (mode != "geral")
+                    item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
+                elif item.label == "Minha Lore":
                     item.disabled = (mode != "geral")
                     item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
                 elif item.label in {"Nova Skill", "Gerenciar"}:
@@ -713,10 +760,18 @@ class FichaView(BaseRPGView):
     async def btn_inventario(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_inventario(interaction)
 
+    @ui.button(label="Crônicas", emoji="📚", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_cronicas(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_cronicas(interaction)
+
     # --- AÇÕES (ROW 1) ---
     @ui.button(label="Buscar Perícia", emoji="🔎", style=discord.ButtonStyle.secondary, row=1)
     async def btn_buscar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
+
+    @ui.button(label="Minha Lore", emoji="📖", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_minha_lore(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_minha_lore(interaction)
 
     @ui.button(label="Nova Skill", emoji="➕", style=discord.ButtonStyle.success, row=1)
     async def btn_add_skill(self, interaction: discord.Interaction, button: ui.Button):
@@ -755,15 +810,20 @@ class FichaView(BaseRPGView):
         skill_repo = SkillRepository(interaction.client.db)
 
         # Optimization: Parallelize independent DB queries
-        recursos, skills, itens = await asyncio.gather(
+        perfil, recursos, skills, itens = await asyncio.gather(
+            character_repo.fetch_profile(self.personagem_id),
             character_repo.fetch_resources(self.personagem_id),
             skill_repo.list_skills_for_sheet(self.personagem_id, limit=15),
             inventory_repo.list_potions(interaction.user.id)
         )
 
+        if not perfil:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
         if not recursos:
             return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
 
+        _, titulo, imagem_url = perfil
         vigor_atual, vigor_max, toxicidade_atual, toxicidade_max = recursos
         if vigor_atual is None: vigor_atual = vigor_max
         if toxicidade_atual is None: toxicidade_atual = 0
@@ -801,7 +861,7 @@ class FichaView(BaseRPGView):
         else:
             embed.add_field(name="🧪 Poções", value="Nenhuma poção no inventário.", inline=False)
 
-        _set_footer_timestamp(embed, "Magia & Alquimia")
+        _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Magia & Alquimia")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -816,14 +876,19 @@ class FichaView(BaseRPGView):
         inventory_repo = InventoryRepository(interaction.client.db)
 
         # Optimization: Parallelize independent DB queries
-        dados, itens = await asyncio.gather(
+        perfil, dados, itens = await asyncio.gather(
+            character_repo.fetch_profile(self.personagem_id),
             character_repo.fetch_combat_stats(self.personagem_id),
             inventory_repo.list_items_with_effects(interaction.user.id)
         )
 
+        if not perfil:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
         if not dados:
             return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
 
+        _, titulo, imagem_url = perfil
         hp_atual, hp_max, ataque, defesa = dados
         if hp_atual is None: hp_atual = hp_max
 
@@ -853,7 +918,7 @@ class FichaView(BaseRPGView):
         self.add_item(RolagemCombateButton("Roll Damage", "💥", self.personagem_id, "1d6+{ataque}"))
         self.add_item(FerimentosCriticosSelect())
 
-        _set_footer_timestamp(embed, "Combate")
+        _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Combate")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -868,10 +933,15 @@ class FichaView(BaseRPGView):
         inventory_repo = InventoryRepository(interaction.client.db)
 
         # Optimization: Parallelize independent DB queries
-        itens, nivel = await asyncio.gather(
+        perfil, itens, nivel = await asyncio.gather(
+            character_repo.fetch_profile(self.personagem_id),
             inventory_repo.list_items(interaction.user.id),
             character_repo.fetch_level(self.personagem_id)
         )
+        if not perfil:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        _, titulo, imagem_url = perfil
         nivel = nivel if nivel is not None else 1
 
         if not itens:
@@ -886,7 +956,7 @@ class FichaView(BaseRPGView):
         capacidade = 10 + (nivel * 2)
         embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
         embed.add_field(name="Encumbrance", value=f"{encumbrance}/{capacidade} (1 por item)", inline=False)
-        _set_footer_timestamp(embed, "Layout estilo pergaminho limpo • Lista dinâmica")
+        _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Inventário")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -898,7 +968,15 @@ class FichaView(BaseRPGView):
         self.clear_dynamic_buttons()
 
         character_repo = CharacterRepository(interaction.client.db)
-        atributos = await character_repo.list_attributes(self.personagem_id)
+        perfil, atributos = await asyncio.gather(
+            character_repo.fetch_profile(self.personagem_id),
+            character_repo.list_attributes(self.personagem_id),
+        )
+
+        if not perfil:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        _, titulo, imagem_url = perfil
 
         embed = discord.Embed(title="🎯 Atributos", color=0x5865f2)
         if not atributos:
@@ -909,12 +987,101 @@ class FichaView(BaseRPGView):
                 self.add_item(AtributoButton(nome, valor))
         self.add_item(ExplorarConhecimentoButton(self.personagem_id))
 
-        _set_footer_timestamp(embed, "Atributos")
+        _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Atributos")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
         else:
             await interaction.response.edit_message(embed=embed, view=self)
+
+    async def mostrar_cronicas(self, interaction: discord.Interaction):
+        self.update_buttons_state("cronicas")
+        self.clear_dynamic_buttons()
+
+        character_repo = CharacterRepository(interaction.client.db)
+        solo_repo = SoloRepository(interaction.client.db)
+
+        perfil, campanha, entradas = await asyncio.gather(
+            character_repo.fetch_profile(self.personagem_id),
+            solo_repo.fetch_campaign(interaction.user.id),
+            solo_repo.list_story_entries(interaction.user.id, limit=6),
+        )
+
+        if not perfil:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        _, titulo, imagem_url = perfil
+
+        embed = discord.Embed(title="📚 Crônicas", color=0x6F4E37)
+
+        if campanha:
+            _, personagem_id, capitulo, progresso, gancho, _, local, ultima_acao = campanha
+            resumo = (
+                f"Capítulo **{capitulo}** • Progresso **{progresso}%**\n"
+                f"Gancho: {gancho or 'Sem gancho registrado.'}\n"
+                f"Última localização: {local or 'Desconhecida'}\n"
+                f"Última ação: {ultima_acao}"
+            )
+            if personagem_id != self.personagem_id:
+                resumo = (
+                    "⚠️ As crônicas salvas pertencem a outro personagem.\n"
+                    + resumo
+                )
+            embed.add_field(name="Resumo da Jornada", value=resumo, inline=False)
+        else:
+            embed.add_field(
+                name="Resumo da Jornada",
+                value="Nenhuma campanha solo registrada ainda.",
+                inline=False,
+            )
+
+        if entradas:
+            entradas_formatadas = "\n".join(
+                [f"• Cap. {cap} — {entrada} ({criado_em})" for cap, entrada, criado_em in entradas]
+            )
+            embed.add_field(name="Histórico recente", value=entradas_formatadas, inline=False)
+        else:
+            embed.add_field(
+                name="Histórico recente",
+                value="Sem registros recentes nas crônicas.",
+                inline=False,
+            )
+
+        _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Crônicas")
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def mostrar_minha_lore(self, interaction: discord.Interaction):
+        character_repo = CharacterRepository(interaction.client.db)
+        dados = await character_repo.fetch_lore(self.personagem_id)
+
+        if not dados:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        nome, titulo, historia, imagem_url = dados
+        biografia = historia or "Nenhuma biografia registrada ainda."
+
+        if len(biografia) > 3800:
+            arquivo = io.BytesIO(biografia.encode("utf-8"))
+            arquivo_discord = discord.File(arquivo, filename=f"{nome}_lore.txt")
+            embed = discord.Embed(
+                title="📖 Minha Lore",
+                description="A biografia é longa. Consulte o arquivo em anexo.",
+                color=0x7A5C3E,
+            )
+            _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Minha Lore")
+            return await interaction.response.send_message(
+                embed=embed,
+                file=arquivo_discord,
+                ephemeral=True,
+            )
+
+        embed = discord.Embed(title="📖 Minha Lore", description=biografia, color=0x7A5C3E)
+        _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Minha Lore")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     def clear_dynamic_buttons(self):
         items_to_keep = [item for item in self.children if getattr(item, "is_static", False)]

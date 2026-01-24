@@ -7,6 +7,7 @@ from data_cache import (
     get_world_location_details,
     get_world_location_names,
 )
+from data.repositories import CharacterMentionRepository, CharacterRepository
 
 class Campaign(commands.Cog):
     diario = app_commands.Group(name="diario", description="Comandos do diário da campanha.")
@@ -15,6 +16,8 @@ class Campaign(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.character_repo = CharacterRepository(bot.db)
+        self.character_mention_repo = CharacterMentionRepository(bot.db)
 
     @staticmethod
     def _split_text(texto: str, limite: int = 3900) -> list[str]:
@@ -61,6 +64,66 @@ class Campaign(commands.Cog):
 
         embed = discord.Embed(title="📖 Diário do Dandelion (Timeline)", description=texto, color=0xA84300)
         embed.set_footer(text="A IA usará APENAS estes fatos para gerar missões.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @diario.command(name="personagem", description="📓 Mostra os últimos fatos do seu personagem")
+    @app_commands.describe(usuario="Outro jogador (apenas mestre)")
+    async def diario_personagem(
+        self,
+        interaction: discord.Interaction,
+        usuario: Optional[discord.Member] = None,
+    ):
+        if usuario and not is_mestre(interaction):
+            return await interaction.response.send_message(
+                "❌ Apenas o Mestre pode consultar o diário de outros jogadores.",
+                ephemeral=True,
+            )
+
+        target = usuario or interaction.user
+        personagem = await self.character_repo.fetch_character_summary_by_user(target.id)
+        if not personagem:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, personagem_nome, _, _ = personagem
+        mencoes = await self.character_mention_repo.list_mentions(personagem_id, limit=5)
+
+        if mencoes:
+            descricao = "\n".join(
+                f"**[{m_id}]** {fato} (relevância: {relevancia}, {criado_em})"
+                for m_id, fato, relevancia, criado_em, _ in mencoes
+            )
+            embed = discord.Embed(
+                title=f"📓 Diário de {personagem_nome}",
+                description=descricao,
+                color=0x8D6E63,
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        async with self.bot.db.execute(
+            """
+            SELECT id, conteudo, data_registro
+            FROM memoria_campanha
+            ORDER BY id DESC
+            LIMIT 5
+            """
+        ) as cursor:
+            memoria = await cursor.fetchall()
+
+        if not memoria:
+            return await interaction.response.send_message(
+                "📭 Nenhum fato registrado ainda para a campanha.",
+                ephemeral=True,
+            )
+
+        descricao = "\n".join(
+            f"**[{mem_id}]** {conteudo} ({data_registro})"
+            for mem_id, conteudo, data_registro in memoria
+        )
+        embed = discord.Embed(
+            title="📖 Últimos fatos da campanha",
+            description=descricao,
+            color=0x8D6E63,
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @diario.command(name="adicionar", description="➕ Adiciona um evento HOJE na linha do tempo")
@@ -131,6 +194,13 @@ class Campaign(commands.Cog):
             params.append(interaction.user.id)
         query += " ORDER BY id ASC"
 
+        is_mestre = Campaign.is_mestre(interaction)
+        params = []
+        query = "SELECT id, titulo, resumo, conteudo FROM lore_entries"
+        if not is_mestre:
+            query += " WHERE is_private = 0 OR is_private IS NULL OR owner_id = ?"
+            params.append(interaction.user.id)
+        query += " ORDER BY id ASC"
         async with self.bot.db.execute(query, params) as c:
             rows = await c.fetchall()
 
@@ -159,36 +229,70 @@ class Campaign(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
     @lore.command(name="adicionar", description="➕ Registra um fato do mundo para a IA usar")
-    @app_commands.describe(titulo="Título curto do lore", conteudo="Texto completo do conhecimento")
+    @app_commands.describe(
+        titulo="Título curto do lore",
+        conteudo="Texto completo do conhecimento",
+        is_private="Marque como privado para limitar a visualização",
+        owner_id="ID do jogador dono do lore (opcional)",
+    )
     @app_commands.check(is_mestre)
-    async def lore_adicionar(self, interaction: discord.Interaction, titulo: str, conteudo: str):
+    async def lore_adicionar(
+        self,
+        interaction: discord.Interaction,
+        titulo: str,
+        conteudo: str,
+        is_private: bool = False,
+        owner_id: Optional[int] = None,
+    ):
         resumo = self._resumir_texto(conteudo, 240)
+        if is_private and owner_id is None:
+            owner_id = interaction.user.id
         await self.bot.db.execute(
-            "INSERT INTO lore_entries (titulo, resumo, conteudo) VALUES (?, ?, ?)",
-            (titulo, resumo, conteudo),
+            "INSERT INTO lore_entries (titulo, resumo, conteudo, is_private, owner_id) VALUES (?, ?, ?, ?, ?)",
+            (titulo, resumo, conteudo, int(is_private), owner_id),
         )
         await self.bot.db.commit()
         await interaction.response.send_message("✅ Lore registrado com sucesso.", ephemeral=True)
 
     @lore.command(name="importar_txt", description="📂 Importa lore longo via arquivo .txt")
-    @app_commands.describe(titulo="Título do lore", arquivo="Arquivo .txt com o conteúdo")
+    @app_commands.describe(
+        titulo="Título do lore",
+        arquivo="Arquivo .txt com o conteúdo",
+        is_private="Marque como privado para limitar a visualização",
+        owner_id="ID do jogador dono do lore (opcional)",
+    )
     @app_commands.check(is_mestre)
-    async def lore_importar_txt(self, interaction: discord.Interaction, titulo: str, arquivo: discord.Attachment):
+    async def lore_importar_txt(
+        self,
+        interaction: discord.Interaction,
+        titulo: str,
+        arquivo: discord.Attachment,
+        is_private: bool = False,
+        owner_id: Optional[int] = None,
+    ):
         if not arquivo.filename.endswith(".txt"):
             return await interaction.response.send_message("Apenas .txt", ephemeral=True)
         await interaction.response.defer()
 
         texto = (await arquivo.read()).decode("utf-8")
         resumo = self._resumir_texto(texto, 240)
+        if is_private and owner_id is None:
+            owner_id = interaction.user.id
         await self.bot.db.execute(
-            "INSERT INTO lore_entries (titulo, resumo, conteudo) VALUES (?, ?, ?)",
-            (titulo, resumo, texto),
+            "INSERT INTO lore_entries (titulo, resumo, conteudo, is_private, owner_id) VALUES (?, ?, ?, ?, ?)",
+            (titulo, resumo, texto, int(is_private), owner_id),
         )
         await self.bot.db.commit()
         await interaction.followup.send("✅ Lore importado! A IA agora conhece esse conteúdo.")
 
     @lore.command(name="editar", description="✏️ Corrige um lore existente")
-    @app_commands.describe(id_lore="ID do lore (veja em /lore ver)", novo_titulo="Novo título", novo_conteudo="Novo texto")
+    @app_commands.describe(
+        id_lore="ID do lore (veja em /lore ver)",
+        novo_titulo="Novo título",
+        novo_conteudo="Novo texto",
+        is_private="Atualiza se o lore é privado",
+        owner_id="ID do jogador dono do lore (opcional)",
+    )
     @app_commands.check(is_mestre)
     async def lore_editar(
         self,
@@ -196,12 +300,31 @@ class Campaign(commands.Cog):
         id_lore: int,
         novo_titulo: str,
         novo_conteudo: str,
+        is_private: Optional[bool] = None,
+        owner_id: Optional[int] = None,
     ):
         resumo = self._resumir_texto(novo_conteudo, 240)
-        cursor = await self.bot.db.execute(
-            "UPDATE lore_entries SET titulo = ?, resumo = ?, conteudo = ?, atualizado_em = datetime('now') WHERE id = ?",
-            (novo_titulo, resumo, novo_conteudo, id_lore),
-        )
+        fields = [
+            "titulo = ?",
+            "resumo = ?",
+            "conteudo = ?",
+            "atualizado_em = datetime('now')",
+        ]
+        params = [novo_titulo, resumo, novo_conteudo]
+        if is_private is not None:
+            fields.append("is_private = ?")
+            params.append(int(is_private))
+            if is_private is False and owner_id is None:
+                fields.append("owner_id = NULL")
+        resolved_owner_id = owner_id
+        if is_private is True and resolved_owner_id is None:
+            resolved_owner_id = interaction.user.id
+        if resolved_owner_id is not None:
+            fields.append("owner_id = ?")
+            params.append(resolved_owner_id)
+        params.append(id_lore)
+        query = f"UPDATE lore_entries SET {', '.join(fields)} WHERE id = ?"
+        cursor = await self.bot.db.execute(query, params)
         await self.bot.db.commit()
 
         if cursor.rowcount > 0:
