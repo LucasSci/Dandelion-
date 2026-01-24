@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import tempfile
 import threading
 import wave
@@ -10,6 +11,7 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 from openai import OpenAI
+from data.repositories import DiaryRepository
 
 try:
     from discord.ext import voice_recv
@@ -89,6 +91,7 @@ class Scribe(commands.Cog):
         self.voice_transcripts = {} # voice_channel_id -> list[str]
         self._chunk_duration_sec = 2
         self._min_chunk_duration_sec = 0.5
+        self.diary_repo = DiaryRepository(bot.db)
 
     async def _get_transcription_settings(self, guild_id: int) -> tuple[int | None, int | None]:
         async with self.bot.db.execute(
@@ -117,6 +120,29 @@ class Scribe(commands.Cog):
             (guild_id, transcription_channel_id, summary_channel_id),
         )
         await self.bot.db.commit()
+
+    async def _registrar_mencoes(self, session_log_id: int, content: str) -> None:
+        if not content:
+            return
+        async with self.bot.db.execute("SELECT id, nome FROM personagens WHERE nome IS NOT NULL") as cursor:
+            personagens = await cursor.fetchall()
+        if not personagens:
+            return
+
+        for personagem_id, nome in personagens:
+            nome = (nome or "").strip()
+            if not nome:
+                continue
+            pattern = rf"(?<!\w){re.escape(nome)}(?!\w)"
+            if re.search(pattern, content, flags=re.IGNORECASE):
+                descricao = content if len(content) <= 500 else f"{content[:497]}..."
+                await self.diary_repo.add_character_mention(
+                    personagem_id=personagem_id,
+                    session_log_id=session_log_id,
+                    memoria_id=None,
+                    descricao_fato=descricao,
+                    relevancia=1,
+                )
 
     async def _transcrever_pcm(
         self,
@@ -595,11 +621,13 @@ class Scribe(commands.Cog):
 
         # Salva no Banco de Dados
         try:
-            await self.bot.db.execute(
+            cursor = await self.bot.db.execute(
                 "INSERT INTO session_logs (channel_id, user_name, content, is_bot) VALUES (?, ?, ?, ?)",
                 (message.channel.id, user_name, content, is_bot)
             )
             await self.bot.db.commit()
+            if cursor.lastrowid:
+                await self._registrar_mencoes(cursor.lastrowid, content)
         except Exception as e:
             print(f"Erro ao salvar log: {e}")
 

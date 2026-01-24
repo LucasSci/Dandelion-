@@ -192,6 +192,19 @@ CREATE TABLE IF NOT EXISTS session_logs (
     timestamp TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS mencoes_personagem (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    personagem_id INTEGER NOT NULL,
+    session_log_id INTEGER,
+    memoria_id INTEGER,
+    descricao_fato TEXT NOT NULL,
+    relevancia INTEGER DEFAULT 0,
+    criado_em TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+    FOREIGN KEY(session_log_id) REFERENCES session_logs(id) ON DELETE SET NULL,
+    FOREIGN KEY(memoria_id) REFERENCES memoria_campanha(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS transcription_settings (
     guild_id INTEGER PRIMARY KEY,
     transcription_channel_id INTEGER,

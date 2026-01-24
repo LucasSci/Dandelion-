@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from typing import Optional
+from data.repositories import DiaryRepository
 from data_cache import (
     clear_world_location_caches,
     get_world_location_details,
@@ -15,6 +16,7 @@ class Campaign(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.diary_repo = DiaryRepository(bot.db)
 
     @staticmethod
     def _split_text(texto: str, limite: int = 3900) -> list[str]:
@@ -61,6 +63,28 @@ class Campaign(commands.Cog):
 
         embed = discord.Embed(title="📖 Diário do Dandelion (Timeline)", description=texto, color=0xA84300)
         embed.set_footer(text="A IA usará APENAS estes fatos para gerar missões.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @diario.command(name="mencoes", description="📌 Vê suas últimas menções registradas no diário")
+    async def diario_mencoes(self, interaction: discord.Interaction):
+        rows = await self.diary_repo.list_mentions_by_user(interaction.user.id, limit=5)
+        if not rows:
+            return await interaction.response.send_message(
+                "📭 Você ainda não possui menções registradas.",
+                ephemeral=True,
+            )
+
+        linhas = []
+        for nome, descricao, relevancia, criado_em in rows:
+            resumo = self._resumir_texto(descricao, 200)
+            relevancia_txt = f"⭐ {relevancia}" if relevancia else "⭐ —"
+            linhas.append(f"**{nome}** ({criado_em} | {relevancia_txt})\n{resumo}")
+
+        embed = discord.Embed(
+            title="📌 Menções recentes",
+            description="\n\n".join(linhas),
+            color=0xA84300,
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @diario.command(name="adicionar", description="➕ Adiciona um evento HOJE na linha do tempo")
