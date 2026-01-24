@@ -1,9 +1,11 @@
 import asyncio
 import time
+from typing import Optional
 
 import discord
 from discord import ui
 from data.repositories import CharacterRepository, InventoryRepository, SkillRepository
+from config import settings
 from utils import rolar_dados, rolar_pericia_explosiva
 from ui.base_view import BaseRPGView
 from ui.views import ConfirmarExclusaoView
@@ -66,6 +68,31 @@ def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
         embed.set_footer(text=f"Atualizado {timestamp}")
 
 
+def _build_author_name(nome: Optional[str], classe: Optional[str], raca: Optional[str]) -> str:
+    identity_bits = [item for item in (classe, raca) if item]
+    if nome and identity_bits:
+        return f"{nome} • {' / '.join(identity_bits)}"
+    if nome:
+        return nome
+    if identity_bits:
+        return " • ".join(identity_bits)
+    return "Ficha de Personagem"
+
+
+def _apply_embed_identity(
+    embed: discord.Embed,
+    nome: Optional[str],
+    classe: Optional[str],
+    raca: Optional[str],
+    imagem_url: Optional[str],
+) -> None:
+    author_name = _build_author_name(nome, classe, raca)
+    embed.set_author(name=f"📜 {author_name}")
+    thumbnail_url = imagem_url or settings.default_character_thumbnail_url
+    if thumbnail_url:
+        embed.set_thumbnail(url=thumbnail_url)
+
+
 async def construir_embed_ficha(db, personagem_id, user_id):
     character_repo = CharacterRepository(db)
     inventory_repo = InventoryRepository(db)
@@ -101,10 +128,8 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         for nome, tipo in itens
     ]
 
-    embed = discord.Embed(
-        title=f"📜 {nome}",
-        color=_cor_por_hp(hp_atual, hp_max),
-    )
+    embed = discord.Embed(color=_cor_por_hp(hp_atual, hp_max))
+    _apply_embed_identity(embed, nome, classe, raca, img)
     embed.add_field(
         name="📖 Identidade",
         value=f"*{classe}* • **{raca}** • Nível **{nivel}**",
@@ -149,8 +174,6 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         inline=False
     )
 
-    if img:
-        embed.set_thumbnail(url=img)
     _set_footer_timestamp(embed, "Ficha estilo pergaminho • Visual inspirado em crônicas de bruxos")
     return embed
 
@@ -645,6 +668,14 @@ class FichaView(BaseRPGView):
         self.clear_dynamic_buttons()
         await interaction.response.edit_message(embed=embed, view=self)
 
+    async def _aplicar_identidade_visual(self, interaction: discord.Interaction, embed: discord.Embed) -> None:
+        character_repo = CharacterRepository(interaction.client.db)
+        identidade = await character_repo.fetch_identity(self.personagem_id)
+        if not identidade:
+            return
+        nome, raca, classe, imagem_url = identidade
+        _apply_embed_identity(embed, nome, classe, raca, imagem_url)
+
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
         self.update_buttons_state("magia")
         self.clear_dynamic_buttons()
@@ -700,6 +731,7 @@ class FichaView(BaseRPGView):
         else:
             embed.add_field(name="🧪 Poções", value="Nenhuma poção no inventário.", inline=False)
 
+        await self._aplicar_identidade_visual(interaction, embed)
         _set_footer_timestamp(embed, "Magia & Alquimia")
 
         if interaction.response.is_done():
@@ -752,6 +784,7 @@ class FichaView(BaseRPGView):
         self.add_item(RolagemCombateButton("Roll Damage", "💥", self.personagem_id, "1d6+{ataque}"))
         self.add_item(FerimentosCriticosSelect())
 
+        await self._aplicar_identidade_visual(interaction, embed)
         _set_footer_timestamp(embed, "Combate")
 
         if interaction.response.is_done():
@@ -785,6 +818,7 @@ class FichaView(BaseRPGView):
         capacidade = 10 + (nivel * 2)
         embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
         embed.add_field(name="Encumbrance", value=f"{encumbrance}/{capacidade} (1 por item)", inline=False)
+        await self._aplicar_identidade_visual(interaction, embed)
         _set_footer_timestamp(embed, "Layout estilo pergaminho limpo • Lista dinâmica")
 
         if interaction.response.is_done():
@@ -807,6 +841,7 @@ class FichaView(BaseRPGView):
             for nome, valor in atributos:
                 self.add_item(AtributoButton(nome, valor))
 
+        await self._aplicar_identidade_visual(interaction, embed)
         _set_footer_timestamp(embed, "Atributos")
 
         if interaction.response.is_done():
