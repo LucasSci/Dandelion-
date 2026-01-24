@@ -568,6 +568,10 @@ class FichaView(BaseRPGView):
                     is_active = (mode == "geral")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+                elif item.label == "Crônicas":
+                    is_active = (mode == "cronicas")
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Combate":
                     is_active = (mode == "combate")
                     item.disabled = is_active
@@ -587,6 +591,9 @@ class FichaView(BaseRPGView):
                 elif item.label == "Buscar Perícia":
                     item.disabled = (mode != "geral")
                     item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
+                elif item.label == "Minha Lore":
+                    item.disabled = (mode != "cronicas")
+                    item.style = discord.ButtonStyle.primary if mode == "cronicas" else discord.ButtonStyle.secondary
                 elif item.label in {"Nova Skill", "Gerenciar"}:
                     item.disabled = (mode != "magia")
                     item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
@@ -612,6 +619,10 @@ class FichaView(BaseRPGView):
     async def btn_inventario(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_inventario(interaction)
 
+    @ui.button(label="Crônicas", emoji="📖", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_cronicas(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_cronicas(interaction)
+
     # --- AÇÕES (ROW 1) ---
     @ui.button(label="Buscar Perícia", emoji="🔎", style=discord.ButtonStyle.secondary, row=1)
     async def btn_buscar(self, interaction: discord.Interaction, button: ui.Button):
@@ -632,6 +643,10 @@ class FichaView(BaseRPGView):
         view_gerenciar = GerenciarHabilidadesView(skills, self)
         await interaction.response.send_message("Selecione a habilidade que deseja editar ou excluir:", view=view_gerenciar, ephemeral=True)
 
+    @ui.button(label="Minha Lore", emoji="📚", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_minha_lore(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_minha_lore(interaction)
+
     # --- MÉTODOS DE EXIBIÇÃO ---
     
     async def mostrar_info_geral(self, interaction: discord.Interaction):
@@ -644,6 +659,100 @@ class FichaView(BaseRPGView):
 
         self.clear_dynamic_buttons()
         await interaction.response.edit_message(embed=embed, view=self)
+
+    async def mostrar_cronicas(self, interaction: discord.Interaction):
+        self.update_buttons_state("cronicas")
+        self.clear_dynamic_buttons()
+
+        character_repo = CharacterRepository(interaction.client.db)
+        dados = await character_repo.fetch_embed_details(self.personagem_id)
+
+        if not dados:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        (
+            nome, raca, classe, nivel, historia, img, _ouro, _hp_atual, _hp_max, _mp_max,
+            _ataque, _defesa, xp_atual, _vigor_atual, _vigor_max, _toxicidade_atual, _toxicidade_max, local
+        ) = dados
+
+        embed = discord.Embed(
+            title=f"📖 Crônicas de {nome}",
+            color=0xBFA36A
+        )
+        embed.add_field(
+            name="🧭 Registro Atual",
+            value=f"*{classe}* • **{raca}** • Nível **{nivel}**\n📍 {local or 'Desconhecida'}\n🧭 XP Atual: {xp_atual}",
+            inline=False,
+        )
+        embed.add_field(
+            name="📜 Histórico",
+            value=historia or "_Sem registro._",
+            inline=False,
+        )
+        embed.add_field(
+            name="📚 Dicas",
+            value="Use **Minha Lore** para acessar entradas privadas sobre este personagem.",
+            inline=False,
+        )
+
+        if img:
+            embed.set_thumbnail(url=img)
+        _set_footer_timestamp(embed, "Crônicas do personagem")
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def mostrar_minha_lore(self, interaction: discord.Interaction):
+        self.update_buttons_state("cronicas")
+        self.clear_dynamic_buttons()
+
+        db = interaction.client.db
+        async with db.execute("PRAGMA table_info(lore_entries)") as cursor:
+            columns = [row[1] for row in await cursor.fetchall()]
+
+        has_owner = "owner_id" in columns
+        has_private = "is_private" in columns
+        lore_entries = []
+
+        if has_owner and has_private:
+            async with db.execute(
+                """
+                SELECT titulo, resumo, conteudo, atualizado_em
+                FROM lore_entries
+                WHERE owner_id = ? AND is_private = 1
+                ORDER BY atualizado_em DESC
+                LIMIT 10
+                """,
+                (interaction.user.id,),
+            ) as cursor:
+                lore_entries = await cursor.fetchall()
+
+        embed = discord.Embed(title="📚 Minha Lore", color=0x8E7CC3)
+        if not (has_owner and has_private):
+            embed.description = (
+                "As entradas privadas ainda não estão disponíveis neste banco.\n"
+                "Peça ao mestre para habilitar a configuração de *owner_id/is_private*."
+            )
+        elif not lore_entries:
+            embed.description = "Nenhuma entrada privada encontrada. Use /lore para registrar suas memórias."
+        else:
+            linhas = []
+            for titulo, resumo, conteudo, atualizado_em in lore_entries:
+                base = (resumo or conteudo or "").strip()
+                if len(base) > 200:
+                    base = f"{base[:200]}..."
+                data_txt = f" (atualizado {atualizado_em})" if atualizado_em else ""
+                linhas.append(f"• **{titulo}**{data_txt}\n  {base or '_Sem resumo._'}")
+            embed.description = "\n".join(linhas)
+
+        _set_footer_timestamp(embed, "Lore privada do jogador")
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
         self.update_buttons_state("magia")
