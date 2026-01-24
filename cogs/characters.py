@@ -7,7 +7,6 @@ from discord import app_commands
 from data_cache import get_world_location_names
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
-from data.repositories import CharacterRepository, SkillRepository
 from rpg_core.derived_stats import calculate_derived_stats
 from data.repositories import CharacterRepository, DiarioRepository, SkillRepository
 LOCALIZACOES_ARMADURA = {
