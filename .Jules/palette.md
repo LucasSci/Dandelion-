@@ -30,6 +30,9 @@
 **Learning:** Fixed-color health bars (always green) fail to convey urgency. Using color-coded emojis based on health percentage improves at-a-glance readability.
 **Action:** Use Green (🟩) for >60%, Yellow (🟨) for 31-60%, and Red (🟥) for <=30% in all text-based status bars.
 
+## 2024-05-24 - Testing Discord TextInputs
+**Learning:** `discord.ui.TextInput.value` is a read-only property that pulls from internal state. In unit tests mocking interactions, you cannot set `.value` directly to simulate user input.
+**Action:** Set the internal `_value` attribute of the TextInput instance in test setup to simulate user input.
 ## 2024-05-24 - Actionable Permission Denied Messages
 **Learning:** Generic "Access Denied" messages frustrate users by blocking them without offering a path forward.
 **Action:** When blocking an interaction, always explain *why* (e.g., "This sheet belongs to @User") and provide a Call to Action (e.g., "Use /create to make yours") to convert the friction into engagement.

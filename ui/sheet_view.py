@@ -243,7 +243,8 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         )
         self.pericia_valor = ui.TextInput(
             label="Valor da Perícia",
-            placeholder="Ex: 4",
+            placeholder="Ex: 4 (Deixe vazio para 0)",
+            required=False
         )
 
         self.add_item(self.pericia_nome)
@@ -251,7 +252,8 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            pericia_valor = int(self.pericia_valor.value)
+            val_str = self.pericia_valor.value
+            pericia_valor = int(val_str) if val_str else 0
         except ValueError:
             return await interaction.response.send_message("❌ Valor da perícia inválido.", ephemeral=True)
 
