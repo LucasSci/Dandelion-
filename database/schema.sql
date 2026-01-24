@@ -429,6 +429,8 @@ CREATE TABLE IF NOT EXISTS lore_entries (
   titulo TEXT NOT NULL,
   resumo TEXT,
   conteudo TEXT,
+  is_private BOOLEAN DEFAULT 0,
+  owner_id INTEGER,
   criado_em TEXT DEFAULT (datetime('now')),
   atualizado_em TEXT DEFAULT (datetime('now'))
 );
