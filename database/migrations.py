@@ -231,6 +231,30 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             """
         )
 
+    if not _table_exists(cursor, "mencoes_personagem"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mencoes_personagem (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                personagem_id INTEGER NOT NULL,
+                session_log_id INTEGER,
+                descricao_fato TEXT NOT NULL,
+                relevancia INTEGER DEFAULT 0,
+                criado_em TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+                FOREIGN KEY(session_log_id) REFERENCES session_logs(id) ON DELETE SET NULL
+            );
+            """
+        )
+
+    if _table_exists(cursor, "mencoes_personagem"):
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_personagem_id ON mencoes_personagem(personagem_id);"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_session_log_id ON mencoes_personagem(session_log_id);"
+        )
+
     if not _table_exists(cursor, "economia_regional"):
         cursor.execute(
             """
