@@ -315,6 +315,10 @@ class CharacterRepository:
         ) as cursor:
             return await cursor.fetchone()
 
+    async def fetch_identity(self, personagem_id: int) -> Optional[tuple[str, Optional[str], Optional[str], Optional[str]]]:
+        async with self.db.execute(
+            """
+            SELECT nome, raca, classe, imagem_url
     async def fetch_profile(self, personagem_id: int) -> Optional[tuple[str, Optional[str], Optional[str]]]:
         async with self.db.execute(
             """
