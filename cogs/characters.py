@@ -8,6 +8,8 @@ from data_cache import get_world_location_names
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
 from data.repositories import CharacterRepository, SkillRepository
+from rpg_core.derived_stats import calculate_derived_stats
+from data.repositories import CharacterRepository, DiarioRepository, SkillRepository
 LOCALIZACOES_ARMADURA = {
     "Cabeça": "cabeca",
     "Torso": "torso",
@@ -26,6 +28,7 @@ class Characters(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.character_repo = CharacterRepository(bot.db)
+        self.diario_repo = DiarioRepository(bot.db)
         self.skill_repo = SkillRepository(bot.db)
 
     # --- AUTOCOMPLETES ---
@@ -197,6 +200,34 @@ class Characters(commands.Cog):
         local = local or "Desconhecida"
         await interaction.response.send_message(f"📍 **{personagem}** está em **{local}**.")
 
+    @app_commands.command(name="diario", description="📓 Mostra os últimos fatos do seu diário")
+    async def diario(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        dados = await self.character_repo.fetch_character_summary_by_user(interaction.user.id)
+        if not dados:
+            return await interaction.followup.send("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, personagem_nome, _, _ = dados
+        fatos = await self.diario_repo.list_recent_facts_by_personagem(personagem_id, limit=5)
+        if not fatos:
+            return await interaction.followup.send(
+                f"📭 Nenhum fato registrado ainda para **{personagem_nome}**.",
+                ephemeral=True,
+            )
+
+        linhas = []
+        for descricao, relevancia, criado_em in fatos:
+            trecho = descricao.strip() if descricao else "(Sem descrição)"
+            linhas.append(f"• {trecho} _(relevância {relevancia}, {criado_em})_")
+
+        embed = discord.Embed(
+            title=f"📓 Diário de {personagem_nome}",
+            description="\n".join(linhas),
+            color=0x2F3136,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     @app_commands.command(name="viajar", description="Define a localização atual do personagem")
     @app_commands.autocomplete(destino=localizacao_autocomplete)
     async def viajar(self, interaction: discord.Interaction, destino: str, usuario: discord.Member = None):
@@ -256,7 +287,7 @@ class Characters(commands.Cog):
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
         personagem_id, personagem_nome, _, _ = personagem
-        atributos = await self.character_repo.list_attributes(personagem_id)
+        atributos_map = await self.character_repo.list_attributes_dict(personagem_id)
 
         if not atributos:
             return await interaction.response.send_message("📭 Nenhum atributo cadastrado.")
@@ -401,7 +432,7 @@ class Characters(commands.Cog):
         personagem_id = personagem[0]
         habilidades = await self.skill_repo.list_skill_export(personagem_id)
 
-        atributos = await self.character_repo.list_attributes(personagem_id)
+        atributos_map = await self.character_repo.list_attributes_dict(personagem_id)
 
         export_localizacoes = ["cabeca", "torso", "pernas"]
         armaduras = await self.character_repo.list_armors(personagem_id, export_localizacoes)
@@ -421,6 +452,8 @@ class Characters(commands.Cog):
             "pernas": armor_layers["pernas"],
         }
         atributos_map = {nome: valor for nome, valor in atributos}
+        derived_stats = self.character_repo.calculate_derived_stats(atributos_map)
+        derived_stats = calculate_derived_stats(atributos_map)
 
         ficha = {
             "schema_version": "v1.0.0",
@@ -437,13 +470,16 @@ class Characters(commands.Cog):
                 "LUCK": atributos_map.get("LUCK", 1),
             },
             "derived_stats": {
-                "Stun": 0,
-                "Run": 0,
-                "Leap": 0,
+                "Stun": derived_stats["Stun"],
+                "Run": derived_stats["Run"],
+                "Leap": derived_stats["Leap"],
+                "HP": derived_stats["HP"],
+                "Stamina": derived_stats["Stamina"],
+                "Vigor": derived_stats["Vigor"],
                 "HP": personagem[9],
                 "Stamina": personagem[14] if personagem[14] is not None else 0,
                 "Vigor": personagem[15] if personagem[15] is not None else 0,
-                "Recovery": 0,
+                "Recovery": derived_stats["Recovery"],
             },
             "skills_tree": [
                 {
