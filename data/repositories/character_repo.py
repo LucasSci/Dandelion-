@@ -162,6 +162,9 @@ class CharacterRepository:
             "Vigor": max(0, body + will + emp),
             "Recovery": max(0, spd // 2),
         }
+    async def list_attributes_dict(self, personagem_id: int, limit: Optional[int] = None) -> dict[str, int]:
+        attributes = await self.list_attributes(personagem_id, limit)
+        return {nome: valor for nome, valor in attributes}
 
     async def upsert_armor(self, personagem_id: int, localizacao: str, sp: int) -> None:
         await self.db.execute(
@@ -301,12 +304,34 @@ class CharacterRepository:
     async def fetch_embed_details(self, personagem_id: int) -> Optional[tuple]:
         async with self.db.execute(
             """
-            SELECT p.nome, p.raca, p.classe, p.nivel, p.historia, p.imagem_url, p.ouro,
+            SELECT p.nome, p.titulo, p.raca, p.classe, p.nivel, p.historia, p.imagem_url, p.ouro,
                    p.hp_atual, p.hp_max, p.mp_max, p.ataque, p.defesa, p.xp_atual,
                    p.vigor_atual, p.vigor_max, p.toxicidade_atual, p.toxicidade_max, w.nome
             FROM personagens p
             LEFT JOIN world_locations w ON w.id = p.localizacao_id
             WHERE p.id = ?
+            """,
+            (personagem_id,),
+        ) as cursor:
+            return await cursor.fetchone()
+
+    async def fetch_profile(self, personagem_id: int) -> Optional[tuple[str, Optional[str], Optional[str]]]:
+        async with self.db.execute(
+            """
+            SELECT nome, titulo, imagem_url
+            FROM personagens
+            WHERE id = ?
+            """,
+            (personagem_id,),
+        ) as cursor:
+            return await cursor.fetchone()
+
+    async def fetch_lore(self, personagem_id: int) -> Optional[tuple[str, Optional[str], Optional[str], Optional[str]]]:
+        async with self.db.execute(
+            """
+            SELECT nome, titulo, historia, imagem_url
+            FROM personagens
+            WHERE id = ?
             """,
             (personagem_id,),
         ) as cursor:
