@@ -12,3 +12,7 @@
 ## 2024-05-24 - [Parallelizing Independent DB Reads]
 **Learning:** Sequential `await` calls for independent database queries (e.g., fetching stats, skills, inventory) add up latency unnecessarily. `asyncio.gather` can parallelize these even with a single SQLite connection (saving dispatch overhead).
 **Action:** Identify independent `await repo.fetch...` calls in Views and group them with `asyncio.gather`.
+
+## 2024-05-24 - [Optimizing Independent DB Queries]
+**Learning:** In Discord UI views (`ui/sheet_view.py`), independent database queries for different sections (e.g. resources, skills, items) were being awaited sequentially. This increases the total response time.
+**Action:** Refactored `atualizar_botoes_habilidade`, `mostrar_combate`, and `mostrar_inventario` to use `asyncio.gather` for fetching data in parallel. This reduces latency, improving the responsiveness of the interactive character sheet.
