@@ -421,6 +421,7 @@ class Characters(commands.Cog):
             "pernas": armor_layers["pernas"],
         }
         atributos_map = {nome: valor for nome, valor in atributos}
+        derived_stats = self.character_repo.calculate_derived_stats(atributos_map)
 
         ficha = {
             "schema_version": "v1.0.0",
@@ -437,13 +438,13 @@ class Characters(commands.Cog):
                 "LUCK": atributos_map.get("LUCK", 1),
             },
             "derived_stats": {
-                "Stun": 0,
-                "Run": 0,
-                "Leap": 0,
-                "HP": personagem[9],
-                "Stamina": personagem[14] if personagem[14] is not None else 0,
-                "Vigor": personagem[15] if personagem[15] is not None else 0,
-                "Recovery": 0,
+                "Stun": derived_stats["Stun"],
+                "Run": derived_stats["Run"],
+                "Leap": derived_stats["Leap"],
+                "HP": derived_stats["HP"],
+                "Stamina": derived_stats["Stamina"],
+                "Vigor": derived_stats["Vigor"],
+                "Recovery": derived_stats["Recovery"],
             },
             "skills_tree": [
                 {
