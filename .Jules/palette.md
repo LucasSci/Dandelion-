@@ -29,3 +29,7 @@
 ## 2026-01-20 - Dynamic Status Bar Colors
 **Learning:** Fixed-color health bars (always green) fail to convey urgency. Using color-coded emojis based on health percentage improves at-a-glance readability.
 **Action:** Use Green (🟩) for >60%, Yellow (🟨) for 31-60%, and Red (🟥) for <=30% in all text-based status bars.
+
+## 2024-05-24 - Actionable Permission Denied Messages
+**Learning:** Generic "Access Denied" messages frustrate users by blocking them without offering a path forward.
+**Action:** When blocking an interaction, always explain *why* (e.g., "This sheet belongs to @User") and provide a Call to Action (e.g., "Use /create to make yours") to convert the friction into engagement.
