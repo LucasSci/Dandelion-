@@ -100,7 +100,13 @@ class AIHandler(commands.Cog):
         if visibility_clause:
             params.append(user_id)
 
-        lore_query = f"""
+        privacy_filter = "is_private = 0"
+        if user_id is not None:
+            privacy_filter = "is_private = 0 OR owner_id = ?"
+            params.append(user_id)
+
+        async with self.bot.db.execute(
+            f"""
             SELECT titulo, resumo, conteudo
             FROM lore_entries
             WHERE {likes}{visibility_clause}
