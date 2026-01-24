@@ -894,6 +894,10 @@ class FichaView(BaseRPGView):
                     is_active = (mode == "geral")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+                elif item.label == "Crônicas":
+                    is_active = (mode == "cronicas")
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Combate":
                     is_active = (mode == "combate")
                     item.disabled = is_active
