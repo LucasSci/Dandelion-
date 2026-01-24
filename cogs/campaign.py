@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from typing import Optional
+from data.repositories import DiaryRepository
 from data_cache import (
     clear_world_location_caches,
     get_world_location_details,
