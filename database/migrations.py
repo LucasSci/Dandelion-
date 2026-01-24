@@ -198,6 +198,19 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             """
         )
 
+    if not _table_exists(cursor, "alchemy_user_recipes"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS alchemy_user_recipes (
+                user_id INTEGER NOT NULL,
+                recipe_id INTEGER NOT NULL,
+                unlocked_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (user_id, recipe_id),
+                FOREIGN KEY(recipe_id) REFERENCES alchemy_recipes(id) ON DELETE CASCADE
+            );
+            """
+        )
+
     if not _table_exists(cursor, "transcription_settings"):
         cursor.execute(
             """
