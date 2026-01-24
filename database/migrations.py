@@ -83,6 +83,13 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     if _table_exists(cursor, "armaduras_personagem"):
         _add_columns_if_missing(cursor, "armaduras_personagem", armaduras_extras)
 
+    lore_entries_extras = [
+        ("is_private", "INTEGER DEFAULT 0"),
+        ("owner_id", "INTEGER"),
+    ]
+    if _table_exists(cursor, "lore_entries"):
+        _add_columns_if_missing(cursor, "lore_entries", lore_entries_extras)
+
     # 4. Migração de Índices de Performance
     try:
         if _table_exists(cursor, "armaduras_personagem"):

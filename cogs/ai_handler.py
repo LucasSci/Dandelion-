@@ -79,7 +79,7 @@ class AIHandler(commands.Cog):
         filtradas = [t for t in tokens if t not in _STOPWORDS and len(t) > 3]
         return filtradas[:6]
 
-    async def buscar_contexto_rag(self, pergunta: str) -> str:
+    async def buscar_contexto_rag(self, pergunta: str, user_id: int | None = None) -> str:
         """Busca fatos relevantes em lore e NPCs para enriquecer a resposta."""
         termos = self._extrair_keywords(pergunta)
         if not termos:
@@ -91,11 +91,16 @@ class AIHandler(commands.Cog):
             like = f"%{termo}%"
             params.extend([like, like, like])
 
+        privacy_filter = "is_private = 0"
+        if user_id is not None:
+            privacy_filter = "is_private = 0 OR owner_id = ?"
+            params.append(user_id)
+
         async with self.bot.db.execute(
             f"""
             SELECT titulo, resumo, conteudo
             FROM lore_entries
-            WHERE {likes}
+            WHERE ({likes}) AND ({privacy_filter})
             ORDER BY atualizado_em DESC
             LIMIT 5
             """,
@@ -156,10 +161,22 @@ class AIHandler(commands.Cog):
 
         return "\n".join(f"- {conteudo}" for _, conteudo in rows)
 
-    async def ler_lore_mundo(self) -> str:
+    async def ler_lore_mundo(self, user_id: int | None = None) -> str:
         """Lê todo o lore inserido pelo mestre para servir de base ao mundo."""
+        params: list[int] = []
+        privacy_filter = "is_private = 0"
+        if user_id is not None:
+            privacy_filter = "is_private = 0 OR owner_id = ?"
+            params.append(user_id)
+
         async with self.bot.db.execute(
-            "SELECT titulo, resumo, conteudo FROM lore_entries ORDER BY id ASC"
+            f"""
+            SELECT titulo, resumo, conteudo
+            FROM lore_entries
+            WHERE {privacy_filter}
+            ORDER BY id ASC
+            """,
+            params,
         ) as c:
             rows = await c.fetchall()
 
@@ -411,8 +428,8 @@ class AIHandler(commands.Cog):
             return await interaction.followup.send("❌ IA não configurada no momento.")
 
         cronologia = await self.ler_cronologia_estrita()
-        lore = await self.ler_lore_mundo()
-        rag = await self.buscar_contexto_rag(solicitacao)
+        lore = await self.ler_lore_mundo(interaction.user.id)
+        rag = await self.buscar_contexto_rag(solicitacao, interaction.user.id)
         prompt = (
             "Você é Dandelion, o bardo narrador de The Witcher.\n"
             "Use a cronologia e o lore abaixo como contexto real.\n\n"

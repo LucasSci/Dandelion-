@@ -125,7 +125,13 @@ class Campaign(commands.Cog):
     @app_commands.check(is_mestre)
     async def lore_ver(self, interaction: discord.Interaction):
         async with self.bot.db.execute(
-            "SELECT id, titulo, resumo, conteudo FROM lore_entries ORDER BY id ASC"
+            """
+            SELECT id, titulo, resumo, conteudo
+            FROM lore_entries
+            WHERE is_private = 0 OR owner_id = ?
+            ORDER BY id ASC
+            """,
+            (interaction.user.id,),
         ) as c:
             rows = await c.fetchall()
 
@@ -159,8 +165,8 @@ class Campaign(commands.Cog):
     async def lore_adicionar(self, interaction: discord.Interaction, titulo: str, conteudo: str):
         resumo = self._resumir_texto(conteudo, 240)
         await self.bot.db.execute(
-            "INSERT INTO lore_entries (titulo, resumo, conteudo) VALUES (?, ?, ?)",
-            (titulo, resumo, conteudo),
+            "INSERT INTO lore_entries (titulo, resumo, conteudo, owner_id) VALUES (?, ?, ?, ?)",
+            (titulo, resumo, conteudo, interaction.user.id),
         )
         await self.bot.db.commit()
         await interaction.response.send_message("✅ Lore registrado com sucesso.", ephemeral=True)
@@ -176,8 +182,8 @@ class Campaign(commands.Cog):
         texto = (await arquivo.read()).decode("utf-8")
         resumo = self._resumir_texto(texto, 240)
         await self.bot.db.execute(
-            "INSERT INTO lore_entries (titulo, resumo, conteudo) VALUES (?, ?, ?)",
-            (titulo, resumo, texto),
+            "INSERT INTO lore_entries (titulo, resumo, conteudo, owner_id) VALUES (?, ?, ?, ?)",
+            (titulo, resumo, texto, interaction.user.id),
         )
         await self.bot.db.commit()
         await interaction.followup.send("✅ Lore importado! A IA agora conhece esse conteúdo.")
@@ -194,8 +200,12 @@ class Campaign(commands.Cog):
     ):
         resumo = self._resumir_texto(novo_conteudo, 240)
         cursor = await self.bot.db.execute(
-            "UPDATE lore_entries SET titulo = ?, resumo = ?, conteudo = ?, atualizado_em = datetime('now') WHERE id = ?",
-            (novo_titulo, resumo, novo_conteudo, id_lore),
+            """
+            UPDATE lore_entries
+            SET titulo = ?, resumo = ?, conteudo = ?, atualizado_em = datetime('now')
+            WHERE id = ? AND (is_private = 0 OR owner_id = ?)
+            """,
+            (novo_titulo, resumo, novo_conteudo, id_lore, interaction.user.id),
         )
         await self.bot.db.commit()
 
