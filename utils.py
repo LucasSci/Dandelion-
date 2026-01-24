@@ -63,6 +63,19 @@ def rolar_pericia_explosiva(stat: int, skill: int):
     total = total_d10 + stat + skill
     return rolagens, total, direcao
 
+def calcular_stats_derivados(atributos: dict[str, int]) -> dict[str, int]:
+    ref = atributos.get("REF", 1)
+    dex = atributos.get("DEX", 1)
+    body = atributos.get("BODY", 1)
+    will = atributos.get("WILL", 1)
+
+    return {
+        "Stun": body + will,
+        "Run": ref + dex,
+        "Leap": dex + body,
+        "Recovery": max(1, body // 2),
+    }
+
 def calcular_xp_necessario(nivel_atual):
     # Fórmula: Base 100 * (Nível ^ 2) * Constante de ajuste
     # Exemplo simples estilo D&D:

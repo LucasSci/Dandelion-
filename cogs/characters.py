@@ -8,6 +8,7 @@ from data_cache import get_world_location_names
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
 from data.repositories import CharacterRepository, SkillRepository
+from utils import calcular_stats_derivados
 LOCALIZACOES_ARMADURA = {
     "Cabeça": "cabeca",
     "Torso": "torso",
@@ -421,6 +422,7 @@ class Characters(commands.Cog):
             "pernas": armor_layers["pernas"],
         }
         atributos_map = {nome: valor for nome, valor in atributos}
+        derived_stats = calcular_stats_derivados(atributos_map)
 
         ficha = {
             "schema_version": "v1.0.0",
@@ -437,13 +439,13 @@ class Characters(commands.Cog):
                 "LUCK": atributos_map.get("LUCK", 1),
             },
             "derived_stats": {
-                "Stun": 0,
-                "Run": 0,
-                "Leap": 0,
+                "Stun": derived_stats["Stun"],
+                "Run": derived_stats["Run"],
+                "Leap": derived_stats["Leap"],
                 "HP": personagem[9],
                 "Stamina": personagem[14] if personagem[14] is not None else 0,
                 "Vigor": personagem[15] if personagem[15] is not None else 0,
-                "Recovery": 0,
+                "Recovery": derived_stats["Recovery"],
             },
             "skills_tree": [
                 {
