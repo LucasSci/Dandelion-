@@ -317,7 +317,8 @@ class CharacterRepository:
         return row[0] if row else None
 
     async def list_characters(self, limit: int = 20) -> list[tuple[str, Optional[int]]]:
-        async with self.db.execute("SELECT nome, user_id FROM personagens LIMIT ?", (limit,)) as cursor:
+        limit = int(limit)
+        async with self.db.execute(f"SELECT nome, user_id FROM personagens LIMIT {limit}") as cursor:
             return await cursor.fetchall()
 
     async def fetch_embed_details(self, personagem_id: int) -> Optional[tuple]:
@@ -338,6 +339,13 @@ class CharacterRepository:
         async with self.db.execute(
             """
             SELECT nome, raca, classe, imagem_url
+            FROM personagens
+            WHERE id = ?
+            """,
+            (personagem_id,),
+        ) as cursor:
+            return await cursor.fetchone()
+
     async def fetch_profile(self, personagem_id: int) -> Optional[tuple[str, Optional[str], Optional[str]]]:
         async with self.db.execute(
             """
