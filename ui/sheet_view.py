@@ -70,6 +70,19 @@ def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
         embed.set_footer(text=f"Atualizado {timestamp}")
 
 
+def _split_text(texto: str, limite: int = 3900) -> list[str]:
+    texto = (texto or "").strip()
+    if not texto:
+        return [""]
+    return [texto[i : i + limite] for i in range(0, len(texto), limite)]
+
+
+async def _table_exists(db, table: str) -> bool:
+    async with db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
+        (table,),
+    ) as cursor:
+        return await cursor.fetchone() is not None
 def _apply_embed_identity(
     embed: discord.Embed,
     titulo: str | None,
@@ -592,6 +605,92 @@ class RolagemCombateButton(ui.Button):
         )
         await interaction.response.send_message(embed=embed)
 
+
+class ExplorarConhecimentoButton(ui.Button):
+    def __init__(self, personagem_id: int):
+        super().__init__(
+            style=discord.ButtonStyle.secondary,
+            label="Explorar Conhecimento",
+            emoji="📚",
+            row=2,
+        )
+        self.personagem_id = personagem_id
+
+    async def callback(self, interaction: discord.Interaction):
+        db = interaction.client.db
+        required_tables = ("lore_entry_tags", "lore_tags", "lore_entries")
+        for table in required_tables:
+            if not await _table_exists(db, table):
+                return await interaction.response.send_message(
+                    "⚠️ O sistema de tags de lore ainda não está disponível.",
+                    ephemeral=True,
+                )
+
+        if not await _table_exists(db, "personagem_tags"):
+            return await interaction.response.send_message(
+                "⚠️ Nenhuma tag foi associada ao seu personagem ainda.",
+                ephemeral=True,
+            )
+
+        async with db.execute(
+            "SELECT tag_id FROM personagem_tags WHERE personagem_id = ?",
+            (self.personagem_id,),
+        ) as cursor:
+            tag_ids = [row[0] for row in await cursor.fetchall()]
+
+        if not tag_ids:
+            return await interaction.response.send_message(
+                "⚠️ Nenhuma tag foi associada ao seu personagem ainda.",
+                ephemeral=True,
+            )
+
+        tag_placeholders = ", ".join(["?"] * len(tag_ids))
+        is_admin = interaction.user.guild_permissions.administrator
+        params = list(tag_ids)
+        privacy_clause = ""
+        if not is_admin:
+            privacy_clause = " AND (le.is_private = 0 OR le.is_private IS NULL OR le.owner_id = ?)"
+            params.append(interaction.user.id)
+
+        query = f"""
+            SELECT le.id, le.titulo, le.resumo, le.conteudo, GROUP_CONCAT(lt.nome, ', ')
+            FROM lore_entries le
+            JOIN lore_entry_tags let ON let.lore_entry_id = le.id
+            JOIN lore_tags lt ON lt.id = let.tag_id
+            WHERE let.tag_id IN ({tag_placeholders})
+            {privacy_clause}
+            GROUP BY le.id
+            ORDER BY le.id ASC
+        """
+        async with db.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+
+        if not rows:
+            return await interaction.response.send_message(
+                "📭 Nenhum lore compatível com as tags do seu personagem foi encontrado.",
+                ephemeral=True,
+            )
+
+        embeds: list[discord.Embed] = []
+        for entry_id, titulo, resumo, conteudo, tags in rows:
+            partes = _split_text(conteudo or resumo or "", 3900)
+            total = len(partes)
+            for index, parte in enumerate(partes, start=1):
+                sufixo = f" (parte {index}/{total})" if total > 1 else ""
+                embed = discord.Embed(
+                    title=f"📚 [{entry_id}] {titulo}{sufixo}",
+                    description=parte or "—",
+                    color=0x2E7D32,
+                )
+                if tags:
+                    embed.add_field(name="Tags", value=tags, inline=False)
+                _set_footer_timestamp(embed, "Explorar Conhecimento")
+                embeds.append(embed)
+
+        await interaction.response.send_message(embed=embeds[0], ephemeral=True)
+        for embed in embeds[1:]:
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
 class FichaView(BaseRPGView):
     def __init__(self, bot, personagem_id, user_id_dono):
         super().__init__(bot, user_id_dono, timeout=None)
@@ -886,6 +985,7 @@ class FichaView(BaseRPGView):
             embed.description = "Clique em um atributo para rolar uma perícia."
             for nome, valor in atributos:
                 self.add_item(AtributoButton(nome, valor))
+        self.add_item(ExplorarConhecimentoButton(self.personagem_id))
 
         _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Atributos")
 

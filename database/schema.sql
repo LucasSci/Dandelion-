@@ -485,4 +485,5 @@ CREATE INDEX IF NOT EXISTS idx_traits_key ON traits(key);
 CREATE INDEX IF NOT EXISTS idx_loot_items_key ON loot_items(key);
 CREATE INDEX IF NOT EXISTS idx_sources_key ON sources(key);
 CREATE INDEX IF NOT EXISTS idx_lore_entries_titulo ON lore_entries(titulo);
+CREATE INDEX IF NOT EXISTS idx_lore_entries_owner_id ON lore_entries(owner_id);
 CREATE INDEX IF NOT EXISTS idx_lore_sources_tipo ON lore_sources(tipo);

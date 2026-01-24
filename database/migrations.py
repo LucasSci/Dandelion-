@@ -66,6 +66,14 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     if _table_exists(cursor, "criaturas"):
         _add_columns_if_missing(cursor, "criaturas", criaturas_extras)
 
+    lore_entries_extras = [
+        ("is_private", "BOOLEAN DEFAULT 0"),
+        ("owner_id", "INTEGER"),
+    ]
+    if _table_exists(cursor, "lore_entries"):
+        _add_columns_if_missing(cursor, "lore_entries", lore_entries_extras)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_lore_entries_owner_id ON lore_entries(owner_id);")
+
     # 3. Migração Quests (Restrição de Classe)
     quests_extras = [
         ("classes_req", "TEXT DEFAULT 'Todas'"),

@@ -186,6 +186,14 @@ class Campaign(commands.Cog):
 
     @lore.command(name="ver", description="📚 Vê o conhecimento de mundo registrado pelo mestre")
     async def lore_ver(self, interaction: discord.Interaction):
+        is_admin = interaction.user.guild_permissions.administrator
+        query = "SELECT id, titulo, resumo, conteudo FROM lore_entries"
+        params = []
+        if not is_admin:
+            query += " WHERE (is_private = 0 OR is_private IS NULL OR owner_id = ?)"
+            params.append(interaction.user.id)
+        query += " ORDER BY id ASC"
+
         is_mestre = Campaign.is_mestre(interaction)
         params = []
         query = "SELECT id, titulo, resumo, conteudo FROM lore_entries"
