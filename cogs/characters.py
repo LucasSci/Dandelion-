@@ -7,6 +7,8 @@ from discord import app_commands
 from data_cache import get_world_location_names
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
+from data.repositories import CharacterRepository, SkillRepository
+from rpg_core.derived_stats import calculate_derived_stats
 from data.repositories import CharacterRepository, DiarioRepository, SkillRepository
 LOCALIZACOES_ARMADURA = {
     "Cabeça": "cabeca",
@@ -285,7 +287,7 @@ class Characters(commands.Cog):
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
         personagem_id, personagem_nome, _, _ = personagem
-        atributos = await self.character_repo.list_attributes(personagem_id)
+        atributos_map = await self.character_repo.list_attributes_dict(personagem_id)
 
         if not atributos:
             return await interaction.response.send_message("📭 Nenhum atributo cadastrado.")
@@ -430,7 +432,7 @@ class Characters(commands.Cog):
         personagem_id = personagem[0]
         habilidades = await self.skill_repo.list_skill_export(personagem_id)
 
-        atributos = await self.character_repo.list_attributes(personagem_id)
+        atributos_map = await self.character_repo.list_attributes_dict(personagem_id)
 
         export_localizacoes = ["cabeca", "torso", "pernas"]
         armaduras = await self.character_repo.list_armors(personagem_id, export_localizacoes)
@@ -449,7 +451,7 @@ class Characters(commands.Cog):
             "torso": armor_layers["torso"],
             "pernas": armor_layers["pernas"],
         }
-        atributos_map = {nome: valor for nome, valor in atributos}
+        derived_stats = calculate_derived_stats(atributos_map)
 
         ficha = {
             "schema_version": "v1.0.0",
@@ -466,13 +468,13 @@ class Characters(commands.Cog):
                 "LUCK": atributos_map.get("LUCK", 1),
             },
             "derived_stats": {
-                "Stun": 0,
-                "Run": 0,
-                "Leap": 0,
+                "Stun": derived_stats["Stun"],
+                "Run": derived_stats["Run"],
+                "Leap": derived_stats["Leap"],
                 "HP": personagem[9],
                 "Stamina": personagem[14] if personagem[14] is not None else 0,
                 "Vigor": personagem[15] if personagem[15] is not None else 0,
-                "Recovery": 0,
+                "Recovery": derived_stats["Recovery"],
             },
             "skills_tree": [
                 {

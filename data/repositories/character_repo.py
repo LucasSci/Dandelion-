@@ -144,6 +144,10 @@ class CharacterRepository:
         async with self.db.execute(query, params) as cursor:
             return await cursor.fetchall()
 
+    async def list_attributes_dict(self, personagem_id: int, limit: Optional[int] = None) -> dict[str, int]:
+        attributes = await self.list_attributes(personagem_id, limit)
+        return {nome: valor for nome, valor in attributes}
+
     async def upsert_armor(self, personagem_id: int, localizacao: str, sp: int) -> None:
         await self.db.execute(
             """
