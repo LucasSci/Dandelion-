@@ -13,6 +13,7 @@ class Settings:
     gemini_api_key: Optional[str]
     roll20_campaign_url: Optional[str]
     vtt_api_url: Optional[str]
+    default_character_thumbnail_url: Optional[str]
     log_level: str
     http_timeout_seconds: float
     sync_commands: bool
@@ -27,6 +28,7 @@ def load_settings() -> Settings:
         gemini_api_key=os.getenv("GEMINI_API_KEY"),
         roll20_campaign_url=os.getenv("ROLL20_CAMPAIGN_URL"),
         vtt_api_url=os.getenv("VTT_API_URL"),
+        default_character_thumbnail_url=os.getenv("DEFAULT_CHARACTER_THUMBNAIL_URL"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         http_timeout_seconds=float(os.getenv("HTTP_TIMEOUT_SECONDS", "20")),
         sync_commands=sync_commands,

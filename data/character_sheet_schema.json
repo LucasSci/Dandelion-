@@ -63,13 +63,41 @@
         "Recovery"
       ],
       "properties": {
-        "Stun": { "type": "integer", "minimum": 0 },
-        "Run": { "type": "integer", "minimum": 0 },
-        "Leap": { "type": "integer", "minimum": 0 },
-        "HP": { "type": "integer", "minimum": 0 },
-        "Stamina": { "type": "integer", "minimum": 0 },
-        "Vigor": { "type": "integer", "minimum": 0 },
-        "Recovery": { "type": "integer", "minimum": 0 }
+        "Stun": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calculado a partir de BODY e WILL (ex.: (BODY + WILL) / 2)."
+        },
+        "Run": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calculado a partir de REF e DEX (ex.: REF + DEX)."
+        },
+        "Leap": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calculado a partir de BODY e DEX (ex.: BODY + DEX)."
+        },
+        "HP": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calculado a partir de BODY."
+        },
+        "Stamina": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calculado a partir de BODY e WILL."
+        },
+        "Vigor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calculado a partir de BODY, WILL e EMP."
+        },
+        "Recovery": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calculado a partir de BODY."
+        }
       }
     },
     "skills_tree": {
