@@ -80,12 +80,7 @@ class ArmorLayer:
     sp_current: int = field(init=False)
 
     def __post_init__(self) -> None:
-        self.reliability = max(0.0, min(100.0, self.reliability))
-        self.sp_current = max(0, int(self.sp_base * (self.reliability / 100)))
-    reliability: int = 100
-    sp_current: int = field(init=False)
-
-    def __post_init__(self) -> None:
+        self.reliability = max(0.0, min(100.0, float(self.reliability)))
         self.sp_current = self._calculate_sp_current()
 
     def apply_damage(self, damage: int) -> int:

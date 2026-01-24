@@ -7,10 +7,8 @@ from discord import app_commands
 from data_cache import get_world_location_names
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
-from data.repositories import CharacterRepository, SkillRepository
-from rpg_core.derived_stats import calculate_derived_stats
 from data.repositories import CharacterRepository, DiarioRepository, SkillRepository
-from witcher_rules import calcular_dano_armadura
+from rpg_core.derived_stats import calculate_derived_stats
 LOCALIZACOES_ARMADURA = {
     "Cabeça": "cabeca",
     "Torso": "torso",
@@ -214,47 +212,10 @@ class Characters(commands.Cog):
         if not dados:
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        personagem_id, nome, _, _ = dados
-        async with self.bot.db.execute(
-            """
-            SELECT mc.conteudo, mc.data_registro
-            FROM personagem_memorias pm
-            JOIN memoria_campanha mc ON mc.id = pm.sessao_id
-            WHERE pm.personagem_id = ?
-            ORDER BY pm.id DESC
-            LIMIT 5
-            """,
-            (personagem_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
-
-        if not rows:
-            return await interaction.response.send_message(
-                f"📭 Não há fatos registrados para **{nome}** ainda.",
-                ephemeral=True,
-            )
-
-        texto = "\n\n".join(
-            f"**{data_registro}**\n{conteudo}" for conteudo, data_registro in rows
-        )
-        embed = discord.Embed(
-            title=f"📖 Diário de {nome}",
-            description=texto,
-            color=0x7A0000,
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    @app_commands.command(name="diario", description="📓 Mostra os últimos fatos do seu diário")
-    async def diario(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
-        dados = await self.character_repo.fetch_character_summary_by_user(interaction.user.id)
-        if not dados:
-            return await interaction.followup.send("❌ Nenhuma ficha encontrada.", ephemeral=True)
-
         personagem_id, personagem_nome, _, _ = dados
         fatos = await self.diario_repo.list_recent_facts_by_personagem(personagem_id, limit=5)
         if not fatos:
-            return await interaction.followup.send(
+            return await interaction.response.send_message(
                 f"📭 Nenhum fato registrado ainda para **{personagem_nome}**.",
                 ephemeral=True,
             )
@@ -265,11 +226,11 @@ class Characters(commands.Cog):
             linhas.append(f"• {trecho} _(relevância {relevancia}, {criado_em})_")
 
         embed = discord.Embed(
-            title=f"📓 Diário de {personagem_nome}",
+            title=f"📖 Diário de {personagem_nome}",
             description="\n".join(linhas),
-            color=0x2F3136,
+            color=0x7A0000,
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="viajar", description="Define a localização atual do personagem")
     @app_commands.autocomplete(destino=localizacao_autocomplete)
@@ -332,10 +293,12 @@ class Characters(commands.Cog):
         personagem_id, personagem_nome, _, _ = personagem
         atributos_map = await self.character_repo.list_attributes_dict(personagem_id)
 
-        if not atributos:
+        if not atributos_map:
             return await interaction.response.send_message("📭 Nenhum atributo cadastrado.")
 
-        linhas = "\n".join([f"• **{nome}**: {valor}" for nome, valor in atributos])
+        linhas = "\n".join(
+            [f"• **{nome}**: {valor}" for nome, valor in atributos_map.items()]
+        )
         await interaction.response.send_message(f"📋 Atributos de **{personagem_nome}**:\n{linhas}")
 
     # --- ARMADURA / DANO ---
@@ -502,15 +465,21 @@ class Characters(commands.Cog):
             "torso": armor_layers["torso"],
             "pernas": armor_layers["pernas"],
         }
-        atributos_map = {nome: valor for nome, valor in atributos}
-        derived_stats = self.character_repo.calculate_derived_stats(atributos_map)
-        if personagem[9] is not None:
-            derived_stats["HP"] = personagem[9]
-        if personagem[14] is not None:
-            derived_stats["Stamina"] = personagem[14]
-        if personagem[15] is not None:
-            derived_stats["Vigor"] = personagem[15]
-        derived_stats = calculate_derived_stats(atributos_map)
+        base_derived_stats = calculate_derived_stats(atributos_map)
+        hp = personagem[9] if personagem[9] is not None else base_derived_stats["HP"]
+        stamina = (
+            personagem[14] if personagem[14] is not None else base_derived_stats["Stamina"]
+        )
+        vigor = personagem[15] if personagem[15] is not None else base_derived_stats["Vigor"]
+        derived_stats = {
+            "Stun": base_derived_stats["Stun"],
+            "Run": base_derived_stats["Run"],
+            "Leap": base_derived_stats["Leap"],
+            "HP": hp,
+            "Stamina": stamina,
+            "Vigor": vigor,
+            "Recovery": base_derived_stats["Recovery"],
+        }
 
         ficha = {
             "schema_version": "v1.0.0",
@@ -527,18 +496,6 @@ class Characters(commands.Cog):
                 "LUCK": atributos_map.get("LUCK", 1),
             },
             "derived_stats": derived_stats,
-            "derived_stats": {
-                "Stun": derived_stats["Stun"],
-                "Run": derived_stats["Run"],
-                "Leap": derived_stats["Leap"],
-                "HP": derived_stats["HP"],
-                "Stamina": derived_stats["Stamina"],
-                "Vigor": derived_stats["Vigor"],
-                "HP": personagem[9],
-                "Stamina": personagem[14] if personagem[14] is not None else 0,
-                "Vigor": personagem[15] if personagem[15] is not None else 0,
-                "Recovery": derived_stats["Recovery"],
-            },
             "skills_tree": [
                 {
                     "nome": h[0],

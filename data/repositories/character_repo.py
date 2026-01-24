@@ -157,29 +157,13 @@ class CharacterRepository:
         emp = _attr_value("EMP")
 
         return {
-            "Stun": max(0, int((body + will) / 2)),
+            "Stun": max(0, body + will),
             "Run": max(0, ref + dex),
             "Leap": max(0, body + dex),
             "HP": max(0, body * 5),
             "Stamina": max(0, body + will),
             "Vigor": max(0, body + will + emp),
-            "Recovery": max(1, body // 2),
-        }
-        ref = attributes.get("REF", 0)
-        dex = attributes.get("DEX", 0)
-        body = attributes.get("BODY", 0)
-        will = attributes.get("WILL", 0)
-        emp = attributes.get("EMP", 0)
-        spd = attributes.get("SPD", 0)
-
-        return {
-            "Stun": max(0, body + will),
-            "Run": max(0, ref + dex),
-            "Leap": max(0, (ref + dex) // 2),
-            "HP": max(0, body * 5),
-            "Stamina": max(0, body + will),
-            "Vigor": max(0, body + will + emp),
-            "Recovery": max(0, spd // 2),
+            "Recovery": max(0, (body + will) // 2),
         }
     async def list_attributes_dict(self, personagem_id: int, limit: Optional[int] = None) -> dict[str, int]:
         attributes = await self.list_attributes(personagem_id, limit)
