@@ -15,7 +15,7 @@ from data.repositories import (
 )
 from ui.base_view import BaseRPGView
 from ui.views import ConfirmarExclusaoView
-from utils import rolar_dados, rolar_pericia_explosiva
+from utils import rolar_dados, rolar_pericia_explosiva, gerar_barra
 
 try:
     from utils.dc_table import DEFAULT_DC_THRESHOLDS, classificar_resultado
@@ -207,9 +207,15 @@ async def construir_embed_ficha(db, personagem_id, user_id):
 
     hp_pct = _format_percentual(hp_atual, hp_max)
     vigor_pct = _format_percentual(vigor_atual, vigor_max)
+
+    barra_hp = gerar_barra(hp_atual, hp_max)
+    barra_vigor = gerar_barra(vigor_atual, vigor_max)
+
     recursos = (
         f"❤️ HP {hp_atual}/{hp_max} ({hp_pct})\n"
+        f"{barra_hp}\n"
         f"⚡ Vigor {vigor_atual}/{vigor_max} ({vigor_pct})\n"
+        f"{barra_vigor}\n"
         f"✨ MP {mp_max}\n"
         f"☠️ Toxicidade {toxicidade_atual}/{toxicidade_max}"
     )
