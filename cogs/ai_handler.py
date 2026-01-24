@@ -105,6 +105,11 @@ class AIHandler(commands.Cog):
             privacy_filter = "is_private = 0 OR owner_id = ?"
             params.append(user_id)
 
+        privacy_filter = "is_private = 0"
+        if user_id is not None:
+            privacy_filter = "is_private = 0 OR owner_id = ?"
+            params.append(user_id)
+
         async with self.bot.db.execute(
             f"""
             SELECT titulo, resumo, conteudo
