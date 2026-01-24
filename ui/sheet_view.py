@@ -356,6 +356,11 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             required=False,
             placeholder="Ex: 15 ou Médio",
         )
+        self.dificuldade_input = ui.TextInput(
+            label="DC / Nível de Dificuldade (opcional)",
+            required=False,
+            placeholder="Ex: 15 ou Médio",
+        )
 
         self.add_item(self.pericia_nome)
         self.add_item(self.pericia_valor)
