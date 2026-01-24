@@ -29,6 +29,7 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
 
     # 1. Migração Personagens (HP Atual, MP, etc)
     personagens_extras = [
+        ("titulo", "TEXT"),
         ("hp_max", "INTEGER DEFAULT 30"),
         ("mp_max", "INTEGER DEFAULT 10"),
         ("vigor_max", "INTEGER DEFAULT 10"),
@@ -198,6 +199,27 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             """
         )
 
+    if not _table_exists(cursor, "personagem_memorias"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS personagem_memorias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                personagem_id INTEGER NOT NULL,
+                log_id INTEGER,
+                descricao_fato TEXT NOT NULL,
+                relevancia INTEGER DEFAULT 1,
+                criado_em TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+                FOREIGN KEY(log_id) REFERENCES session_logs(id) ON DELETE SET NULL
+            );
+            """
+        )
+
+    if _table_exists(cursor, "personagem_memorias"):
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_personagem_memorias_personagem_id ON personagem_memorias(personagem_id);"
+        )
+
     if not _table_exists(cursor, "transcription_settings"):
         cursor.execute(
             """
@@ -207,6 +229,30 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
                 summary_channel_id INTEGER
             );
             """
+        )
+
+    if not _table_exists(cursor, "mencoes_personagem"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mencoes_personagem (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                personagem_id INTEGER NOT NULL,
+                session_log_id INTEGER,
+                descricao_fato TEXT NOT NULL,
+                relevancia INTEGER DEFAULT 0,
+                criado_em TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+                FOREIGN KEY(session_log_id) REFERENCES session_logs(id) ON DELETE SET NULL
+            );
+            """
+        )
+
+    if _table_exists(cursor, "mencoes_personagem"):
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_personagem_id ON mencoes_personagem(personagem_id);"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_session_log_id ON mencoes_personagem(session_log_id);"
         )
 
     if not _table_exists(cursor, "economia_regional"):

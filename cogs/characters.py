@@ -9,6 +9,7 @@ from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
 from data.repositories import CharacterRepository, SkillRepository
 from rpg_core.derived_stats import calculate_derived_stats
+from data.repositories import CharacterRepository, DiarioRepository, SkillRepository
 LOCALIZACOES_ARMADURA = {
     "Cabeça": "cabeca",
     "Torso": "torso",
@@ -27,6 +28,7 @@ class Characters(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.character_repo = CharacterRepository(bot.db)
+        self.diario_repo = DiarioRepository(bot.db)
         self.skill_repo = SkillRepository(bot.db)
 
     # --- AUTOCOMPLETES ---
@@ -197,6 +199,34 @@ class Characters(commands.Cog):
         personagem, local = row
         local = local or "Desconhecida"
         await interaction.response.send_message(f"📍 **{personagem}** está em **{local}**.")
+
+    @app_commands.command(name="diario", description="📓 Mostra os últimos fatos do seu diário")
+    async def diario(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        dados = await self.character_repo.fetch_character_summary_by_user(interaction.user.id)
+        if not dados:
+            return await interaction.followup.send("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, personagem_nome, _, _ = dados
+        fatos = await self.diario_repo.list_recent_facts_by_personagem(personagem_id, limit=5)
+        if not fatos:
+            return await interaction.followup.send(
+                f"📭 Nenhum fato registrado ainda para **{personagem_nome}**.",
+                ephemeral=True,
+            )
+
+        linhas = []
+        for descricao, relevancia, criado_em in fatos:
+            trecho = descricao.strip() if descricao else "(Sem descrição)"
+            linhas.append(f"• {trecho} _(relevância {relevancia}, {criado_em})_")
+
+        embed = discord.Embed(
+            title=f"📓 Diário de {personagem_nome}",
+            description="\n".join(linhas),
+            color=0x2F3136,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="viajar", description="Define a localização atual do personagem")
     @app_commands.autocomplete(destino=localizacao_autocomplete)

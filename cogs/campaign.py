@@ -7,6 +7,7 @@ from data_cache import (
     get_world_location_details,
     get_world_location_names,
 )
+from data.repositories import CharacterMentionRepository, CharacterRepository
 
 class Campaign(commands.Cog):
     diario = app_commands.Group(name="diario", description="Comandos do diário da campanha.")
@@ -15,6 +16,8 @@ class Campaign(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.character_repo = CharacterRepository(bot.db)
+        self.character_mention_repo = CharacterMentionRepository(bot.db)
 
     @staticmethod
     def _split_text(texto: str, limite: int = 3900) -> list[str]:
@@ -61,6 +64,66 @@ class Campaign(commands.Cog):
 
         embed = discord.Embed(title="📖 Diário do Dandelion (Timeline)", description=texto, color=0xA84300)
         embed.set_footer(text="A IA usará APENAS estes fatos para gerar missões.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @diario.command(name="personagem", description="📓 Mostra os últimos fatos do seu personagem")
+    @app_commands.describe(usuario="Outro jogador (apenas mestre)")
+    async def diario_personagem(
+        self,
+        interaction: discord.Interaction,
+        usuario: Optional[discord.Member] = None,
+    ):
+        if usuario and not is_mestre(interaction):
+            return await interaction.response.send_message(
+                "❌ Apenas o Mestre pode consultar o diário de outros jogadores.",
+                ephemeral=True,
+            )
+
+        target = usuario or interaction.user
+        personagem = await self.character_repo.fetch_character_summary_by_user(target.id)
+        if not personagem:
+            return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
+
+        personagem_id, personagem_nome, _, _ = personagem
+        mencoes = await self.character_mention_repo.list_mentions(personagem_id, limit=5)
+
+        if mencoes:
+            descricao = "\n".join(
+                f"**[{m_id}]** {fato} (relevância: {relevancia}, {criado_em})"
+                for m_id, fato, relevancia, criado_em, _ in mencoes
+            )
+            embed = discord.Embed(
+                title=f"📓 Diário de {personagem_nome}",
+                description=descricao,
+                color=0x8D6E63,
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        async with self.bot.db.execute(
+            """
+            SELECT id, conteudo, data_registro
+            FROM memoria_campanha
+            ORDER BY id DESC
+            LIMIT 5
+            """
+        ) as cursor:
+            memoria = await cursor.fetchall()
+
+        if not memoria:
+            return await interaction.response.send_message(
+                "📭 Nenhum fato registrado ainda para a campanha.",
+                ephemeral=True,
+            )
+
+        descricao = "\n".join(
+            f"**[{mem_id}]** {conteudo} ({data_registro})"
+            for mem_id, conteudo, data_registro in memoria
+        )
+        embed = discord.Embed(
+            title="📖 Últimos fatos da campanha",
+            description=descricao,
+            color=0x8D6E63,
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @diario.command(name="adicionar", description="➕ Adiciona um evento HOJE na linha do tempo")
