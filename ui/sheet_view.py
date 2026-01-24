@@ -763,6 +763,15 @@ class FichaView(BaseRPGView):
         self.update_buttons_state("inventario")
         self.clear_dynamic_buttons()
 
+        def gerar_barra_encumbrance(encumbrance_atual: int, capacidade_maxima: int, segmentos: int = 10) -> str:
+            if capacidade_maxima <= 0:
+                preenchidos = 0
+            else:
+                proporcao = encumbrance_atual / capacidade_maxima
+                preenchidos = min(segmentos, max(0, round(proporcao * segmentos)))
+            vazios = segmentos - preenchidos
+            return f"[{'■' * preenchidos}{'□' * vazios}]"
+
         character_repo = CharacterRepository(interaction.client.db)
         inventory_repo = InventoryRepository(interaction.client.db)
 
@@ -783,8 +792,13 @@ class FichaView(BaseRPGView):
 
         encumbrance = len(itens)
         capacidade = 10 + (nivel * 2)
+        barra_encumbrance = gerar_barra_encumbrance(encumbrance, capacidade)
         embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
-        embed.add_field(name="Encumbrance", value=f"{encumbrance}/{capacidade} (1 por item)", inline=False)
+        embed.add_field(
+            name="Encumbrance",
+            value=f"{barra_encumbrance} {encumbrance}/{capacidade} (1 por item)",
+            inline=False,
+        )
         _set_footer_timestamp(embed, "Layout estilo pergaminho limpo • Lista dinâmica")
 
         if interaction.response.is_done():
