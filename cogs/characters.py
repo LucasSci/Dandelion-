@@ -453,6 +453,12 @@ class Characters(commands.Cog):
         }
         atributos_map = {nome: valor for nome, valor in atributos}
         derived_stats = self.character_repo.calculate_derived_stats(atributos_map)
+        if personagem[9] is not None:
+            derived_stats["HP"] = personagem[9]
+        if personagem[14] is not None:
+            derived_stats["Stamina"] = personagem[14]
+        if personagem[15] is not None:
+            derived_stats["Vigor"] = personagem[15]
         derived_stats = calculate_derived_stats(atributos_map)
 
         ficha = {
@@ -469,6 +475,7 @@ class Characters(commands.Cog):
                 "WILL": atributos_map.get("WILL", 1),
                 "LUCK": atributos_map.get("LUCK", 1),
             },
+            "derived_stats": derived_stats,
             "derived_stats": {
                 "Stun": derived_stats["Stun"],
                 "Run": derived_stats["Run"],

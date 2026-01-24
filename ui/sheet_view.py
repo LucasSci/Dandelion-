@@ -170,6 +170,14 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         f"**{nome}** ({tipo})" if tipo else f"**{nome}**"
         for nome, tipo in itens
     ]
+    atributos_map = {nome: valor for nome, valor in atributos}
+    derived_stats = character_repo.calculate_derived_stats(atributos_map)
+    derived_display = [
+        ("Stun", derived_stats["Stun"]),
+        ("Run", derived_stats["Run"]),
+        ("Leap", derived_stats["Leap"]),
+        ("Recovery", derived_stats["Recovery"]),
+    ]
 
     embed = discord.Embed(color=_cor_por_hp(hp_atual, hp_max))
     _apply_embed_identity(embed, nome, classe, raca, img)
@@ -225,6 +233,11 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     embed.add_field(
         name="📊 Derivados",
         value=_format_dual_column(derived_items, name_width=9, value_width=5),
+        inline=True
+    )
+    embed.add_field(
+        name="🧮 Derivados",
+        value=_format_dual_column(derived_display, name_width=10, value_width=4),
         inline=True
     )
     embed.add_field(
