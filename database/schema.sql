@@ -197,6 +197,14 @@ CREATE TABLE IF NOT EXISTS alchemy_user_ingredients (
     FOREIGN KEY(ingredient_id) REFERENCES alchemy_ingredients(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS alchemy_user_recipes (
+    user_id INTEGER NOT NULL,
+    recipe_id INTEGER NOT NULL,
+    unlocked_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, recipe_id),
+    FOREIGN KEY(recipe_id) REFERENCES alchemy_recipes(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS session_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     channel_id INTEGER,

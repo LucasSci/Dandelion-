@@ -51,6 +51,12 @@ def _format_percentual(atual, maximo):
     return f"{int(round(pct * 100))}%"
 
 
+def _format_receitas_conhecidas(receitas):
+    if not receitas:
+        return "_Nenhuma receita desbloqueada._"
+    return "\n".join([f"• **{nome}** ({base})" for nome, base in receitas])
+
+
 def _cor_por_hp(hp_atual, hp_max):
     if hp_max <= 0:
         return 0xED4245
@@ -846,13 +852,30 @@ class FichaView(BaseRPGView):
         character_repo = CharacterRepository(interaction.client.db)
         inventory_repo = InventoryRepository(interaction.client.db)
         skill_repo = SkillRepository(interaction.client.db)
+        db = interaction.client.db
+
+        async def listar_receitas_conhecidas():
+            async with db.execute(
+                """
+                SELECT ar.nome, ar.base_alcoolica
+                FROM alchemy_user_recipes ur
+                JOIN alchemy_recipes ar ON ar.id = ur.recipe_id
+                WHERE ur.user_id = ?
+                ORDER BY ar.nome
+                LIMIT 12
+                """,
+                (interaction.user.id,),
+            ) as cursor:
+                return await cursor.fetchall()
 
         # Optimization: Parallelize independent DB queries
+        recursos, skills, itens, receitas = await asyncio.gather(
         perfil, recursos, skills, itens = await asyncio.gather(
             character_repo.fetch_profile(self.personagem_id),
             character_repo.fetch_resources(self.personagem_id),
             skill_repo.list_skills_for_sheet(self.personagem_id, limit=15),
-            inventory_repo.list_potions(interaction.user.id)
+            inventory_repo.list_potions(interaction.user.id),
+            listar_receitas_conhecidas(),
         )
 
         if not perfil:
@@ -899,6 +922,13 @@ class FichaView(BaseRPGView):
         else:
             embed.add_field(name="🧪 Poções", value="Nenhuma poção no inventário.", inline=False)
 
+        embed.add_field(
+            name="📘 Receitas Conhecidas",
+            value=_format_receitas_conhecidas(receitas),
+            inline=False,
+        )
+
+        _set_footer_timestamp(embed, "Magia & Alquimia")
         _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Magia & Alquimia")
 
         if interaction.response.is_done():
