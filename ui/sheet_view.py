@@ -156,7 +156,12 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     inventory_repo = InventoryRepository(db)
     skill_repo = SkillRepository(db)
 
-    dados = await character_repo.fetch_embed_details(personagem_id)
+    dados, atributos, pericias, itens = await asyncio.gather(
+        character_repo.fetch_embed_details(personagem_id),
+        character_repo.list_attributes(personagem_id, limit=12),
+        skill_repo.list_skills_for_sheet(personagem_id, limit=10, order_by_name=True),
+        inventory_repo.list_recent_items(user_id, limit=8),
+    )
 
     if not dados:
         return None
@@ -171,12 +176,6 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         vigor_atual = vigor_max
     if toxicidade_atual is None:
         toxicidade_atual = 0
-
-    atributos, pericias, itens = await asyncio.gather(
-        character_repo.list_attributes(personagem_id, limit=12),
-        skill_repo.list_skills_for_sheet(personagem_id, limit=10, order_by_name=True),
-        inventory_repo.list_recent_items(user_id, limit=8),
-    )
     atributos_map = {nome: valor for nome, valor in atributos}
     derived_stats = character_repo.calculate_derived_stats(atributos_map)
 
