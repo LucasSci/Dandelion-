@@ -159,6 +159,19 @@ class Alchemy(commands.Cog):
             rows = await cursor.fetchall()
         return [app_commands.Choice(name=row[0], value=row[0]) for row in rows]
 
+    async def _listar_receitas_desbloqueadas(self, user_id: int) -> list[tuple]:
+        async with self.bot.db.execute(
+            """
+            SELECT ar.id, ar.nome, ar.base_alcoolica, ar.efeito, ar.toxicidade_base, ar.qualidade_min, ur.unlocked_at
+            FROM alchemy_user_recipes ur
+            JOIN alchemy_recipes ar ON ar.id = ur.recipe_id
+            WHERE ur.user_id = ?
+            ORDER BY ar.nome
+            """,
+            (user_id,),
+        ) as cursor:
+            return await cursor.fetchall()
+
     @app_commands.command(name="forage", description="🌿 Coleta ervas e ingredientes conforme o bioma.")
     async def forage(self, interaction: discord.Interaction):
         if not await self._verificar_ficha(interaction):
@@ -258,6 +271,32 @@ class Alchemy(commands.Cog):
         embed = discord.Embed(
             title="📜 Grimório de Alquimia",
             description="\n\n".join(blocos)[:4000],
+            color=0x4b7f52,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(
+        name="alquimia_receitas_desbloqueadas",
+        description="📘 Lista suas receitas de alquimia desbloqueadas.",
+    )
+    async def listar_receitas_desbloqueadas(self, interaction: discord.Interaction):
+        receitas = await self._listar_receitas_desbloqueadas(interaction.user.id)
+        if not receitas:
+            return await interaction.response.send_message(
+                "📭 Você ainda não desbloqueou receitas.", ephemeral=True
+            )
+
+        linhas = [
+            (
+                f"**{nome}** — Base: {base} | Toxicidade: {tox} | Qualidade mínima: {qual_min}\n"
+                f"Efeito: {efeito}"
+            )
+            for _rec_id, nome, base, efeito, tox, qual_min, _unlocked_at in receitas
+        ]
+
+        embed = discord.Embed(
+            title="📘 Receitas Conhecidas",
+            description="\n\n".join(linhas)[:4000],
             color=0x4b7f52,
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
