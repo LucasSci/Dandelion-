@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS personagens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
     nome TEXT UNIQUE,
+    titulo TEXT,
     raca TEXT,
     classe TEXT,
     nivel INTEGER DEFAULT 1,
