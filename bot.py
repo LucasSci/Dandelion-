@@ -96,18 +96,35 @@ async def teste_gerar_prompt(interaction: discord.Interaction, url_imagem: str):
         return await interaction.followup.send("❌ Sessão HTTP indisponível.")
 
     max_image_bytes = 5 * 1024 * 1024
+    image_data = None
+    image_mime_type = None
 
     try:
         async with bot.http_session.get(url_imagem) as resp:
             if resp.status != 200:
+                logger.error("Download falhou no teste_gerar_prompt (status=%s).", resp.status)
                 return await interaction.followup.send("❌ Não consegui acessar a imagem na URL fornecida.")
             content_length = resp.content_length
             if content_length is not None and content_length > max_image_bytes:
+                logger.error("Imagem excede o limite de 5MB (content_length=%s).", content_length)
                 return await interaction.followup.send("❌ A imagem excede 5MB. Use uma imagem menor.")
+            image_mime_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
             image_data = await resp.read()
-            if len(image_data) > max_image_bytes:
-                return await interaction.followup.send("❌ A imagem excede 5MB. Use uma imagem menor.")
+    except Exception:
+        logger.exception("Falha no download da imagem em teste_gerar_prompt.")
+        return await interaction.followup.send("❌ Erro ao baixar a imagem. Consulte os logs.")
 
+    if not image_mime_type or not image_mime_type.startswith("image/"):
+        logger.error("Content-Type inválido no teste_gerar_prompt: %s", image_mime_type)
+        return await interaction.followup.send("❌ A URL não retornou uma imagem válida.")
+    if not isinstance(image_data, bytes):
+        logger.error("image_data não é bytes no teste_gerar_prompt: %s", type(image_data))
+        return await interaction.followup.send("❌ Não consegui processar a imagem baixada.")
+    if len(image_data) > max_image_bytes:
+        logger.error("Imagem excede o limite de 5MB (len=%s).", len(image_data))
+        return await interaction.followup.send("❌ A imagem excede 5MB. Use uma imagem menor.")
+
+    try:
         prompt_text = """
         Analise esta imagem de uma criatura.
         Crie um prompt de geração de imagem (text-to-image) altamente detalhado para recriar esta criatura.
@@ -120,7 +137,7 @@ async def teste_gerar_prompt(interaction: discord.Interaction, url_imagem: str):
             types.Content(
                 parts=[
                     types.Part.from_text(text=prompt_text),
-                    types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
+                    types.Part.from_bytes(data=image_data, mime_type=image_mime_type)
                 ]
             )
         ]
@@ -130,7 +147,11 @@ async def teste_gerar_prompt(interaction: discord.Interaction, url_imagem: str):
             model="gemini-2.0-flash",
             contents=contents,
         )
+    except Exception:
+        logger.exception("Falha na chamada Gemini em teste_gerar_prompt.")
+        return await interaction.followup.send("❌ Erro na análise da IA. Consulte os logs.")
 
+    try:
         prompt_gerado = response.text
 
         embed = discord.Embed(
@@ -142,10 +163,9 @@ async def teste_gerar_prompt(interaction: discord.Interaction, url_imagem: str):
         embed.set_footer(text="Copie este prompt e use no Midjourney/Leonardo.ai")
 
         await interaction.followup.send(embed=embed)
-
     except Exception:
-        logger.exception("Falha no comando teste_gerar_prompt")
-        await interaction.followup.send("❌ Erro na análise da IA. Consulte os logs.")
+        logger.exception("Falha na resposta do teste_gerar_prompt.")
+        await interaction.followup.send("❌ Erro ao responder o comando. Consulte os logs.")
 
 # ======================
 # EVENTOS
