@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+from typing import Optional
 
 import discord
 from discord import app_commands
@@ -111,9 +112,9 @@ class AIHandler(commands.Cog):
             WHERE {likes}{visibility_clause}
             ORDER BY atualizado_em DESC
             LIMIT 5
-            """,
-            params,
-        ) as cursor:
+        """
+
+        async with self.bot.db.execute(lore_query, params) as cursor:
             lore_rows = await cursor.fetchall()
 
         npc_likes = " OR ".join(
