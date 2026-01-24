@@ -163,9 +163,8 @@ class CharacterRepository:
             "HP": max(0, body * 5),
             "Stamina": max(0, body + will),
             "Vigor": max(0, body + will + emp),
-            "Recovery": max(1, (body + will) // 2),
+            "Recovery": max(0, (body + will) // 2),
         }
-
     async def list_attributes_dict(self, personagem_id: int, limit: Optional[int] = None) -> dict[str, int]:
         attributes = await self.list_attributes(personagem_id, limit)
         return {nome: valor for nome, valor in attributes}
