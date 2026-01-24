@@ -122,6 +122,8 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         skill_repo.list_skills_for_sheet(personagem_id, limit=10, order_by_name=True),
         inventory_repo.list_recent_items(user_id, limit=8),
     )
+    atributos_map = {nome: valor for nome, valor in atributos}
+    derived_stats = character_repo.calculate_derived_stats(atributos_map)
 
     # Using indexing to handle potential extra columns (description) from the repo
     pericias_formatadas = [(p[0], p[1] or "—") for p in pericias]
@@ -166,6 +168,20 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     embed.add_field(
         name="🧠 Atributos",
         value=_format_dual_column(atributos, name_width=10, value_width=3),
+        inline=True
+    )
+    derived_items = [
+        ("Stun", derived_stats["Stun"]),
+        ("Run", derived_stats["Run"]),
+        ("Leap", derived_stats["Leap"]),
+        ("HP", derived_stats["HP"]),
+        ("Stamina", derived_stats["Stamina"]),
+        ("Vigor", derived_stats["Vigor"]),
+        ("Recovery", derived_stats["Recovery"]),
+    ]
+    embed.add_field(
+        name="📊 Derivados",
+        value=_format_dual_column(derived_items, name_width=9, value_width=5),
         inline=True
     )
     embed.add_field(
@@ -984,6 +1000,9 @@ class FichaView(BaseRPGView):
         self.clear_dynamic_buttons()
 
         character_repo = CharacterRepository(interaction.client.db)
+        atributos = await character_repo.list_attributes(self.personagem_id)
+        atributos_map = {nome: valor for nome, valor in atributos}
+        derived_stats = character_repo.calculate_derived_stats(atributos_map)
         perfil, atributos = await asyncio.gather(
             character_repo.fetch_profile(self.personagem_id),
             character_repo.list_attributes(self.personagem_id),
@@ -1001,6 +1020,28 @@ class FichaView(BaseRPGView):
             embed.description = "Clique em um atributo para rolar uma perícia."
             for nome, valor in atributos:
                 self.add_item(AtributoButton(nome, valor))
+            embed.add_field(
+                name="🧠 Atributos",
+                value=_format_dual_column(atributos, name_width=10, value_width=3),
+                inline=True
+            )
+            embed.add_field(
+                name="📊 Derivados",
+                value=_format_dual_column(
+                    [
+                        ("Stun", derived_stats["Stun"]),
+                        ("Run", derived_stats["Run"]),
+                        ("Leap", derived_stats["Leap"]),
+                        ("HP", derived_stats["HP"]),
+                        ("Stamina", derived_stats["Stamina"]),
+                        ("Vigor", derived_stats["Vigor"]),
+                        ("Recovery", derived_stats["Recovery"]),
+                    ],
+                    name_width=9,
+                    value_width=5,
+                ),
+                inline=True,
+            )
         self.add_item(ExplorarConhecimentoButton(self.personagem_id))
 
         _apply_embed_identity(embed, titulo, imagem_url, "Ficha do personagem • Atributos")
