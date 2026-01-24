@@ -331,10 +331,12 @@ class Characters(commands.Cog):
         personagem_id, personagem_nome, _, _ = personagem
         atributos_map = await self.character_repo.list_attributes_dict(personagem_id)
 
-        if not atributos:
+        if not atributos_map:
             return await interaction.response.send_message("📭 Nenhum atributo cadastrado.")
 
-        linhas = "\n".join([f"• **{nome}**: {valor}" for nome, valor in atributos])
+        linhas = "\n".join(
+            [f"• **{nome}**: {valor}" for nome, valor in atributos_map.items()]
+        )
         await interaction.response.send_message(f"📋 Atributos de **{personagem_nome}**:\n{linhas}")
 
     # --- ARMADURA / DANO ---
