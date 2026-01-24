@@ -29,6 +29,7 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
 
     # 1. Migração Personagens (HP Atual, MP, etc)
     personagens_extras = [
+        ("titulo", "TEXT"),
         ("hp_max", "INTEGER DEFAULT 30"),
         ("mp_max", "INTEGER DEFAULT 10"),
         ("vigor_max", "INTEGER DEFAULT 10"),
@@ -65,6 +66,14 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     if _table_exists(cursor, "criaturas"):
         _add_columns_if_missing(cursor, "criaturas", criaturas_extras)
 
+    lore_entries_extras = [
+        ("is_private", "BOOLEAN DEFAULT 0"),
+        ("owner_id", "INTEGER"),
+    ]
+    if _table_exists(cursor, "lore_entries"):
+        _add_columns_if_missing(cursor, "lore_entries", lore_entries_extras)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_lore_entries_owner_id ON lore_entries(owner_id);")
+
     # 3. Migração Quests (Restrição de Classe)
     quests_extras = [
         ("classes_req", "TEXT DEFAULT 'Todas'"),
@@ -82,6 +91,13 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     ]
     if _table_exists(cursor, "armaduras_personagem"):
         _add_columns_if_missing(cursor, "armaduras_personagem", armaduras_extras)
+
+    lore_entries_extras = [
+        ("is_private", "BOOLEAN DEFAULT 0"),
+        ("owner_id", "INTEGER"),
+    ]
+    if _table_exists(cursor, "lore_entries"):
+        _add_columns_if_missing(cursor, "lore_entries", lore_entries_extras)
 
     # 4. Migração de Índices de Performance
     try:
@@ -198,6 +214,19 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             """
         )
 
+    if not _table_exists(cursor, "alchemy_user_recipes"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS alchemy_user_recipes (
+                user_id INTEGER NOT NULL,
+                recipe_id INTEGER NOT NULL,
+                unlocked_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (user_id, recipe_id),
+                FOREIGN KEY(recipe_id) REFERENCES alchemy_recipes(id) ON DELETE CASCADE
+            );
+            """
+        )
+
     if not _table_exists(cursor, "personagem_memorias"):
         cursor.execute(
             """
@@ -209,6 +238,12 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
                 UNIQUE(personagem_id, sessao_id),
                 FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
                 FOREIGN KEY(sessao_id) REFERENCES memoria_campanha(id) ON DELETE CASCADE
+                log_id INTEGER,
+                descricao_fato TEXT NOT NULL,
+                relevancia INTEGER DEFAULT 1,
+                criado_em TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+                FOREIGN KEY(log_id) REFERENCES session_logs(id) ON DELETE SET NULL
             );
             """
         )
@@ -230,6 +265,30 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
                 summary_channel_id INTEGER
             );
             """
+        )
+
+    if not _table_exists(cursor, "mencoes_personagem"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mencoes_personagem (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                personagem_id INTEGER NOT NULL,
+                session_log_id INTEGER,
+                descricao_fato TEXT NOT NULL,
+                relevancia INTEGER DEFAULT 0,
+                criado_em TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+                FOREIGN KEY(session_log_id) REFERENCES session_logs(id) ON DELETE SET NULL
+            );
+            """
+        )
+
+    if _table_exists(cursor, "mencoes_personagem"):
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_personagem_id ON mencoes_personagem(personagem_id);"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_session_log_id ON mencoes_personagem(session_log_id);"
         )
 
     if not _table_exists(cursor, "economia_regional"):
