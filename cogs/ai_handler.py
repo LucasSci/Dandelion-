@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+from typing import Optional
 
 import discord
 from discord import app_commands
@@ -79,7 +80,7 @@ class AIHandler(commands.Cog):
         filtradas = [t for t in tokens if t not in _STOPWORDS and len(t) > 3]
         return filtradas[:6]
 
-    async def buscar_contexto_rag(self, pergunta: str) -> str:
+    async def buscar_contexto_rag(self, pergunta: str, viewer_id: Optional[int] = None) -> str:
         """Busca fatos relevantes em lore e NPCs para enriquecer a resposta."""
         termos = self._extrair_keywords(pergunta)
         if not termos:
@@ -91,16 +92,20 @@ class AIHandler(commands.Cog):
             like = f"%{termo}%"
             params.extend([like, like, like])
 
-        async with self.bot.db.execute(
-            f"""
+        lore_query = f"""
             SELECT titulo, resumo, conteudo
             FROM lore_entries
             WHERE {likes}
+        """
+        if viewer_id is not None:
+            lore_query += " AND (is_private = 0 OR owner_id = ?)"
+            params.append(viewer_id)
+        lore_query += """
             ORDER BY atualizado_em DESC
             LIMIT 5
-            """,
-            params,
-        ) as cursor:
+        """
+
+        async with self.bot.db.execute(lore_query, params) as cursor:
             lore_rows = await cursor.fetchall()
 
         npc_likes = " OR ".join(
@@ -156,11 +161,16 @@ class AIHandler(commands.Cog):
 
         return "\n".join(f"- {conteudo}" for _, conteudo in rows)
 
-    async def ler_lore_mundo(self) -> str:
+    async def ler_lore_mundo(self, viewer_id: Optional[int] = None) -> str:
         """Lê todo o lore inserido pelo mestre para servir de base ao mundo."""
-        async with self.bot.db.execute(
-            "SELECT titulo, resumo, conteudo FROM lore_entries ORDER BY id ASC"
-        ) as c:
+        query = "SELECT titulo, resumo, conteudo FROM lore_entries"
+        params: tuple = ()
+        if viewer_id is not None:
+            query += " WHERE (is_private = 0 OR owner_id = ?)"
+            params = (viewer_id,)
+        query += " ORDER BY id ASC"
+
+        async with self.bot.db.execute(query, params) as c:
             rows = await c.fetchall()
 
         if not rows:
@@ -411,8 +421,9 @@ class AIHandler(commands.Cog):
             return await interaction.followup.send("❌ IA não configurada no momento.")
 
         cronologia = await self.ler_cronologia_estrita()
-        lore = await self.ler_lore_mundo()
-        rag = await self.buscar_contexto_rag(solicitacao)
+        viewer_id = None if interaction.user.guild_permissions.administrator else interaction.user.id
+        lore = await self.ler_lore_mundo(viewer_id=viewer_id)
+        rag = await self.buscar_contexto_rag(solicitacao, viewer_id=viewer_id)
         prompt = (
             "Você é Dandelion, o bardo narrador de The Witcher.\n"
             "Use a cronologia e o lore abaixo como contexto real.\n\n"
