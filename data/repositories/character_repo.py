@@ -144,6 +144,28 @@ class CharacterRepository:
         async with self.db.execute(query, params) as cursor:
             return await cursor.fetchall()
 
+    @staticmethod
+    def calculate_derived_stats(attributes: dict[str, int]) -> dict[str, int]:
+        def _attr_value(key: str, default: int = 1) -> int:
+            value = attributes.get(key, default)
+            return default if value is None else int(value)
+
+        body = _attr_value("BODY")
+        will = _attr_value("WILL")
+        ref = _attr_value("REF")
+        dex = _attr_value("DEX")
+        emp = _attr_value("EMP")
+
+        return {
+            "Stun": max(0, int((body + will) / 2)),
+            "Run": max(0, ref + dex),
+            "Leap": max(0, body + dex),
+            "HP": max(0, body * 5),
+            "Stamina": max(0, body + will),
+            "Vigor": max(0, body + will + emp),
+            "Recovery": max(1, body // 2),
+        }
+
     async def upsert_armor(self, personagem_id: int, localizacao: str, sp: int) -> None:
         await self.db.execute(
             """
