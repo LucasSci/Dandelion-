@@ -52,8 +52,7 @@ class SkillRepository:
         if order_by_name:
             query += " ORDER BY nome"
         if limit:
-            query += " LIMIT ?"
-            params.append(limit)
+            query += f" LIMIT {int(limit)}"
         async with self.db.execute(query, params) as cursor:
             return await cursor.fetchall()
 
