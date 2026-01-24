@@ -66,7 +66,7 @@ class CombatUpdateRequest(BaseModel):
     token_id: str
     position: Tuple[int, int]
     grid: List[List[int]]
-    grid_type: str = "square"
+    grid_mode: str = "square"
     scale_meters: float = 2.0
 
 
@@ -74,7 +74,7 @@ class CombatUpdateResponse(BaseModel):
     token_id: str
     position: Tuple[int, int]
     terrain_cost: int
-    grid_type: str
+    grid_mode: str
     scale_meters: float
 
 
@@ -100,7 +100,7 @@ def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
         width=width,
         height=height,
         grid=payload.grid,
-        grid_type=payload.grid_type,
+        grid_mode=payload.grid_mode,
         scale_meters=payload.scale_meters,
     )
     x, y = payload.position
@@ -109,7 +109,7 @@ def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
         token_id=payload.token_id,
         position=payload.position,
         terrain_cost=cost,
-        grid_type=grid_map.grid_type,
+        grid_mode=grid_map.grid_mode,
         scale_meters=grid_map.scale_meters,
     )
 
@@ -135,7 +135,7 @@ class MapGenerateRequest(BaseModel):
     height: int
     biome: str
     clima: str | None = None
-    grid_type: str = "square"
+    grid_mode: str = "square"
     scale_meters: float = 2.0
     seed: int | None = None
 
@@ -144,7 +144,7 @@ class MapGenerateResponse(BaseModel):
     grid: List[List[int]]
     biome: str
     clima: str | None
-    grid_type: str
+    grid_mode: str
     scale_meters: float
 
 
@@ -153,20 +153,20 @@ def generate_map(payload: MapGenerateRequest) -> MapGenerateResponse:
     grid_map = GridMap(
         width=payload.width,
         height=payload.height,
-        grid_type=payload.grid_type,
+        grid_mode=payload.grid_mode,
         scale_meters=payload.scale_meters,
     )
     grid_map.generate(
         biome=payload.biome,
         seed=payload.seed,
         clima=payload.clima,
-        grid_type=payload.grid_type,
+        grid_mode=payload.grid_mode,
     )
     return MapGenerateResponse(
         grid=grid_map.grid,
         biome=payload.biome,
         clima=payload.clima,
-        grid_type=grid_map.grid_type,
+        grid_mode=grid_map.grid_mode,
         scale_meters=grid_map.scale_meters,
     )
 
