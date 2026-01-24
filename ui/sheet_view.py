@@ -47,6 +47,14 @@ def _format_percentual(atual, maximo):
     return f"{int(round(pct * 100))}%"
 
 
+def _format_encumbrance_bar(atual, maximo, length=10, filled="■", empty="□"):
+    if maximo <= 0:
+        return empty * length
+    pct = max(min(atual / maximo, 1), 0)
+    filled_count = int(round(pct * length))
+    return f"{filled * filled_count}{empty * (length - filled_count)}"
+
+
 def _cor_por_hp(hp_atual, hp_max):
     if hp_max <= 0:
         return 0xED4245
@@ -783,8 +791,14 @@ class FichaView(BaseRPGView):
 
         encumbrance = len(itens)
         capacidade = 10 + (nivel * 2)
+        encumbrance_bar = _format_encumbrance_bar(encumbrance, capacidade)
+        encumbrance_pct = _format_percentual(encumbrance, capacidade)
         embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
-        embed.add_field(name="Encumbrance", value=f"{encumbrance}/{capacidade} (1 por item)", inline=False)
+        embed.add_field(
+            name="Encumbrance",
+            value=f"{encumbrance}/{capacidade} (1 por item)\n{encumbrance_bar} {encumbrance_pct}",
+            inline=False
+        )
         _set_footer_timestamp(embed, "Layout estilo pergaminho limpo • Lista dinâmica")
 
         if interaction.response.is_done():
