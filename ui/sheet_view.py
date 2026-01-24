@@ -1,4 +1,5 @@
 import asyncio
+import io
 import time
 
 import discord
@@ -101,10 +102,12 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         for nome, tipo in itens
     ]
 
+    titulo = classe or "Sem título"
     embed = discord.Embed(
         title=f"📜 {nome}",
         color=_cor_por_hp(hp_atual, hp_max),
     )
+    embed.set_author(name=f"{nome}, {titulo}")
     embed.add_field(
         name="📖 Identidade",
         value=f"*{classe}* • **{raca}** • Nível **{nivel}**",
@@ -584,6 +587,10 @@ class FichaView(BaseRPGView):
                     is_active = (mode == "inventario")
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+                elif item.label == "Crônicas":
+                    is_active = (mode == "cronicas")
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Buscar Perícia":
                     item.disabled = (mode != "geral")
                     item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
@@ -612,6 +619,10 @@ class FichaView(BaseRPGView):
     async def btn_inventario(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_inventario(interaction)
 
+    @ui.button(label="Crônicas", emoji="📖", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_cronicas(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_cronicas(interaction)
+
     # --- AÇÕES (ROW 1) ---
     @ui.button(label="Buscar Perícia", emoji="🔎", style=discord.ButtonStyle.secondary, row=1)
     async def btn_buscar(self, interaction: discord.Interaction, button: ui.Button):
@@ -631,6 +642,10 @@ class FichaView(BaseRPGView):
 
         view_gerenciar = GerenciarHabilidadesView(skills, self)
         await interaction.response.send_message("Selecione a habilidade que deseja editar ou excluir:", view=view_gerenciar, ephemeral=True)
+
+    @ui.button(label="Minha Lore", emoji="📚", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_minha_lore(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_minha_lore(interaction)
 
     # --- MÉTODOS DE EXIBIÇÃO ---
     
@@ -701,6 +716,65 @@ class FichaView(BaseRPGView):
             embed.add_field(name="🧪 Poções", value="Nenhuma poção no inventário.", inline=False)
 
         _set_footer_timestamp(embed, "Magia & Alquimia")
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def mostrar_cronicas(self, interaction: discord.Interaction):
+        self.update_buttons_state("cronicas")
+        self.clear_dynamic_buttons()
+
+        character_repo = CharacterRepository(interaction.client.db)
+        dados = await character_repo.fetch_embed_details(self.personagem_id)
+
+        if not dados:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        nome, _, classe, _, historia, img, _, _, _, _, _, _, _, _, _, _, _, _ = dados
+        titulo = classe or "Sem título"
+        resumo_historia = (historia or "").strip()
+        if not resumo_historia:
+            resumo_historia = "_Sem trajetória registrada._"
+        elif len(resumo_historia) > 600:
+            resumo_historia = f"{resumo_historia[:600]}..."
+
+        embed = discord.Embed(
+            title="📖 Crônicas",
+            description=f"**{nome}** — {titulo}",
+            color=0x8B5E34,
+        )
+        embed.add_field(name="🧭 Trajetória", value=resumo_historia, inline=False)
+
+        async with interaction.client.db.execute(
+            """
+            SELECT id, conteudo
+            FROM memoria_campanha
+            WHERE conteudo LIKE ?
+            ORDER BY id DESC
+            LIMIT 3
+            """,
+            (f"%{nome}%",),
+        ) as cursor:
+            mencoes = await cursor.fetchall()
+
+        if mencoes:
+            linhas = []
+            for evento_id, conteudo in mencoes:
+                trecho = conteudo[:140] + ("..." if len(conteudo) > 140 else "")
+                linhas.append(f"• **[{evento_id}]** {trecho}")
+            embed.add_field(name="📝 Menções recentes", value="\n".join(linhas), inline=False)
+        else:
+            embed.add_field(
+                name="📝 Menções recentes",
+                value="_Nenhuma menção recente no diário._",
+                inline=False,
+            )
+
+        if img:
+            embed.set_thumbnail(url=img)
+        _set_footer_timestamp(embed, "Crônicas do personagem")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -814,6 +888,45 @@ class FichaView(BaseRPGView):
         else:
             await interaction.response.edit_message(embed=embed, view=self)
 
+    async def mostrar_minha_lore(self, interaction: discord.Interaction):
+        character_repo = CharacterRepository(interaction.client.db)
+        dados = await character_repo.fetch_embed_details(self.personagem_id)
+
+        if not dados:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        nome, _, classe, _, historia, img, _, _, _, _, _, _, _, _, _, _, _, _ = dados
+        titulo = classe or "Sem título"
+        historia = (historia or "").strip()
+
+        if not historia:
+            embed = discord.Embed(
+                title=f"📚 Minha Lore — {nome}",
+                description="_Biografia ainda não registrada._",
+                color=0x5C7AEA,
+            )
+            if img:
+                embed.set_thumbnail(url=img)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        if len(historia) <= 3800:
+            embed = discord.Embed(
+                title=f"📚 Minha Lore — {nome}",
+                description=historia,
+                color=0x5C7AEA,
+            )
+            embed.set_author(name=f"{nome}, {titulo}")
+            if img:
+                embed.set_thumbnail(url=img)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        buffer = io.BytesIO(historia.encode("utf-8"))
+        arquivo = discord.File(fp=buffer, filename=f"lore_{nome}.txt")
+        return await interaction.response.send_message(
+            content=f"📚 **{nome}, {titulo}** — biografia completa em anexo.",
+            file=arquivo,
+            ephemeral=True,
+        )
     def clear_dynamic_buttons(self):
         items_to_keep = [item for item in self.children if getattr(item, "is_static", False)]
         self.clear_items()
