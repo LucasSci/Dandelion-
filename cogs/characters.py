@@ -7,9 +7,8 @@ from discord import app_commands
 from data_cache import get_world_location_names
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
-from data.repositories import CharacterRepository, SkillRepository
-from rpg_core.derived_stats import calculate_derived_stats
 from data.repositories import CharacterRepository, DiarioRepository, SkillRepository
+from rpg_core.derived_stats import calculate_derived_stats
 LOCALIZACOES_ARMADURA = {
     "Cabeça": "cabeca",
     "Torso": "torso",
@@ -213,47 +212,10 @@ class Characters(commands.Cog):
         if not dados:
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        personagem_id, nome, _, _ = dados
-        async with self.bot.db.execute(
-            """
-            SELECT mc.conteudo, mc.data_registro
-            FROM personagem_memorias pm
-            JOIN memoria_campanha mc ON mc.id = pm.sessao_id
-            WHERE pm.personagem_id = ?
-            ORDER BY pm.id DESC
-            LIMIT 5
-            """,
-            (personagem_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
-
-        if not rows:
-            return await interaction.response.send_message(
-                f"📭 Não há fatos registrados para **{nome}** ainda.",
-                ephemeral=True,
-            )
-
-        texto = "\n\n".join(
-            f"**{data_registro}**\n{conteudo}" for conteudo, data_registro in rows
-        )
-        embed = discord.Embed(
-            title=f"📖 Diário de {nome}",
-            description=texto,
-            color=0x7A0000,
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    @app_commands.command(name="diario", description="📓 Mostra os últimos fatos do seu diário")
-    async def diario(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
-        dados = await self.character_repo.fetch_character_summary_by_user(interaction.user.id)
-        if not dados:
-            return await interaction.followup.send("❌ Nenhuma ficha encontrada.", ephemeral=True)
-
         personagem_id, personagem_nome, _, _ = dados
         fatos = await self.diario_repo.list_recent_facts_by_personagem(personagem_id, limit=5)
         if not fatos:
-            return await interaction.followup.send(
+            return await interaction.response.send_message(
                 f"📭 Nenhum fato registrado ainda para **{personagem_nome}**.",
                 ephemeral=True,
             )
@@ -264,11 +226,11 @@ class Characters(commands.Cog):
             linhas.append(f"• {trecho} _(relevância {relevancia}, {criado_em})_")
 
         embed = discord.Embed(
-            title=f"📓 Diário de {personagem_nome}",
+            title=f"📖 Diário de {personagem_nome}",
             description="\n".join(linhas),
-            color=0x2F3136,
+            color=0x7A0000,
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="viajar", description="Define a localização atual do personagem")
     @app_commands.autocomplete(destino=localizacao_autocomplete)
