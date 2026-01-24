@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS personagens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
     nome TEXT UNIQUE,
+    titulo TEXT,
     raca TEXT,
     classe TEXT,
     nivel INTEGER DEFAULT 1,
@@ -67,6 +68,19 @@ CREATE TABLE IF NOT EXISTS memoria_campanha (
     conteudo TEXT,
     data_registro TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS personagem_memorias (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    personagem_id INTEGER NOT NULL,
+    log_id INTEGER,
+    descricao_fato TEXT NOT NULL,
+    relevancia INTEGER DEFAULT 1,
+    criado_em TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+    FOREIGN KEY(log_id) REFERENCES session_logs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_personagem_memorias_personagem_id ON personagem_memorias(personagem_id);
 
 -- CAMPANHA SOLO --
 CREATE TABLE IF NOT EXISTS solo_campaigns (
@@ -190,6 +204,17 @@ CREATE TABLE IF NOT EXISTS session_logs (
     content TEXT,
     is_bot BOOLEAN,
     timestamp TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS mencoes_personagem (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    personagem_id INTEGER NOT NULL,
+    session_log_id INTEGER,
+    descricao_fato TEXT NOT NULL,
+    relevancia INTEGER DEFAULT 0,
+    criado_em TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+    FOREIGN KEY(session_log_id) REFERENCES session_logs(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS transcription_settings (
