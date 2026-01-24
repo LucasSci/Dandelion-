@@ -1,7 +1,22 @@
-import re
 import random
+import re
 
 from witcher_rules import rolar_d10_explosivo
+
+_DICE_PATTERN = re.compile(r"(\d+)d(\d+)(?:([+-])(\d+))?")
+_XP_TABLE = {
+    1: 300,
+    2: 900,
+    3: 2700,
+    4: 6500,
+    5: 14000,
+    6: 23000,
+    7: 34000,
+    8: 48000,
+    9: 64000,
+    10: 85000,
+}
+
 
 def rolar_dados(formula: str):
     """
@@ -10,10 +25,10 @@ def rolar_dados(formula: str):
     """
     if not formula:
         return None, 0
-        
+
     formula = formula.lower().replace(" ", "")
     # Tenta encontrar padrão XdY+Z
-    match = re.fullmatch(r'(\d+)d(\d+)(?:([+-])(\d+))?', formula)
+    match = _DICE_PATTERN.fullmatch(formula)
     
     if not match:
         # Se for apenas um número fixo (ex: "5")
@@ -26,13 +41,15 @@ def rolar_dados(formula: str):
     if qtd <= 0 or lados <= 0:
         return None, 0
     bonus = int(bonus) if bonus else 0
-    
-    rolls = [random.randint(1, lados) for _ in range(qtd)]
+
+    rand_int = random.randint
+    rolls = [rand_int(1, lados) for _ in range(qtd)]
     total = sum(rolls) + (bonus if sinal == "+" else -bonus)
-    
+
     detalhes = f"[{', '.join(map(str, rolls))}]"
-    if bonus: detalhes += f" {'+' if sinal=='+' else '-'} {bonus}"
-    
+    if bonus:
+        detalhes += f" {'+' if sinal=='+' else '-'} {bonus}"
+
     return detalhes, total
 
 def rolar_pericia_explosiva(stat: int, skill: int):
@@ -49,17 +66,14 @@ def rolar_pericia_explosiva(stat: int, skill: int):
 def calcular_xp_necessario(nivel_atual):
     # Fórmula: Base 100 * (Nível ^ 2) * Constante de ajuste
     # Exemplo simples estilo D&D:
-    tabela = {
-        1: 300, 2: 900, 3: 2700, 4: 6500, 5: 14000,
-        6: 23000, 7: 34000, 8: 48000, 9: 64000, 10: 85000
-    }
-    return tabela.get(nivel_atual, nivel_atual * 10000) # Fallback para níveis altos
+    return _XP_TABLE.get(nivel_atual, nivel_atual * 10000)  # Fallback para níveis altos
 
 async def adicionar_xp(db, user_id, xp_ganho, channel):
     async with db.execute("SELECT nivel, xp_atual, hp_max, ataque FROM personagens WHERE user_id = ?", (user_id,)) as cursor:
         dados = await cursor.fetchone()
     
-    if not dados: return
+    if not dados:
+        return
     nivel, xp, hp, atk = dados
     
     novo_xp = xp + xp_ganho
