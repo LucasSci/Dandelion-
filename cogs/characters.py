@@ -384,36 +384,44 @@ class Characters(commands.Cog):
         armadura = await self.character_repo.fetch_armor(personagem_id, localizacao)
 
         sp_base = armadura[1] if armadura else 0
-        reliability = armadura[2] if armadura and armadura[2] is not None else 100
-        reliability = max(0, min(100, reliability))
-        sp_atual = max(0, int(sp_base * (reliability / 100))) if sp_base > 0 else 0
+        reliability = armadura[2] if armadura else None
         multiplicador = 1.0
         if tipo_dano and armadura:
             mod_value = await self.character_repo.fetch_armor_modifier(armadura[0], tipo_dano)
             if mod_value is not None:
                 multiplicador = mod_value
 
-        dano_reduzido = max(0, dano - sp_atual)
-        dano_final = max(0, int(round(dano_reduzido * multiplicador)))
+        armor_result = calcular_dano_armadura(
+            dano_base=dano,
+            sp_base=sp_base,
+            reliability=reliability,
+            multiplicador=multiplicador,
+            aplicar_degradacao=bool(armadura),
+        )
+        dano_final = armor_result.dano_final
         novo_hp = max(0, hp_atual - dano_final)
 
-        nova_reliability = reliability
-        novo_sp_atual = sp_atual
-        if armadura and sp_base > 0 and dano > 0:
-            reducao_sp = max(1, dano // 5)
-            novo_sp_atual = max(0, sp_atual - reducao_sp)
-            nova_reliability = max(0, min(100, int(round((novo_sp_atual / sp_base) * 100))))
-            await self.character_repo.update_armor_reliability(armadura[0], nova_reliability)
+        if armadura and armor_result.degradou:
+            await self.character_repo.update_armor_reliability(
+                armadura[0],
+                armor_result.nova_reliability,
+            )
 
         await self.character_repo.update_hp(personagem_id, novo_hp)
 
         tipo_txt = f" ({tipo_dano})" if tipo_dano else ""
         resposta = (
             f"💥 **{personagem_nome}** recebeu **{dano}** de dano{tipo_txt} em **{localizacao}**.\n"
-            f"🛡️ SP: {sp_atual} (Base {sp_base} | Rel {reliability}%) | 🔻 Dano após SP: {dano_reduzido}\n"
+            "🛡️ SP: "
+            f"{armor_result.sp_atual} (Base {armor_result.sp_base} | Rel {armor_result.reliability_inicial}%)"
+            f" | 🔻 Dano após SP: {armor_result.dano_reduzido}\n"
         )
-        if armadura and sp_base > 0 and dano > 0:
-            resposta += f"🧱 Integridade: {reliability}% → {nova_reliability}% (SP efetivo {sp_atual} → {novo_sp_atual})\n"
+        if armadura and armor_result.degradou:
+            resposta += (
+                "🧱 Integridade: "
+                f"{armor_result.reliability_inicial}% → {armor_result.nova_reliability}% "
+                f"(SP efetivo {armor_result.sp_atual} → {armor_result.novo_sp_atual})\n"
+            )
         if multiplicador != 1.0:
             resposta += f"🧪 Multiplicador: {multiplicador}x | Dano final: {dano_final}\n"
         else:

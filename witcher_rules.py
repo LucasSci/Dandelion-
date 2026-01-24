@@ -26,6 +26,18 @@ class DamageResult:
     hp_restante: int
 
 
+@dataclass(frozen=True)
+class ArmorDamageResult:
+    sp_base: int
+    reliability_inicial: int
+    sp_atual: int
+    dano_reduzido: int
+    dano_final: int
+    novo_sp_atual: int
+    nova_reliability: int
+    degradou: bool
+
+
 def rolar_d10_explosivo(roller: Roller = random.randint) -> Tuple[int, List[int]]:
     """Rola 1d10 com explosão para cima (10) ou para baixo (1).
 
@@ -83,4 +95,42 @@ def aplicar_dano(
         sp_utilizado=sp_armadura,
         dano_final=dano_final,
         hp_restante=hp_restante,
+    )
+
+
+def calcular_dano_armadura(
+    dano_base: int,
+    sp_base: int,
+    reliability: int | None,
+    multiplicador: float = 1.0,
+    aplicar_degradacao: bool = True,
+) -> ArmorDamageResult:
+    """Calcula SP atual, dano final e degradação de armadura.
+
+    A degradação usa a regra de redução de SP baseada no dano bruto (dano_base).
+    """
+    reliability_inicial = 100 if reliability is None else reliability
+    reliability_inicial = max(0, min(100, reliability_inicial))
+    sp_atual = max(0, int(sp_base * (reliability_inicial / 100))) if sp_base > 0 else 0
+
+    dano_reduzido = max(0, dano_base - sp_atual)
+    dano_final = max(0, int(round(dano_reduzido * multiplicador)))
+
+    novo_sp_atual = sp_atual
+    nova_reliability = reliability_inicial
+    degradou = aplicar_degradacao and sp_base > 0 and dano_base > 0
+    if degradou:
+        reducao_sp = max(1, dano_base // 5)
+        novo_sp_atual = max(0, sp_atual - reducao_sp)
+        nova_reliability = max(0, min(100, int(round((novo_sp_atual / sp_base) * 100))))
+
+    return ArmorDamageResult(
+        sp_base=sp_base,
+        reliability_inicial=reliability_inicial,
+        sp_atual=sp_atual,
+        dano_reduzido=dano_reduzido,
+        dano_final=dano_final,
+        novo_sp_atual=novo_sp_atual,
+        nova_reliability=nova_reliability,
+        degradou=degradou,
     )
