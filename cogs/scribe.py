@@ -582,13 +582,41 @@ class Scribe(commands.Cog):
                 max_tokens=1500
             )
             
-            diario = response.choices[0].message.content
+            diario_completo = response.choices[0].message.content or ""
 
             # Cortar se for muito longo para o Discord (limite de 4096 caracteres na descrição do Embed)
-            if len(diario) > 4000: 
-                diario = diario[:4000] + "... (continua no próximo bardo)"
+            diario_exibicao = diario_completo
+            if len(diario_exibicao) > 4000:
+                diario_exibicao = diario_exibicao[:4000] + "... (continua no próximo bardo)"
 
-            embed = discord.Embed(title="📕 As Crônicas da Sessão", description=diario, color=0x7A0000)
+            cursor = await self.bot.db.execute(
+                "INSERT INTO memoria_campanha (tipo, conteudo) VALUES ('Resumo', ?)",
+                (diario_completo,),
+            )
+            await self.bot.db.commit()
+            sessao_id = cursor.lastrowid
+
+            async with self.bot.db.execute("SELECT id, nome FROM personagens") as personagem_cursor:
+                personagens = await personagem_cursor.fetchall()
+
+            diario_lower = diario_completo.lower()
+            for personagem_id, nome in personagens:
+                nome_normalizado = (nome or "").strip().lower()
+                if nome_normalizado and nome_normalizado in diario_lower:
+                    await self.bot.db.execute(
+                        """
+                        INSERT OR IGNORE INTO personagem_memorias (personagem_id, sessao_id)
+                        VALUES (?, ?)
+                        """,
+                        (personagem_id, sessao_id),
+                    )
+            await self.bot.db.commit()
+
+            embed = discord.Embed(
+                title="📕 As Crônicas da Sessão",
+                description=diario_exibicao,
+                color=0x7A0000,
+            )
             embed.set_footer(text="Escrito por Dandelion (via OpenAI)")
             await interaction.followup.send(embed=embed)
 

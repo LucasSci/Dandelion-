@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS personagens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
     nome TEXT UNIQUE,
+    titulo TEXT,
     raca TEXT,
     classe TEXT,
     nivel INTEGER DEFAULT 1,
@@ -67,6 +68,28 @@ CREATE TABLE IF NOT EXISTS memoria_campanha (
     conteudo TEXT,
     data_registro TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS personagem_memorias (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    personagem_id INTEGER NOT NULL,
+    sessao_id INTEGER NOT NULL,
+    criado_em TEXT DEFAULT (datetime('now')),
+    UNIQUE(personagem_id, sessao_id),
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+    FOREIGN KEY(sessao_id) REFERENCES memoria_campanha(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_personagem_memorias_personagem_id ON personagem_memorias(personagem_id);
+CREATE INDEX IF NOT EXISTS idx_personagem_memorias_sessao_id ON personagem_memorias(sessao_id);
+    log_id INTEGER,
+    descricao_fato TEXT NOT NULL,
+    relevancia INTEGER DEFAULT 1,
+    criado_em TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+    FOREIGN KEY(log_id) REFERENCES session_logs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_personagem_memorias_personagem_id ON personagem_memorias(personagem_id);
 
 -- CAMPANHA SOLO --
 CREATE TABLE IF NOT EXISTS solo_campaigns (
@@ -183,6 +206,14 @@ CREATE TABLE IF NOT EXISTS alchemy_user_ingredients (
     FOREIGN KEY(ingredient_id) REFERENCES alchemy_ingredients(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS alchemy_user_recipes (
+    user_id INTEGER NOT NULL,
+    recipe_id INTEGER NOT NULL,
+    unlocked_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, recipe_id),
+    FOREIGN KEY(recipe_id) REFERENCES alchemy_recipes(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS session_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     channel_id INTEGER,
@@ -196,13 +227,11 @@ CREATE TABLE IF NOT EXISTS mencoes_personagem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     personagem_id INTEGER NOT NULL,
     session_log_id INTEGER,
-    memoria_id INTEGER,
     descricao_fato TEXT NOT NULL,
     relevancia INTEGER DEFAULT 0,
     criado_em TEXT DEFAULT (datetime('now')),
     FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
-    FOREIGN KEY(session_log_id) REFERENCES session_logs(id) ON DELETE SET NULL,
-    FOREIGN KEY(memoria_id) REFERENCES memoria_campanha(id) ON DELETE SET NULL
+    FOREIGN KEY(session_log_id) REFERENCES session_logs(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS transcription_settings (
@@ -417,6 +446,8 @@ CREATE TABLE IF NOT EXISTS lore_entries (
   titulo TEXT NOT NULL,
   resumo TEXT,
   conteudo TEXT,
+  is_private BOOLEAN DEFAULT 0,
+  owner_id INTEGER,
   criado_em TEXT DEFAULT (datetime('now')),
   atualizado_em TEXT DEFAULT (datetime('now'))
 );
@@ -471,4 +502,5 @@ CREATE INDEX IF NOT EXISTS idx_traits_key ON traits(key);
 CREATE INDEX IF NOT EXISTS idx_loot_items_key ON loot_items(key);
 CREATE INDEX IF NOT EXISTS idx_sources_key ON sources(key);
 CREATE INDEX IF NOT EXISTS idx_lore_entries_titulo ON lore_entries(titulo);
+CREATE INDEX IF NOT EXISTS idx_lore_entries_owner_id ON lore_entries(owner_id);
 CREATE INDEX IF NOT EXISTS idx_lore_sources_tipo ON lore_sources(tipo);
