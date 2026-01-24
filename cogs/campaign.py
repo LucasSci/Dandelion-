@@ -122,11 +122,16 @@ class Campaign(commands.Cog):
         await interaction.response.send_message("🔥 **TABULA RASA!** O Dandelion esqueceu tudo sobre a campanha.", ephemeral=True)
 
     @lore.command(name="ver", description="📚 Vê o conhecimento de mundo registrado pelo mestre")
-    @app_commands.check(is_mestre)
     async def lore_ver(self, interaction: discord.Interaction):
-        async with self.bot.db.execute(
-            "SELECT id, titulo, resumo, conteudo FROM lore_entries ORDER BY id ASC"
-        ) as c:
+        is_admin = interaction.user.guild_permissions.administrator
+        query = "SELECT id, titulo, resumo, conteudo FROM lore_entries"
+        params = []
+        if not is_admin:
+            query += " WHERE (is_private = 0 OR is_private IS NULL OR owner_id = ?)"
+            params.append(interaction.user.id)
+        query += " ORDER BY id ASC"
+
+        async with self.bot.db.execute(query, params) as c:
             rows = await c.fetchall()
 
         if not rows:
