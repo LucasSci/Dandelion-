@@ -51,12 +51,12 @@ class GridMap:
         biome: str,
         seed: int | None = None,
         clima: str | None = None,
-        grid_type: str | None = None,
+        grid_mode: str | None = None,
     ) -> None:
         self.biome = biome
         self.clima = clima
-        if grid_type:
-            self.grid_type = grid_type
+        if grid_mode:
+            self.grid_mode = grid_mode
         generator = NoiseGenerator(biome=biome, seed=seed)
         self.grid = generator.generate(self.width, self.height)
         self.biome = biome
@@ -84,25 +84,7 @@ class GridMap:
 
     def _hex_neighbors(self, x: int, y: int) -> List[Tuple[int, int]]:
         # odd-r offset coordinates
-        if y % 2 == 0:
-            candidates = [
-                (x - 1, y - 1),
-                (x, y - 1),
-                (x - 1, y),
-                (x + 1, y),
-                (x - 1, y + 1),
-                (x, y + 1),
-            ]
-        else:
-            candidates = [
-                (x, y - 1),
-                (x + 1, y - 1),
-                (x - 1, y),
-                (x + 1, y),
-                (x, y + 1),
-                (x + 1, y + 1),
-            ]
-        if self.grid_type == "hex":
+        if self.grid_mode == "hex":
             if y % 2 == 0:
                 deltas = [(-1, 0), (1, 0), (-1, -1), (0, -1), (-1, 1), (0, 1)]
             else:
