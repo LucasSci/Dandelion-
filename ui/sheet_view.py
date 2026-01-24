@@ -1158,6 +1158,65 @@ class FichaView(BaseRPGView):
         else:
             await interaction.response.edit_message(embed=embed, view=self)
 
+    async def mostrar_cronicas(self, interaction: discord.Interaction):
+        self.update_buttons_state("cronicas")
+        self.clear_dynamic_buttons()
+
+        character_repo = CharacterRepository(interaction.client.db)
+        dados = await character_repo.fetch_embed_details(self.personagem_id)
+
+        if not dados:
+            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+
+        nome, _, classe, _, historia, img, _, _, _, _, _, _, _, _, _, _, _, _ = dados
+        titulo = classe or "Sem título"
+        resumo_historia = (historia or "").strip()
+        if not resumo_historia:
+            resumo_historia = "_Sem trajetória registrada._"
+        elif len(resumo_historia) > 600:
+            resumo_historia = f"{resumo_historia[:600]}..."
+
+        embed = discord.Embed(
+            title="📖 Crônicas",
+            description=f"**{nome}** — {titulo}",
+            color=0x8B5E34,
+        )
+        embed.add_field(name="🧭 Trajetória", value=resumo_historia, inline=False)
+
+        async with interaction.client.db.execute(
+            """
+            SELECT id, conteudo
+            FROM memoria_campanha
+            WHERE conteudo LIKE ?
+            ORDER BY id DESC
+            LIMIT 3
+            """,
+            (f"%{nome}%",),
+        ) as cursor:
+            mencoes = await cursor.fetchall()
+
+        if mencoes:
+            linhas = []
+            for evento_id, conteudo in mencoes:
+                trecho = conteudo[:140] + ("..." if len(conteudo) > 140 else "")
+                linhas.append(f"• **[{evento_id}]** {trecho}")
+            embed.add_field(name="📝 Menções recentes", value="\n".join(linhas), inline=False)
+        else:
+            embed.add_field(
+                name="📝 Menções recentes",
+                value="_Nenhuma menção recente no diário._",
+                inline=False,
+            )
+
+        if img:
+            embed.set_thumbnail(url=img)
+        _set_footer_timestamp(embed, "Crônicas do personagem")
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
     async def mostrar_combate(self, interaction: discord.Interaction):
         self.update_buttons_state("combate")
         self.clear_dynamic_buttons()
