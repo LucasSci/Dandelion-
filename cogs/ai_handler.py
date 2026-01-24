@@ -12,6 +12,32 @@ from openai import AsyncOpenAI
 from config import settings
 
 API_KEY = os.getenv("OPENAI_API_KEY")
+_STOPWORDS = frozenset(
+    {
+        "de",
+        "da",
+        "do",
+        "dos",
+        "das",
+        "a",
+        "o",
+        "as",
+        "os",
+        "em",
+        "no",
+        "na",
+        "que",
+        "quem",
+        "qual",
+        "quando",
+        "onde",
+        "como",
+        "por",
+        "para",
+        "com",
+    }
+)
+_DIGITS_ONLY = re.compile(r"\D+")
 
 class AIHandler(commands.Cog):
     def __init__(self, bot):
@@ -41,37 +67,16 @@ class AIHandler(commands.Cog):
         """Converte texto em int de forma segura, retornando 0 se falhar"""
         try:
             # Filtra apenas os dígitos da string (ex: '500 moedas' -> '500')
-            digits = ''.join(filter(str.isdigit, text))
+            if not text:
+                return 0
+            digits = _DIGITS_ONLY.sub("", text)
             return int(digits) if digits else 0
-        except:
+        except ValueError:
             return 0
 
     def _extrair_keywords(self, texto: str) -> list[str]:
         tokens = re.findall(r"\w+", texto.lower())
-        stopwords = {
-            "de",
-            "da",
-            "do",
-            "dos",
-            "das",
-            "a",
-            "o",
-            "as",
-            "os",
-            "em",
-            "no",
-            "na",
-            "que",
-            "quem",
-            "qual",
-            "quando",
-            "onde",
-            "como",
-            "por",
-            "para",
-            "com",
-        }
-        filtradas = [t for t in tokens if t not in stopwords and len(t) > 3]
+        filtradas = [t for t in tokens if t not in _STOPWORDS and len(t) > 3]
         return filtradas[:6]
 
     async def buscar_contexto_rag(self, pergunta: str) -> str:
@@ -146,12 +151,10 @@ class AIHandler(commands.Cog):
         async with self.bot.db.execute("SELECT id, conteudo FROM memoria_campanha ORDER BY id ASC") as c:
             rows = await c.fetchall()
         
-        if not rows: return "INÍCIO DA AVENTURA. Nenhum evento ocorreu ainda."
-        
-        texto = ""
-        for r in rows:
-            texto += f"- {r[1]}\n"
-        return texto
+        if not rows:
+            return "INÍCIO DA AVENTURA. Nenhum evento ocorreu ainda."
+
+        return "\n".join(f"- {conteudo}" for _, conteudo in rows)
 
     async def ler_lore_mundo(self) -> str:
         """Lê todo o lore inserido pelo mestre para servir de base ao mundo."""
@@ -238,7 +241,8 @@ class AIHandler(commands.Cog):
             return None
 
     async def gerar_imagem_dalle(self, prompt_visual: str):
-        if not self.client: return None
+        if not self.client:
+            return None
         try:
             p = (
                 "The Witcher RPG art style. "
@@ -253,7 +257,9 @@ class AIHandler(commands.Cog):
                 n=1,
             )
             return r.data[0].url
-        except: return None
+        except Exception as e:
+            print(f"Erro IA gerar imagem: {e}")
+            return None
 
     async def gerar_dialogo_npc(self, npc: dict, mensagem: str) -> str:
         if not self.client:
@@ -319,21 +325,26 @@ class AIHandler(commands.Cog):
         
     async def get_response(self, prompt: str) -> str:
         """Chat genérico"""
-        if not self.client: return "IA Off."
+        if not self.client:
+            return "IA Off."
         try:
             r = await self.client.chat.completions.create(
                 model="gpt-4o-mini", messages=[{"role":"user", "content":prompt}]
             )
-            return r.choices[0].message.content
-        except: return "Erro."
+            return r.choices[0].message.content or ""
+        except Exception as e:
+            print(f"Erro IA resposta: {e}")
+            return "Erro."
 
     async def gerar_descricao_item(self, nome, tipo):
         return await self.get_response(f"Descreva o item '{nome}' ({tipo}) para RPG The Witcher. Curto.")
 
     async def gerar_item_aleatorio(self, raridade):
         raw = await self.get_response(f"Gere um item {raridade} formato: NOME|TIPO|EFEITO")
-        p = raw.split('|')
-        return {"nome": p[0], "tipo": p[1], "efeito": p[2]} if len(p)>=3 else None
+        if not raw:
+            return None
+        p = [segment.strip() for segment in raw.split("|")]
+        return {"nome": p[0], "tipo": p[1], "efeito": p[2]} if len(p) >= 3 else None
 
     @app_commands.command(name="teste_gerar_prompt", description="[DEV] Gera um prompt de imagem baseado em uma URL")
     @app_commands.describe(url_imagem="A URL da imagem de referência da Fandom")
