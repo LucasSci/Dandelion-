@@ -70,6 +70,7 @@ def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
         embed.set_footer(text=f"Atualizado {timestamp}")
 
 
+def _split_text(texto: str, limite: int = 3800) -> list[str]:
 def _split_text(texto: str, limite: int = 3900) -> list[str]:
     texto = (texto or "").strip()
     if not texto:
@@ -77,6 +78,11 @@ def _split_text(texto: str, limite: int = 3900) -> list[str]:
     return [texto[i : i + limite] for i in range(0, len(texto), limite)]
 
 
+def _resumir_texto(texto: str, limite: int = 180) -> str:
+    texto = (texto or "").strip()
+    if len(texto) <= limite:
+        return texto
+    return f"{texto[:limite]}..."
 async def _table_exists(db, table: str) -> bool:
     async with db.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
@@ -137,6 +143,9 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         title=f"📜 {nome}",
         color=_cor_por_hp(hp_atual, hp_max),
     )
+    epiteto = (classe or "").strip()
+    titulo_personagem = f"{nome} — {epiteto}" if epiteto else nome
+    embed.set_author(name=titulo_personagem)
     embed.add_field(
         name="📖 Identidade",
         value=f"*{classe}* • **{raca}** • Nível **{nivel}**",
@@ -754,6 +763,10 @@ class FichaView(BaseRPGView):
                 elif item.label in {"Nova Skill", "Gerenciar"}:
                     item.disabled = (mode != "magia")
                     item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
+                elif item.label in {"Minha Lore", "Diário"}:
+                    is_enabled = mode in {"cronicas", "geral"}
+                    item.disabled = not is_enabled
+                    item.style = discord.ButtonStyle.primary if is_enabled else discord.ButtonStyle.secondary
 
     # --- NAVEGAÇÃO (ROW 0) ---
     @ui.button(label="Geral", emoji="📜", style=discord.ButtonStyle.secondary, row=0)
@@ -776,6 +789,7 @@ class FichaView(BaseRPGView):
     async def btn_inventario(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_inventario(interaction)
 
+    @ui.button(label="Crônicas", emoji="📖", style=discord.ButtonStyle.secondary, row=0)
     @ui.button(label="Crônicas", emoji="📚", style=discord.ButtonStyle.secondary, row=0)
     async def btn_cronicas(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_cronicas(interaction)
@@ -803,6 +817,14 @@ class FichaView(BaseRPGView):
 
         view_gerenciar = GerenciarHabilidadesView(skills, self)
         await interaction.response.send_message("Selecione a habilidade que deseja editar ou excluir:", view=view_gerenciar, ephemeral=True)
+
+    @ui.button(label="Minha Lore", emoji="📚", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_minha_lore(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_minha_lore(interaction)
+
+    @ui.button(label="Diário", emoji="📔", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_diario(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_diario(interaction)
 
     # --- MÉTODOS DE EXIBIÇÃO ---
     
@@ -1066,6 +1088,54 @@ class FichaView(BaseRPGView):
         self.update_buttons_state("cronicas")
         self.clear_dynamic_buttons()
 
+        db = interaction.client.db
+
+        async def fetch_lore():
+            async with db.execute(
+                """
+                SELECT id, titulo, resumo, conteudo, criado_em
+                FROM lore_entries
+                ORDER BY id DESC
+                LIMIT 4
+                """
+            ) as cursor:
+                return await cursor.fetchall()
+
+        async def fetch_diario():
+            async with db.execute(
+                """
+                SELECT id, tipo, conteudo, data_registro
+                FROM memoria_campanha
+                ORDER BY id DESC
+                LIMIT 4
+                """
+            ) as cursor:
+                return await cursor.fetchall()
+
+        lore_entries, diario_entries = await asyncio.gather(fetch_lore(), fetch_diario())
+
+        embed = discord.Embed(title="📖 Crônicas", color=0x7A5C3E)
+        embed.description = "Resumo rápido do lore do mundo e da linha do tempo recente."
+
+        if lore_entries:
+            lore_lines = []
+            for entry_id, titulo, resumo, conteudo, _ in lore_entries:
+                base = resumo or conteudo or "—"
+                lore_lines.append(f"**[{entry_id}] {titulo}** — {_resumir_texto(base)}")
+            embed.add_field(name="📚 Lore do Mundo", value="\n".join(lore_lines), inline=False)
+        else:
+            embed.add_field(name="📚 Lore do Mundo", value="Nenhum lore registrado ainda.", inline=False)
+
+        if diario_entries:
+            diario_lines = []
+            for entry_id, tipo, conteudo, _ in diario_entries:
+                base = conteudo or "—"
+                diario_lines.append(f"**[{entry_id}] {tipo}** — {_resumir_texto(base)}")
+            embed.add_field(name="🕰️ Diário da Campanha", value="\n".join(diario_lines), inline=False)
+        else:
+            embed.add_field(name="🕰️ Diário da Campanha", value="Nenhuma entrada no diário até agora.", inline=False)
+
+        _set_footer_timestamp(embed, "Crônicas • Lore & Memória")
         character_repo = CharacterRepository(interaction.client.db)
         solo_repo = SoloRepository(interaction.client.db)
 
@@ -1123,6 +1193,81 @@ class FichaView(BaseRPGView):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def mostrar_minha_lore(self, interaction: discord.Interaction):
+        db = interaction.client.db
+        async with db.execute(
+            "SELECT id, titulo, resumo, conteudo FROM lore_entries ORDER BY id ASC"
+        ) as cursor:
+            entries = await cursor.fetchall()
+
+        if not entries:
+            mensagem = "📭 Nenhum lore registrado ainda. Use /lore adicionar ou /lore importar_txt."
+            if interaction.response.is_done():
+                return await interaction.followup.send(mensagem, ephemeral=True)
+            return await interaction.response.send_message(mensagem, ephemeral=True)
+
+        embeds = []
+        for entry_id, titulo, resumo, conteudo in entries:
+            texto = conteudo or resumo or ""
+            partes = _split_text(texto, 3800)
+            total = len(partes)
+            for index, parte in enumerate(partes, start=1):
+                sufixo = f" (parte {index}/{total})" if total > 1 else ""
+                embed = discord.Embed(
+                    title=f"📚 [{entry_id}] {titulo}{sufixo}",
+                    description=parte or "—",
+                    color=0x2E7D32,
+                )
+                embed.set_footer(text="Lore completo registrado pelo mestre.")
+                embeds.append(embed)
+
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embeds[0], ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embeds[0], ephemeral=True)
+        for embed in embeds[1:]:
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+    async def mostrar_diario(self, interaction: discord.Interaction):
+        db = interaction.client.db
+        async with db.execute(
+            """
+            SELECT id, tipo, conteudo
+            FROM memoria_campanha
+            WHERE tipo IN ('Evento', 'Resumo', 'Quest', 'Consequence')
+            ORDER BY id DESC
+            LIMIT 20
+            """
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+        if not rows:
+            mensagem = "📭 O diário está vazio. A IA não sabe nada sobre sua história atual."
+            if interaction.response.is_done():
+                return await interaction.followup.send(mensagem, ephemeral=True)
+            return await interaction.response.send_message(mensagem, ephemeral=True)
+
+        linhas = []
+        for entry_id, tipo, conteudo in reversed(rows):
+            conteudo_curto = _resumir_texto(conteudo, 150)
+            linhas.append(f"**[{entry_id}] {tipo}** — {conteudo_curto}")
+
+        texto = "\n".join(linhas)
+        embeds = []
+        for parte in _split_text(texto, 3800):
+            embed = discord.Embed(
+                title="📖 Diário da Campanha",
+                description=parte or "—",
+                color=0xA84300,
+            )
+            embed.set_footer(text="Linha do tempo registrada até agora.")
+            embeds.append(embed)
+
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embeds[0], ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embeds[0], ephemeral=True)
+        for embed in embeds[1:]:
+            await interaction.followup.send(embed=embed, ephemeral=True)
         character_repo = CharacterRepository(interaction.client.db)
         dados = await character_repo.fetch_lore(self.personagem_id)
 
