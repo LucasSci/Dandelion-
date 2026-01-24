@@ -6,6 +6,7 @@ import discord
 from discord import ui
 from data.repositories import CharacterRepository, InventoryRepository, SkillRepository, SoloRepository
 from utils import rolar_dados, rolar_pericia_explosiva
+from utils.dc_table import DEFAULT_DC_THRESHOLDS, classificar_resultado
 from ui.base_view import BaseRPGView
 from ui.views import ConfirmarExclusaoView
 
@@ -246,9 +247,15 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             placeholder="Ex: 4 (Deixe vazio para 0)",
             required=False
         )
+        self.dc_valor = ui.TextInput(
+            label="DC (opcional)",
+            placeholder="Ex: 15 (deixe vazio para tabela padrão)",
+            required=False,
+        )
 
         self.add_item(self.pericia_nome)
         self.add_item(self.pericia_valor)
+        self.add_item(self.dc_valor)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -257,7 +264,15 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         except ValueError:
             return await interaction.response.send_message("❌ Valor da perícia inválido.", ephemeral=True)
 
+        dc = None
+        if self.dc_valor.value:
+            try:
+                dc = int(self.dc_valor.value)
+            except ValueError:
+                return await interaction.response.send_message("❌ DC inválido. Use um número inteiro.", ephemeral=True)
+
         rolagens, total, direcao = rolar_pericia_explosiva(self.atributo_valor, pericia_valor)
+        classificacao = classificar_resultado(total, dc)
 
         etiqueta = self.pericia_nome.value.strip() if self.pericia_nome.value else "Perícia"
         detalhes_rolagem = ", ".join(map(str, rolagens))
@@ -281,7 +296,13 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             value=f"1d10 + Stat({self.atributo_valor}) + Skill({pericia_valor})",
             inline=False
         )
+        if dc is not None:
+            embed.add_field(name="DC", value=str(dc), inline=True)
+        else:
+            tabela_txt = "/".join(map(str, DEFAULT_DC_THRESHOLDS))
+            embed.add_field(name="Tabela de Dificuldade", value=tabela_txt, inline=True)
         embed.add_field(name="Total", value=f"# **{total}**", inline=False)
+        embed.add_field(name="Classificação", value=classificacao, inline=False)
 
         await interaction.response.send_message(embed=embed)
 
