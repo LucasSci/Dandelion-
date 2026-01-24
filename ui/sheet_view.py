@@ -783,8 +783,19 @@ class FichaView(BaseRPGView):
 
         encumbrance = len(itens)
         capacidade = 10 + (nivel * 2)
+        barra_tamanho = 8
+        if capacidade <= 0:
+            preenchido = 0
+        else:
+            proporcao = max(min(encumbrance / capacidade, 1), 0)
+            preenchido = int(round(proporcao * barra_tamanho))
+        barra = f"{'■' * preenchido}{'□' * (barra_tamanho - preenchido)}"
         embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
-        embed.add_field(name="Encumbrance", value=f"{encumbrance}/{capacidade} (1 por item)", inline=False)
+        embed.add_field(
+            name="Encumbrance",
+            value=f"{encumbrance}/{capacidade} (1 por item)\n{barra}",
+            inline=False,
+        )
         _set_footer_timestamp(embed, "Layout estilo pergaminho limpo • Lista dinâmica")
 
         if interaction.response.is_done():
