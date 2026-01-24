@@ -68,6 +68,19 @@ CREATE TABLE IF NOT EXISTS memoria_campanha (
     data_registro TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS personagem_memorias (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    personagem_id INTEGER NOT NULL,
+    log_id INTEGER,
+    descricao_fato TEXT NOT NULL,
+    relevancia INTEGER DEFAULT 1,
+    criado_em TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+    FOREIGN KEY(log_id) REFERENCES session_logs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_personagem_memorias_personagem_id ON personagem_memorias(personagem_id);
+
 -- CAMPANHA SOLO --
 CREATE TABLE IF NOT EXISTS solo_campaigns (
     user_id INTEGER PRIMARY KEY,
