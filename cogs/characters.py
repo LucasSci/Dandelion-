@@ -455,15 +455,21 @@ class Characters(commands.Cog):
             "torso": armor_layers["torso"],
             "pernas": armor_layers["pernas"],
         }
-        atributos_map = {nome: valor for nome, valor in atributos}
-        derived_stats = self.character_repo.calculate_derived_stats(atributos_map)
-        if personagem[9] is not None:
-            derived_stats["HP"] = personagem[9]
-        if personagem[14] is not None:
-            derived_stats["Stamina"] = personagem[14]
-        if personagem[15] is not None:
-            derived_stats["Vigor"] = personagem[15]
-        derived_stats = calculate_derived_stats(atributos_map)
+        base_derived_stats = calculate_derived_stats(atributos_map)
+        hp = personagem[9] if personagem[9] is not None else base_derived_stats["HP"]
+        stamina = (
+            personagem[14] if personagem[14] is not None else base_derived_stats["Stamina"]
+        )
+        vigor = personagem[15] if personagem[15] is not None else base_derived_stats["Vigor"]
+        derived_stats = {
+            "Stun": base_derived_stats["Stun"],
+            "Run": base_derived_stats["Run"],
+            "Leap": base_derived_stats["Leap"],
+            "HP": hp,
+            "Stamina": stamina,
+            "Vigor": vigor,
+            "Recovery": base_derived_stats["Recovery"],
+        }
 
         ficha = {
             "schema_version": "v1.0.0",
@@ -480,18 +486,6 @@ class Characters(commands.Cog):
                 "LUCK": atributos_map.get("LUCK", 1),
             },
             "derived_stats": derived_stats,
-            "derived_stats": {
-                "Stun": derived_stats["Stun"],
-                "Run": derived_stats["Run"],
-                "Leap": derived_stats["Leap"],
-                "HP": derived_stats["HP"],
-                "Stamina": derived_stats["Stamina"],
-                "Vigor": derived_stats["Vigor"],
-                "HP": personagem[9],
-                "Stamina": personagem[14] if personagem[14] is not None else 0,
-                "Vigor": personagem[15] if personagem[15] is not None else 0,
-                "Recovery": derived_stats["Recovery"],
-            },
             "skills_tree": [
                 {
                     "nome": h[0],
