@@ -122,11 +122,15 @@ class Campaign(commands.Cog):
         await interaction.response.send_message("🔥 **TABULA RASA!** O Dandelion esqueceu tudo sobre a campanha.", ephemeral=True)
 
     @lore.command(name="ver", description="📚 Vê o conhecimento de mundo registrado pelo mestre")
-    @app_commands.check(is_mestre)
     async def lore_ver(self, interaction: discord.Interaction):
-        async with self.bot.db.execute(
-            "SELECT id, titulo, resumo, conteudo FROM lore_entries ORDER BY id ASC"
-        ) as c:
+        is_mestre = Campaign.is_mestre(interaction)
+        params = []
+        query = "SELECT id, titulo, resumo, conteudo FROM lore_entries"
+        if not is_mestre:
+            query += " WHERE is_private = 0 OR is_private IS NULL OR owner_id = ?"
+            params.append(interaction.user.id)
+        query += " ORDER BY id ASC"
+        async with self.bot.db.execute(query, params) as c:
             rows = await c.fetchall()
 
         if not rows:
@@ -154,36 +158,70 @@ class Campaign(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
     @lore.command(name="adicionar", description="➕ Registra um fato do mundo para a IA usar")
-    @app_commands.describe(titulo="Título curto do lore", conteudo="Texto completo do conhecimento")
+    @app_commands.describe(
+        titulo="Título curto do lore",
+        conteudo="Texto completo do conhecimento",
+        is_private="Marque como privado para limitar a visualização",
+        owner_id="ID do jogador dono do lore (opcional)",
+    )
     @app_commands.check(is_mestre)
-    async def lore_adicionar(self, interaction: discord.Interaction, titulo: str, conteudo: str):
+    async def lore_adicionar(
+        self,
+        interaction: discord.Interaction,
+        titulo: str,
+        conteudo: str,
+        is_private: bool = False,
+        owner_id: Optional[int] = None,
+    ):
         resumo = self._resumir_texto(conteudo, 240)
+        if is_private and owner_id is None:
+            owner_id = interaction.user.id
         await self.bot.db.execute(
-            "INSERT INTO lore_entries (titulo, resumo, conteudo) VALUES (?, ?, ?)",
-            (titulo, resumo, conteudo),
+            "INSERT INTO lore_entries (titulo, resumo, conteudo, is_private, owner_id) VALUES (?, ?, ?, ?, ?)",
+            (titulo, resumo, conteudo, int(is_private), owner_id),
         )
         await self.bot.db.commit()
         await interaction.response.send_message("✅ Lore registrado com sucesso.", ephemeral=True)
 
     @lore.command(name="importar_txt", description="📂 Importa lore longo via arquivo .txt")
-    @app_commands.describe(titulo="Título do lore", arquivo="Arquivo .txt com o conteúdo")
+    @app_commands.describe(
+        titulo="Título do lore",
+        arquivo="Arquivo .txt com o conteúdo",
+        is_private="Marque como privado para limitar a visualização",
+        owner_id="ID do jogador dono do lore (opcional)",
+    )
     @app_commands.check(is_mestre)
-    async def lore_importar_txt(self, interaction: discord.Interaction, titulo: str, arquivo: discord.Attachment):
+    async def lore_importar_txt(
+        self,
+        interaction: discord.Interaction,
+        titulo: str,
+        arquivo: discord.Attachment,
+        is_private: bool = False,
+        owner_id: Optional[int] = None,
+    ):
         if not arquivo.filename.endswith(".txt"):
             return await interaction.response.send_message("Apenas .txt", ephemeral=True)
         await interaction.response.defer()
 
         texto = (await arquivo.read()).decode("utf-8")
         resumo = self._resumir_texto(texto, 240)
+        if is_private and owner_id is None:
+            owner_id = interaction.user.id
         await self.bot.db.execute(
-            "INSERT INTO lore_entries (titulo, resumo, conteudo) VALUES (?, ?, ?)",
-            (titulo, resumo, texto),
+            "INSERT INTO lore_entries (titulo, resumo, conteudo, is_private, owner_id) VALUES (?, ?, ?, ?, ?)",
+            (titulo, resumo, texto, int(is_private), owner_id),
         )
         await self.bot.db.commit()
         await interaction.followup.send("✅ Lore importado! A IA agora conhece esse conteúdo.")
 
     @lore.command(name="editar", description="✏️ Corrige um lore existente")
-    @app_commands.describe(id_lore="ID do lore (veja em /lore ver)", novo_titulo="Novo título", novo_conteudo="Novo texto")
+    @app_commands.describe(
+        id_lore="ID do lore (veja em /lore ver)",
+        novo_titulo="Novo título",
+        novo_conteudo="Novo texto",
+        is_private="Atualiza se o lore é privado",
+        owner_id="ID do jogador dono do lore (opcional)",
+    )
     @app_commands.check(is_mestre)
     async def lore_editar(
         self,
@@ -191,12 +229,31 @@ class Campaign(commands.Cog):
         id_lore: int,
         novo_titulo: str,
         novo_conteudo: str,
+        is_private: Optional[bool] = None,
+        owner_id: Optional[int] = None,
     ):
         resumo = self._resumir_texto(novo_conteudo, 240)
-        cursor = await self.bot.db.execute(
-            "UPDATE lore_entries SET titulo = ?, resumo = ?, conteudo = ?, atualizado_em = datetime('now') WHERE id = ?",
-            (novo_titulo, resumo, novo_conteudo, id_lore),
-        )
+        fields = [
+            "titulo = ?",
+            "resumo = ?",
+            "conteudo = ?",
+            "atualizado_em = datetime('now')",
+        ]
+        params = [novo_titulo, resumo, novo_conteudo]
+        if is_private is not None:
+            fields.append("is_private = ?")
+            params.append(int(is_private))
+            if is_private is False and owner_id is None:
+                fields.append("owner_id = NULL")
+        resolved_owner_id = owner_id
+        if is_private is True and resolved_owner_id is None:
+            resolved_owner_id = interaction.user.id
+        if resolved_owner_id is not None:
+            fields.append("owner_id = ?")
+            params.append(resolved_owner_id)
+        params.append(id_lore)
+        query = f"UPDATE lore_entries SET {', '.join(fields)} WHERE id = ?"
+        cursor = await self.bot.db.execute(query, params)
         await self.bot.db.commit()
 
         if cursor.rowcount > 0:
