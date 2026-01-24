@@ -216,6 +216,12 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         super().__init__()
         self.atributo_nome = atributo_nome
         self.atributo_valor = atributo_valor
+        self.dcs = {
+            "Fácil": 10,
+            "Média": 15,
+            "Difícil": 20,
+            "Extrema": 25,
+        }
 
         self.pericia_nome = ui.TextInput(
             label="Nome da Perícia (opcional)",
@@ -226,15 +232,28 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             label="Valor da Perícia",
             placeholder="Ex: 4",
         )
+        self.dc_valor = ui.TextInput(
+            label="DC (opcional)",
+            placeholder="Ex: 15",
+            required=False,
+        )
 
         self.add_item(self.pericia_nome)
         self.add_item(self.pericia_valor)
+        self.add_item(self.dc_valor)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
             pericia_valor = int(self.pericia_valor.value)
         except ValueError:
             return await interaction.response.send_message("❌ Valor da perícia inválido.", ephemeral=True)
+
+        dc_informada = None
+        if self.dc_valor.value:
+            try:
+                dc_informada = int(self.dc_valor.value)
+            except ValueError:
+                return await interaction.response.send_message("❌ DC inválida.", ephemeral=True)
 
         rolagens, total, direcao = rolar_pericia_explosiva(self.atributo_valor, pericia_valor)
 
@@ -261,6 +280,37 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             inline=False
         )
         embed.add_field(name="Total", value=f"# **{total}**", inline=False)
+        dcs_texto = "\n".join([f"• **{nome}**: {valor}" for nome, valor in self.dcs.items()])
+        embed.add_field(name="📊 DCs de Referência", value=dcs_texto, inline=False)
+
+        if dc_informada is not None:
+            margem = total - dc_informada
+            if margem < 0:
+                nivel = "Falha"
+            elif margem == 0:
+                nivel = "Vitória Marginal"
+            elif margem < 10:
+                nivel = "Vitória"
+            else:
+                nivel = "Crítica"
+            embed.add_field(
+                name="🎯 Comparação com DC",
+                value=f"DC **{dc_informada}** (Diferença: {margem:+d})",
+                inline=False
+            )
+        else:
+            if total >= self.dcs["Extrema"]:
+                nivel = "Crítica"
+            elif total >= self.dcs["Difícil"]:
+                nivel = "Vitória Maior"
+            elif total >= self.dcs["Média"]:
+                nivel = "Vitória"
+            elif total >= self.dcs["Fácil"]:
+                nivel = "Vitória Marginal"
+            else:
+                nivel = "Falha"
+
+        embed.add_field(name="🏆 Nível", value=nivel, inline=False)
 
         await interaction.response.send_message(embed=embed)
 
