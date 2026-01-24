@@ -351,9 +351,15 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             placeholder="Ex: 15",
             required=False,
         )
+        self.dificuldade_input = ui.TextInput(
+            label="DC / Nível de Dificuldade (opcional)",
+            required=False,
+            placeholder="Ex: 15 ou Médio",
+        )
 
         self.add_item(self.pericia_nome)
         self.add_item(self.pericia_valor)
+        self.add_item(self.dificuldade_input)
         self.add_item(self.dc_valor)
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -407,6 +413,13 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             tabela_txt = "/".join(map(str, DEFAULT_DC_THRESHOLDS))
             embed.add_field(name="Tabela de Dificuldade", value=tabela_txt, inline=True)
         embed.add_field(name="Total", value=f"# **{total}**", inline=False)
+        resultado = self._avaliar_dificuldade(total)
+        if resultado:
+            embed.add_field(
+                name=f"Resultado vs DC {resultado['dc']} ({resultado['rotulo']})",
+                value=f"{resultado['texto']} (Margem {resultado['margem']:+})",
+                inline=False,
+            )
         dcs_texto = "\n".join([f"• **{nome}**: {valor}" for nome, valor in self.dcs.items()])
         embed.add_field(name="📊 DCs de Referência", value=dcs_texto, inline=False)
 
@@ -442,6 +455,55 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
 
         await interaction.response.send_message(embed=embed)
 
+    def _avaliar_dificuldade(self, total: int):
+        dificuldade_raw = self.dificuldade_input.value.strip() if self.dificuldade_input.value else ""
+        if not dificuldade_raw:
+            return None
+
+        tabela_dificuldade = {
+            "facil": 10,
+            "fácil": 10,
+            "medio": 15,
+            "médio": 15,
+            "dificil": 20,
+            "difícil": 20,
+            "epico": 25,
+            "épico": 25,
+        }
+        dificuldade_normalizada = dificuldade_raw.lower()
+        dc = tabela_dificuldade.get(dificuldade_normalizada)
+        rotulo = dificuldade_raw.title()
+        if dc is None:
+            try:
+                dc = int(dificuldade_raw)
+                rotulo = "Personalizada"
+            except ValueError:
+                return None
+
+        margem = total - dc
+        if margem < 0:
+            texto = "Falha"
+        elif margem < 5:
+            texto = "Vitória Marginal"
+        elif margem < 10:
+            texto = "Sucesso"
+        else:
+            texto = "Crítica"
+
+        if dc in tabela_dificuldade.values():
+            rotulo = {
+                10: "Fácil",
+                15: "Médio",
+                20: "Difícil",
+                25: "Épico",
+            }.get(dc, rotulo)
+
+        return {
+            "dc": dc,
+            "margem": margem,
+            "texto": texto,
+            "rotulo": rotulo,
+        }
 
 class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
     def __init__(self, personagem_id):
