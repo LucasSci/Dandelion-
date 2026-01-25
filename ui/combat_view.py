@@ -1,24 +1,7 @@
 import discord
 from discord import ui
 
-# --- VISUAL: BARRA DE VIDA ---
-def gerar_barra(atual, maximo, tamanho=10):
-    if maximo <= 0:
-        pct = 0
-    else:
-        pct = max(0, min(atual / maximo, 1))
-
-    cheios = int(pct * tamanho)
-
-    # Define a cor com base na porcentagem de vida
-    if pct > 0.6:
-        cor = "🟩"  # Alta (Verde)
-    elif pct > 0.3:
-        cor = "🟨"  # Média (Amarelo)
-    else:
-        cor = "🟥"  # Baixa/Crítica (Vermelho)
-
-    return cor * cheios + "⬛" * (tamanho - cheios)
+from utils import gerar_barra
 
 # --- LINK EXTERNO (ROLL20) ---
 class Roll20LinkView(ui.View):

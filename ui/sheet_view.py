@@ -15,7 +15,7 @@ from data.repositories import (
 )
 from ui.base_view import BaseRPGView
 from ui.views import ConfirmarExclusaoView
-from utils import rolar_dados, rolar_pericia_explosiva
+from utils import rolar_dados, rolar_pericia_explosiva, gerar_barra
 
 try:
     from utils.dc_table import DEFAULT_DC_THRESHOLDS, classificar_resultado
@@ -205,11 +205,12 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     embed.add_field(name="💰 Ouro", value=str(ouro), inline=True)
     embed.add_field(name="🧭 XP Atual", value=str(xp_atual), inline=True)
 
-    hp_pct = _format_percentual(hp_atual, hp_max)
-    vigor_pct = _format_percentual(vigor_atual, vigor_max)
+    hp_barra = gerar_barra(hp_atual, hp_max)
+    vigor_barra = gerar_barra(vigor_atual, vigor_max, cor_cheio="🟨")
+
     recursos = (
-        f"❤️ HP {hp_atual}/{hp_max} ({hp_pct})\n"
-        f"⚡ Vigor {vigor_atual}/{vigor_max} ({vigor_pct})\n"
+        f"❤️ {hp_barra} {hp_atual}/{hp_max}\n"
+        f"⚡ {vigor_barra} {vigor_atual}/{vigor_max}\n"
         f"✨ MP {mp_max}\n"
         f"☠️ Toxicidade {toxicidade_atual}/{toxicidade_max}"
     )
