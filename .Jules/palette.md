@@ -36,3 +36,7 @@
 ## 2024-05-24 - Actionable Permission Denied Messages
 **Learning:** Generic "Access Denied" messages frustrate users by blocking them without offering a path forward.
 **Action:** When blocking an interaction, always explain *why* (e.g., "This sheet belongs to @User") and provide a Call to Action (e.g., "Use /create to make yours") to convert the friction into engagement.
+
+## 2024-05-24 - Rich Success States
+**Learning:** Simple text success messages ("Created!") often feel underwhelming and lack context for the next step.
+**Action:** Use `discord.Embed` for success states of complex creation actions, providing a summary of the created entity (with thumbnail/fields) and a clear Call to Action (Footer) for what to do next.

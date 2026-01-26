@@ -49,12 +49,28 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
             ))
             await db.commit()
 
-            if final_user_id:
-                msg = f"✅ **{self.nome.value}** nasceu! Use `/ficha` para ver."
+            # UX Improvement: Rich Embed for Character Creation Success
+            is_player = bool(final_user_id)
+            embed_color = 0x57F287 if is_player else 0x95A5A6
+            title = "✨ Personagem Criado!" if is_player else "📂 Personagem Arquivado"
+
+            if is_player:
+                description = f"Bem-vindo(a) ao continente, **{self.nome.value}**! Sua jornada começa agora."
+                footer_text = "Use /ficha para acessar seu painel."
             else:
-                msg = f"📂 **{self.nome.value}** foi arquivado no Pool de Fichas do Mestre.\nUse `/mestre_vincular` para entregar a alguém."
+                description = f"**{self.nome.value}** foi salvo no banco de dados e está aguardando um jogador."
+                footer_text = "Use /mestre_vincular para atribuir a alguém."
+
+            embed = discord.Embed(title=title, description=description, color=embed_color)
+            embed.add_field(name="Raça", value=self.raca.value or "Desconhecida", inline=True)
+            embed.add_field(name="Classe", value=self.classe.value or "Desconhecida", inline=True)
+
+            if self.imagem.value:
+                embed.set_thumbnail(url=self.imagem.value)
+
+            embed.set_footer(text=footer_text)
             
-            await interaction.response.send_message(msg, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
         except Exception as e:
             # Capturando IntegrityError genericamente ou checando o tipo de erro específico do aiosqlite/sqlite3
