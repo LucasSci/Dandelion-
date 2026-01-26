@@ -50,11 +50,26 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
             await db.commit()
 
             if final_user_id:
-                msg = f"✅ **{self.nome.value}** nasceu! Use `/ficha` para ver."
+                title = "✨ Personagem Criado!"
+                desc = f"A jornada de **{self.nome.value}** começa agora."
+                color = 0x57F287  # Green
+                footer = "Use /ficha para acessar seu painel."
             else:
-                msg = f"📂 **{self.nome.value}** foi arquivado no Pool de Fichas do Mestre.\nUse `/mestre_vincular` para entregar a alguém."
+                title = "📂 Personagem Arquivado"
+                desc = f"**{self.nome.value}** foi salvo no Pool de Fichas do Mestre."
+                color = 0x95A5A6  # Grey
+                footer = "Use /mestre_vincular para atribuir a alguém."
+
+            embed = discord.Embed(title=title, description=desc, color=color)
+            embed.add_field(name="Raça", value=self.raca.value, inline=True)
+            embed.add_field(name="Classe", value=self.classe.value, inline=True)
+
+            if self.imagem.value:
+                embed.set_thumbnail(url=self.imagem.value)
+
+            embed.set_footer(text=footer)
             
-            await interaction.response.send_message(msg, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
         except Exception as e:
             # Capturando IntegrityError genericamente ou checando o tipo de erro específico do aiosqlite/sqlite3
