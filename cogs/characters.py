@@ -1,3 +1,4 @@
+import asyncio
 import discord
 import io
 import json
@@ -444,12 +445,13 @@ class Characters(commands.Cog):
             )
 
         personagem_id = personagem[0]
-        habilidades = await self.skill_repo.list_skill_export(personagem_id)
-
-        atributos_map = await self.character_repo.list_attributes_dict(personagem_id)
-
         export_localizacoes = ["cabeca", "torso", "pernas"]
-        armaduras = await self.character_repo.list_armors(personagem_id, export_localizacoes)
+
+        habilidades, atributos_map, armaduras = await asyncio.gather(
+            self.skill_repo.list_skill_export(personagem_id),
+            self.character_repo.list_attributes_dict(personagem_id),
+            self.character_repo.list_armors(personagem_id, export_localizacoes),
+        )
         armor_layers = {
             localizacao: {"sp": 0, "reliability": 100}
             for localizacao in export_localizacoes
