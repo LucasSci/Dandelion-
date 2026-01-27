@@ -83,6 +83,26 @@ def _cor_por_hp(hp_atual, hp_max):
     return 0xED4245
 
 
+def _gerar_barra_encumbrance(encumbrance_atual: int, capacidade_maxima: int, segmentos: int = 10) -> str:
+    if capacidade_maxima <= 0:
+        return "⬛" * segmentos
+
+    proporcao = encumbrance_atual / capacidade_maxima
+    preenchidos = min(segmentos, max(0, round(proporcao * segmentos)))
+    vazios = segmentos - preenchidos
+
+    if proporcao >= 1.0:
+        cor = "🟥"
+    elif proporcao >= 0.8:
+        cor = "🟧"
+    elif proporcao >= 0.5:
+        cor = "🟨"
+    else:
+        cor = "🟩"
+
+    return f"{cor * preenchidos}{'⬛' * vazios}"
+
+
 def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
     timestamp = f"<t:{int(time.time())}:R>"
     if texto_base:
@@ -1149,15 +1169,6 @@ class FichaView(BaseRPGView):
         self.update_buttons_state("inventario")
         self.clear_dynamic_buttons()
 
-        def gerar_barra_encumbrance(encumbrance_atual: int, capacidade_maxima: int, segmentos: int = 10) -> str:
-            if capacidade_maxima <= 0:
-                preenchidos = 0
-            else:
-                proporcao = encumbrance_atual / capacidade_maxima
-                preenchidos = min(segmentos, max(0, round(proporcao * segmentos)))
-            vazios = segmentos - preenchidos
-            return f"[{'■' * preenchidos}{'□' * vazios}]"
-
         character_repo = CharacterRepository(interaction.client.db)
         inventory_repo = InventoryRepository(interaction.client.db)
 
@@ -1178,7 +1189,7 @@ class FichaView(BaseRPGView):
 
         encumbrance = len(itens)
         capacidade = 10 + (nivel * 2)
-        barra_encumbrance = gerar_barra_encumbrance(encumbrance, capacidade)
+        barra_encumbrance = _gerar_barra_encumbrance(encumbrance, capacidade)
 
         embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
         embed.add_field(

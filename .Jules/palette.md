@@ -36,3 +36,7 @@
 ## 2024-05-24 - Actionable Permission Denied Messages
 **Learning:** Generic "Access Denied" messages frustrate users by blocking them without offering a path forward.
 **Action:** When blocking an interaction, always explain *why* (e.g., "This sheet belongs to @User") and provide a Call to Action (e.g., "Use /create to make yours") to convert the friction into engagement.
+
+## 2024-05-22 - Color-coded Progress Bars
+**Learning:** Visual status bars (like Encumbrance) benefit significantly from color-coding (Green/Yellow/Orange/Red) using emojis (🟩, 🟨, 🟧, 🟥) to convey severity at a glance, rather than just monochrome text characters.
+**Action:** Apply this pattern to other resource bars (Health, Vigor, XP) if they aren't already utilizing it.
