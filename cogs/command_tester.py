@@ -150,12 +150,20 @@ class CommandTester(commands.Cog):
         return None
 
     def _build_args(self, comando: app_commands.Command) -> tuple[list[object], list[str]]:
-        params = None
+        params: list[object] | None = None
         if hasattr(comando, "parameters"):
-            params = list(comando.parameters.values())
+            raw_params = comando.parameters
+            if isinstance(raw_params, dict):
+                params = list(raw_params.values())
+            else:
+                params = list(raw_params)
         elif hasattr(comando, "_params"):
-            params = list(comando._params.values())
-        if params is None:
+            raw_params = comando._params
+            if isinstance(raw_params, dict):
+                params = list(raw_params.values())
+            else:
+                params = list(raw_params)
+        if not params:
             return [], []
 
         args = []
