@@ -1,6 +1,7 @@
 import asyncio
 import discord
 import io
+import asyncio
 import json
 from typing import Optional
 from discord.ext import commands
@@ -445,13 +446,13 @@ class Characters(commands.Cog):
             )
 
         personagem_id = personagem[0]
-
         export_localizacoes = ["cabeca", "torso", "pernas"]
 
+        # Optimization: Fetch independent data (skills, attributes, armors) in parallel
         habilidades, atributos_map, armaduras = await asyncio.gather(
             self.skill_repo.list_skill_export(personagem_id),
             self.character_repo.list_attributes_dict(personagem_id),
-            self.character_repo.list_armors(personagem_id, export_localizacoes)
+            self.character_repo.list_armors(personagem_id, export_localizacoes),
         )
         armor_layers = {
             localizacao: {"sp": 0, "reliability": 100}
