@@ -615,5 +615,36 @@ class Characters(commands.Cog):
         txt = "\n".join([f"• {r[0]} ({'Ocupado' if r[1] else 'Livre'})" for r in rows])
         await interaction.response.send_message(f"**Fichas:**\n{txt}")
 
+    @app_commands.command(
+        name="mestre_listar_fichas",
+        description="🔒 (Mestre) Lista fichas com filtros de raça, classe e gênero",
+    )
+    @app_commands.check(is_mestre)
+    async def mestre_listar_fichas(
+        self,
+        interaction: discord.Interaction,
+        raca: Optional[str] = None,
+        classe: Optional[str] = None,
+        genero: Optional[str] = None,
+    ):
+        rows = await self.character_repo.list_characters_filtered(
+            raca=raca,
+            classe=classe,
+            genero=genero,
+            limit=20,
+        )
+        if not rows:
+            return await interaction.response.send_message("📭 Nenhuma ficha encontrada.", ephemeral=True)
+        filtros = ", ".join(
+            [f"{nome}: {valor}" for nome, valor in (("Raça", raca), ("Classe", classe), ("Gênero", genero)) if valor]
+        )
+        header = f"**Fichas filtradas ({filtros})**" if filtros else "**Fichas (sem filtro)**"
+        linhas = []
+        for nome, user_id, raca_valor, classe_valor, genero_valor in rows:
+            identidade = " • ".join([item for item in (raca_valor, classe_valor, genero_valor) if item]) or "Sem identidade"
+            status = "Ocupado" if user_id else "Livre"
+            linhas.append(f"• {nome} — {identidade} ({status})")
+        await interaction.response.send_message(f"{header}\n" + "\n".join(linhas))
+
 async def setup(bot):
     await bot.add_cog(Characters(bot))

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS personagens (
     titulo TEXT,
     raca TEXT,
     classe TEXT,
+    genero TEXT,
     nivel INTEGER DEFAULT 1,
     xp_atual INTEGER DEFAULT 0,
     historia TEXT,

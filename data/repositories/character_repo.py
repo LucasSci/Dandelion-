@@ -305,10 +305,38 @@ class CharacterRepository:
         async with self.db.execute(f"SELECT nome, user_id FROM personagens LIMIT {limit}") as cursor:
             return await cursor.fetchall()
 
+    async def list_characters_filtered(
+        self,
+        raca: Optional[str] = None,
+        classe: Optional[str] = None,
+        genero: Optional[str] = None,
+        limit: int = 20,
+    ) -> list[tuple[str, Optional[int], Optional[str], Optional[str], Optional[str]]]:
+        limit = int(limit)
+        filtros = []
+        params: list[object] = []
+        if raca:
+            filtros.append("LOWER(raca) LIKE ?")
+            params.append(f"%{raca.strip().lower()}%")
+        if classe:
+            filtros.append("LOWER(classe) LIKE ?")
+            params.append(f"%{classe.strip().lower()}%")
+        if genero:
+            filtros.append("LOWER(genero) LIKE ?")
+            params.append(f"%{genero.strip().lower()}%")
+
+        query = "SELECT nome, user_id, raca, classe, genero FROM personagens"
+        if filtros:
+            query += " WHERE " + " AND ".join(filtros)
+        query += " LIMIT ?"
+        params.append(limit)
+        async with self.db.execute(query, params) as cursor:
+            return await cursor.fetchall()
+
     async def fetch_embed_details(self, personagem_id: int) -> Optional[tuple]:
         async with self.db.execute(
             """
-            SELECT p.nome, p.titulo, p.raca, p.classe, p.nivel, p.historia, p.imagem_url, p.ouro,
+            SELECT p.nome, p.titulo, p.raca, p.classe, p.genero, p.nivel, p.historia, p.imagem_url, p.ouro,
                    p.hp_atual, p.hp_max, p.mp_max, p.ataque, p.defesa, p.xp_atual,
                    p.vigor_atual, p.vigor_max, p.toxicidade_atual, p.toxicidade_max, w.nome
             FROM personagens p
@@ -319,10 +347,12 @@ class CharacterRepository:
         ) as cursor:
             return await cursor.fetchone()
 
-    async def fetch_identity(self, personagem_id: int) -> Optional[tuple[str, Optional[str], Optional[str], Optional[str]]]:
+    async def fetch_identity(
+        self, personagem_id: int
+    ) -> Optional[tuple[str, Optional[str], Optional[str], Optional[str], Optional[str]]]:
         async with self.db.execute(
             """
-            SELECT nome, raca, classe, imagem_url
+            SELECT nome, raca, classe, genero, imagem_url
             FROM personagens
             WHERE id = ?
             """,
