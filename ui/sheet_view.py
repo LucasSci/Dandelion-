@@ -549,25 +549,36 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        termo = f"%{self.termo.value.strip()}%"
+        termo_busca = self.termo.value.strip()
+        termo_sql = f"%{termo_busca}%"
         skill_repo = SkillRepository(interaction.client.db)
-        resultados = await skill_repo.search_skills(self.personagem_id, termo, limit=5)
+        resultados = await skill_repo.search_skills(self.personagem_id, termo_sql, limit=5)
 
         if not resultados:
             embed = discord.Embed(
                 title="🔎 Nenhuma perícia encontrada",
-                description=f"Não encontramos nada com **'{self.termo.value}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
+                description=f"Não encontramos nada com **'{termo_busca}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
                 color=0xED4245
             )
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        linhas = []
-        for nome, dado, descricao in resultados:
-            dado_txt = f" ({dado})" if dado else ""
-            resumo = (descricao[:80] + "...") if descricao and len(descricao) > 80 else (descricao or "Sem descrição.")
-            linhas.append(f"• **{nome}**{dado_txt} — {resumo}")
+        embed = discord.Embed(
+            title=f"🔎 Resultados para '{termo_busca}'",
+            color=0x5865F2,
+        )
 
-        await interaction.response.send_message("\n".join(linhas), ephemeral=True)
+        for nome, dado, descricao in resultados:
+            dado_txt = f" `{dado}`" if dado else ""
+            resumo = (descricao[:120] + "...") if descricao and len(descricao) > 120 else (descricao or "Sem descrição.")
+            emoji = "🎲" if dado else "✨"
+            embed.add_field(
+                name=f"{emoji} {nome}{dado_txt}",
+                value=resumo,
+                inline=False,
+            )
+
+        embed.set_footer(text="Use /magia para ver todas.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ==============================================================================
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)
