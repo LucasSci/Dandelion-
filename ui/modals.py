@@ -49,22 +49,32 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
             ))
             await db.commit()
 
-            # UX Improvement: Rich Embed for Character Creation Success
-            is_player = bool(final_user_id)
-            embed_color = 0x57F287 if is_player else 0x95A5A6
-            title = "✨ Personagem Criado!" if is_player else "📂 Personagem Arquivado"
-
-            if is_player:
-                description = f"Bem-vindo(a) ao continente, **{self.nome.value}**! Sua jornada começa agora."
-                footer_text = "Use /ficha para acessar seu painel."
+            if final_user_id:
+                title = f"✨ Personagem Criado: {self.nome.value}"
+                footer_text = "Use /ficha para ver os detalhes completos."
+                desc = "Sua jornada começa agora!"
             else:
-                description = f"**{self.nome.value}** foi salvo no banco de dados e está aguardando um jogador."
-                footer_text = "Use /mestre_vincular para atribuir a alguém."
+                title = f"📂 Personagem Arquivado: {self.nome.value}"
+                footer_text = "Arquivado no Pool do Mestre. Use /mestre_vincular para atribuir."
+                desc = "Personagem pronto para ser atribuído."
 
-            embed = discord.Embed(title=title, description=description, color=embed_color)
-            embed.add_field(name="Raça", value=self.raca.value or "Desconhecida", inline=True)
-            embed.add_field(name="Classe", value=self.classe.value or "Desconhecida", inline=True)
+            embed = discord.Embed(
+                title=title,
+                description=desc,
+                color=0x57F287  # Green
+            )
 
+            # Identity Field
+            raca = self.raca.value or "Desconhecida"
+            classe = self.classe.value or "Aventureiro"
+            embed.add_field(name="Identidade", value=f"**{raca}** • *{classe}*", inline=True)
+
+            # History Field (if provided)
+            if self.historia.value:
+                historia_curta = (self.historia.value[:200] + '...') if len(self.historia.value) > 200 else self.historia.value
+                embed.add_field(name="História", value=f"_{historia_curta}_", inline=False)
+
+            # Thumbnail (if provided)
             if self.imagem.value:
                 embed.set_thumbnail(url=self.imagem.value)
 
