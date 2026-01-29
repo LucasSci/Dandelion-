@@ -1028,8 +1028,8 @@ class FichaView(BaseRPGView):
         ]
 
         embed = discord.Embed(title="✨ Magia & Alquimia", color=0x8E7CC3)
-        vigor_pct = _format_percentual(vigor_atual, vigor_max)
-        embed.add_field(name="⚡ Vigor", value=f"{vigor_atual}/{vigor_max} ({vigor_pct})", inline=True)
+        vigor_bar = gerar_barra(vigor_atual, vigor_max, segmentos=5)
+        embed.add_field(name="⚡ Vigor", value=f"{vigor_bar} {vigor_atual}/{vigor_max}", inline=True)
         embed.add_field(name="☠️ Toxicidade", value=f"{toxicidade_atual}/{toxicidade_max}", inline=True)
 
         if not skills:
@@ -1149,9 +1149,9 @@ class FichaView(BaseRPGView):
         armas_txt = "\n".join([f"• **{n}** — {e or 'Sem efeito'}" for n, e in armas]) or "Sem armas equipadas."
         armaduras_txt = "\n".join([f"• **{n}** — {e or 'Sem efeito'}" for n, e in armaduras]) or "Sem armaduras registradas."
 
-        hp_pct = _format_percentual(hp_atual, hp_max)
+        hp_bar = gerar_barra(hp_atual, hp_max, segmentos=5)
         embed = discord.Embed(title="⚔️ Combate", color=_cor_por_hp(hp_atual, hp_max))
-        embed.add_field(name="❤️ Vida", value=f"{hp_atual}/{hp_max} ({hp_pct})", inline=True)
+        embed.add_field(name="❤️ Vida", value=f"{hp_bar} {hp_atual}/{hp_max}", inline=True)
         embed.add_field(name="⚔️ Ataque", value=str(ataque), inline=True)
         embed.add_field(name="🛡️ SP Atual", value=str(defesa), inline=True)
         embed.add_field(name="Armas", value=armas_txt, inline=False)
