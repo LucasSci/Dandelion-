@@ -38,6 +38,7 @@ def load_settings() -> Settings:
             "cogs.alchemy",
             "cogs.bestiary",
             "cogs.combat",
+            "cogs.command_tester",
             "cogs.scribe",
             "cogs.quests",
             "cogs.campaign",
