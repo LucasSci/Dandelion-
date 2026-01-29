@@ -103,13 +103,19 @@ async def adicionar_xp(db, user_id, xp_ganho, channel):
     await db.commit()
     await channel.send(msg)
 
-def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None):
+def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, **kwargs):
+    # Compatibility: Handle 'segmentos' alias for 'tamanho'
+    if 'segmentos' in kwargs:
+        tamanho = kwargs['segmentos']
+
     if maximo <= 0:
         pct = 0
     else:
         pct = max(0, min(atual / maximo, 1))
 
     cheios = int(pct * tamanho)
+    if cheios == 0 and pct > 0:
+        cheios = 1
 
     if cor_cheio:
         cor = cor_cheio

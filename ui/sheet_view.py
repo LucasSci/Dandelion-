@@ -724,7 +724,17 @@ class PocaoSelect(ui.Select):
             description=efeito or "Efeito não descrito.",
             color=0x4B7B6F
         )
-        embed.add_field(name="☠️ Toxicidade", value=f"+{custo_toxicidade} (Total: {nova_toxicidade})")
+
+        pct = nova_toxicidade / toxicidade_max if toxicidade_max > 0 else 0
+        if pct <= 0.3:
+            cor = "🟩"
+        elif pct <= 0.6:
+            cor = "🟨"
+        else:
+            cor = "🟥"
+        tox_bar = gerar_barra(nova_toxicidade, toxicidade_max, tamanho=5, cor_cheio=cor)
+
+        embed.add_field(name="☠️ Toxicidade", value=f"{tox_bar} +{custo_toxicidade} ({nova_toxicidade}/{toxicidade_max})")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class PocaoView(ui.View):
@@ -755,6 +765,7 @@ class HabilidadeButton(ui.Button):
         self.vigor_cost = vigor_cost
 
     async def callback(self, interaction: discord.Interaction):
+        vigor_feedback = None
         if self.personagem_id and self.vigor_cost:
             character_repo = CharacterRepository(interaction.client.db)
             row = await character_repo.fetch_vigor(self.personagem_id)
@@ -775,8 +786,15 @@ class HabilidadeButton(ui.Button):
             novo_vigor = max(vigor_atual - self.vigor_cost, 0)
             await character_repo.update_vigor(self.personagem_id, novo_vigor)
 
+            # Palette: Add visual feedback for Vigor cost
+            bar = gerar_barra(novo_vigor, vigor_max, tamanho=5)
+            vigor_feedback = f"Vigor: {bar} {novo_vigor}/{vigor_max}"
+
         embed = discord.Embed(title=f"⚔️ {interaction.user.display_name} usou {self.nome_habilidade}", color=0xFF5500)
         embed.description = self.desc_habilidade or "..."
+
+        if vigor_feedback:
+            embed.set_footer(text=vigor_feedback)
         
         if self.dado_habilidade:
             detalhes, total = rolar_dados(self.dado_habilidade)
