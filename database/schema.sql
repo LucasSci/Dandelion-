@@ -120,6 +120,16 @@ CREATE TABLE IF NOT EXISTS habilidades_personagem (
     FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS rolagens_personagem (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    personagem_id INTEGER NOT NULL,
+    nome TEXT NOT NULL,
+    formula TEXT NOT NULL,
+    categoria TEXT,
+    ordem INTEGER DEFAULT 0,
+    FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS atributos_personagem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     personagem_id INTEGER NOT NULL,
