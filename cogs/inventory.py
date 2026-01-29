@@ -20,7 +20,7 @@ class InventarioView(ui.View):
             return False
         return True
 
-    @ui.button(label="💰 Vender Item (Primeiro)", style=discord.ButtonStyle.success)
+    @ui.button(label="Vender Item (Primeiro)", emoji="💰", style=discord.ButtonStyle.success)
     async def vender_item(self, interaction: discord.Interaction, button: ui.Button):
         # A View não tem acesso direto ao bot, mas podemos pegar da interaction.client
         db = interaction.client.db
@@ -56,7 +56,7 @@ class InventarioView(ui.View):
         )
         self.stop()
 
-    @ui.button(label="❌ Fechar", style=discord.ButtonStyle.danger)
+    @ui.button(label="Fechar", emoji="❌", style=discord.ButtonStyle.danger)
     async def fechar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         self.stop()

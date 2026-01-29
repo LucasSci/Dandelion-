@@ -7,10 +7,6 @@ from unittest.mock import MagicMock
 # Add project root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Mock utils since we might not need its full logic and it imports things
-sys.modules['utils'] = MagicMock()
-sys.modules['utils'].rolar_dados = MagicMock(return_value=(None, None))
-
 # Now import the view
 try:
     from ui.sheet_view import HabilidadeButton, FichaView
