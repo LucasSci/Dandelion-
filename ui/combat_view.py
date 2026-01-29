@@ -1,24 +1,6 @@
 import discord
 from discord import ui
-
-# --- VISUAL: BARRA DE VIDA ---
-def gerar_barra(atual, maximo, tamanho=10):
-    if maximo <= 0:
-        pct = 0
-    else:
-        pct = max(0, min(atual / maximo, 1))
-
-    cheios = int(pct * tamanho)
-
-    # Define a cor com base na porcentagem de vida
-    if pct > 0.6:
-        cor = "🟩"  # Alta (Verde)
-    elif pct > 0.3:
-        cor = "🟨"  # Média (Amarelo)
-    else:
-        cor = "🟥"  # Baixa/Crítica (Vermelho)
-
-    return cor * cheios + "⬛" * (tamanho - cheios)
+from utils import gerar_barra
 
 # --- LINK EXTERNO (ROLL20) ---
 class Roll20LinkView(ui.View):
@@ -40,7 +22,7 @@ class MestreView(ui.View):
         self.cog = cog
         self.channel_id = channel_id
 
-    @ui.button(label="▶️ Destravar / Próximo Turno", style=discord.ButtonStyle.success)
+    @ui.button(label="Destravar / Próximo Turno", emoji="▶️", style=discord.ButtonStyle.success)
     async def btn_proximo(self, interaction: discord.Interaction, button: ui.Button):
         # Verifica se é admin/mestre (pode ajustar a permissão conforme necessidade)
         if not interaction.user.guild_permissions.administrator:

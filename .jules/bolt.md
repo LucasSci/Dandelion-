@@ -16,3 +16,7 @@
 ## 2024-05-24 - [Optimizing Independent DB Queries]
 **Learning:** In Discord UI views (`ui/sheet_view.py`), independent database queries for different sections (e.g. resources, skills, items) were being awaited sequentially. This increases the total response time.
 **Action:** Refactored `atualizar_botoes_habilidade`, `mostrar_combate`, and `mostrar_inventario` to use `asyncio.gather` for fetching data in parallel. This reduces latency, improving the responsiveness of the interactive character sheet.
+
+## 2024-05-25 - [Async Export Optimization]
+**Learning:** Exporting heavy JSON data (`ficha_exportar`) involved multiple sequential DB fetches (skills, attrs, armor), causing noticeable latency.
+**Action:** Parallelized these fetches with `asyncio.gather`. Verified with `tests/test_characters_export_async.py` showing execution time reduction from ~0.3s to ~0.1s.
