@@ -41,6 +41,7 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
         ("xp_atual", "INTEGER DEFAULT 0"),
         ("hp_atual", "INTEGER DEFAULT 30"),
         ("localizacao_id", "INTEGER"),
+        ("genero", "TEXT"),
     ]
     if _table_exists(cursor, "personagens"):
         _add_columns_if_missing(cursor, "personagens", personagens_extras)

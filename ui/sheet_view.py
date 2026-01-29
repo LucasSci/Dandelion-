@@ -111,8 +111,13 @@ def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
         embed.set_footer(text=f"Atualizado {timestamp}")
 
 
-def _build_author_name(nome: Optional[str], classe: Optional[str], raca: Optional[str]) -> str:
-    identity_bits = [item for item in (classe, raca) if item]
+def _build_author_name(
+    nome: Optional[str],
+    classe: Optional[str],
+    raca: Optional[str],
+    genero: Optional[str],
+) -> str:
+    identity_bits = [item for item in (classe, raca, genero) if item]
     if nome and identity_bits:
         return f"{nome} • {' / '.join(identity_bits)}"
     if nome:
@@ -127,9 +132,10 @@ def _apply_embed_identity(
     nome: Optional[str],
     classe: Optional[str],
     raca: Optional[str],
+    genero: Optional[str],
     imagem_url: Optional[str],
 ) -> None:
-    author_name = _build_author_name(nome, classe, raca)
+    author_name = _build_author_name(nome, classe, raca, genero)
     embed.set_author(name=f"📜 {author_name}")
     thumbnail_url = imagem_url or settings.default_character_thumbnail_url
     if thumbnail_url:
@@ -187,7 +193,7 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         return None
 
     (
-        nome, titulo, raca, classe, nivel, historia, img, ouro, hp_atual, hp_max, mp_max,
+        nome, titulo, raca, classe, genero, nivel, historia, img, ouro, hp_atual, hp_max, mp_max,
         ataque, defesa, xp_atual, vigor_atual, vigor_max, toxicidade_atual, toxicidade_max, local
     ) = dados
     if hp_atual is None:
@@ -209,10 +215,18 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         title=f"📜 {nome}",
         color=_cor_por_hp(hp_atual, hp_max),
     )
-    _apply_embed_identity(embed, nome, classe, raca, img)
+    _apply_embed_identity(embed, nome, classe, raca, genero, img)
+    identidade_partes = []
+    if classe:
+        identidade_partes.append(f"*{classe}*")
+    if raca:
+        identidade_partes.append(f"**{raca}**")
+    if genero:
+        identidade_partes.append(genero)
+    identidade_texto = " • ".join(identidade_partes) if identidade_partes else "Identidade indisponível"
     embed.add_field(
         name="📖 Identidade",
-        value=f"*{classe}* • **{raca}** • Nível **{nivel}**",
+        value=f"{identidade_texto} • Nível **{nivel}**",
         inline=False,
     )
     embed.add_field(
@@ -992,8 +1006,8 @@ class FichaView(BaseRPGView):
         identidade = await character_repo.fetch_identity(self.personagem_id)
         if not identidade:
             return
-        nome, raca, classe, imagem_url = identidade
-        _apply_embed_identity(embed, nome, classe, raca, imagem_url)
+        nome, raca, classe, genero, imagem_url = identidade
+        _apply_embed_identity(embed, nome, classe, raca, genero, imagem_url)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
         self.update_buttons_state("magia")

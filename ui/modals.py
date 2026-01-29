@@ -11,6 +11,7 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
     nome = ui.TextInput(label="Nome do Personagem", placeholder="Ex: Geralt de Rívia")
     raca = ui.TextInput(label="Raça", placeholder="Ex: Bruxo, Humano, Elfo")
     classe = ui.TextInput(label="Classe", placeholder="Ex: Guerreiro, Mago")
+    genero = ui.TextInput(label="Gênero", placeholder="Ex: Masculino, Feminino, Não-binário", required=False)
     
     # Conformidade verificada: required=False em campos opcionais
     historia = ui.TextInput(
@@ -37,13 +38,14 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
             # Usamos apenas o execute.
             await db.execute("""
                 INSERT INTO personagens
-                (user_id, nome, raca, classe, historia, imagem_url, ouro)
-                VALUES (?, ?, ?, ?, ?, ?, 0)
+                (user_id, nome, raca, classe, genero, historia, imagem_url, ouro)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
             """, (
                 final_user_id,
                 self.nome.value.strip(),
                 self.raca.value,
                 self.classe.value,
+                self.genero.value,
                 self.historia.value,
                 self.imagem.value
             ))
@@ -67,7 +69,8 @@ class CriarFichaModal(ui.Modal, title="⚔️ Registro de Personagem"):
             # Identity Field
             raca = self.raca.value or "Desconhecida"
             classe = self.classe.value or "Aventureiro"
-            embed.add_field(name="Identidade", value=f"**{raca}** • *{classe}*", inline=True)
+            genero = self.genero.value or "Não informado"
+            embed.add_field(name="Identidade", value=f"**{raca}** • *{classe}* • {genero}", inline=True)
 
             # History Field (if provided)
             if self.historia.value:
