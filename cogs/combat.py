@@ -6,7 +6,8 @@ from typing import Optional
 from discord.ext import commands
 from discord import app_commands
 from data_cache import get_world_location_names
-from ui.combat_view import CombateView, MestreView, Roll20LinkView, gerar_barra
+from ui.combat_view import CombateView, MestreView, Roll20LinkView
+from utils import gerar_barra
 from vtt_engine.grid_system import GridMap
 from utils import rolar_dados
 from config import settings
