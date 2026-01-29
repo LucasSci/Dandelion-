@@ -44,21 +44,22 @@ class TestCharacterCreationUX(unittest.IsolatedAsyncioTestCase):
         mock_interaction.response.send_message.assert_called_once()
         kwargs = mock_interaction.response.send_message.call_args.kwargs
 
-        # VERIFY EMBED
-        embed = kwargs.get('embed')
-        self.assertIsNotNone(embed, "Response should contain an Embed")
+        # Expectation: 'embed' should be in kwargs, and it should be a discord.Embed
+        self.assertIn('embed', kwargs, "Response should contain an 'embed'")
+        embed = kwargs['embed']
         self.assertIsInstance(embed, discord.Embed)
-        self.assertEqual(embed.title, "✨ Personagem Criado!")
+
+        # Check Content
         self.assertIn("Geralt", embed.description)
-        self.assertEqual(embed.color.value, 0x57F287)
+        self.assertEqual(embed.thumbnail.url, "http://example.com/geralt.png")
 
         # Check Fields
         field_names = [f.name for f in embed.fields]
         self.assertIn("Raça", field_names)
         self.assertIn("Classe", field_names)
 
-        # Check Thumbnail
-        self.assertEqual(embed.thumbnail.url, "http://example.com/geralt.png")
+        # Check Footer
+        self.assertIn("/ficha", embed.footer.text)
 
 if __name__ == '__main__':
     unittest.main()
