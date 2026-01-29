@@ -103,45 +103,22 @@ async def adicionar_xp(db, user_id, xp_ganho, channel):
     await db.commit()
     await channel.send(msg)
 
-def gerar_barra(atual: int, maximo: int, segmentos: int = 10, cor: bool = True) -> str:
-    """
-    Gera uma barra de progresso visual com emojis.
-
-    Args:
-        atual: Valor atual.
-        maximo: Valor máximo.
-        segmentos: Quantidade de blocos na barra.
-        cor: Se True, usa cores (verde/amarelo/vermelho) baseadas na %, caso contrário usa azul.
-    """
+def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None):
     if maximo <= 0:
-        pct = 0.0
+        pct = 0
     else:
-        pct = max(0.0, min(1.0, atual / maximo))
+        pct = max(0, min(atual / maximo, 1))
 
-    cheio = int(round(pct * segmentos))
+    cheios = int(pct * tamanho)
 
-    # Garante que se tem algo (>0), mostre pelo menos 1 quadrado
-    if atual > 0 and cheio == 0:
-        cheio = 1
-    # Garante que se falta algo (<max), mostre pelo menos 1 vazio
-    if atual < maximo and cheio == segmentos and maximo > 0:
-        cheio = segmentos - 1
-
-    vazio = segmentos - cheio
-
-    # Emojis
-    # Vazio: Quadrado preto grande
-    char_vazio = "⬛"
-
-    if not cor:
-        char_cheio = "🟦" # Azul para neutro
+    if cor_cheio:
+        cor = cor_cheio
     else:
-        # Lógica de cores (Hearthstone/RPG style)
-        if pct > 0.7:
-            char_cheio = "🟩" # Verde (Saudável)
+        if pct > 0.6:
+            cor = "🟩"  # Alta (Verde)
         elif pct > 0.3:
-            char_cheio = "🟨" # Amarelo (Ferido)
+            cor = "🟨"  # Média (Amarelo)
         else:
-            char_cheio = "🟥" # Vermelho (Crítico)
+            cor = "🟥"  # Baixa/Crítica (Vermelho)
 
-    return f"[{char_cheio * cheio}{char_vazio * vazio}]"
+    return cor * cheios + "⬛" * (tamanho - cheios)

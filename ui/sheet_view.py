@@ -83,6 +83,26 @@ def _cor_por_hp(hp_atual, hp_max):
     return 0xED4245
 
 
+def _gerar_barra_encumbrance(encumbrance_atual: int, capacidade_maxima: int, segmentos: int = 10) -> str:
+    if capacidade_maxima <= 0:
+        return "⬛" * segmentos
+
+    proporcao = encumbrance_atual / capacidade_maxima
+    preenchidos = min(segmentos, max(0, round(proporcao * segmentos)))
+    vazios = segmentos - preenchidos
+
+    if proporcao >= 1.0:
+        cor = "🟥"
+    elif proporcao >= 0.8:
+        cor = "🟧"
+    elif proporcao >= 0.5:
+        cor = "🟨"
+    else:
+        cor = "🟩"
+
+    return f"{cor * preenchidos}{'⬛' * vazios}"
+
+
 def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
     timestamp = f"<t:{int(time.time())}:R>"
     if texto_base:
@@ -156,7 +176,12 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     inventory_repo = InventoryRepository(db)
     skill_repo = SkillRepository(db)
 
-    dados = await character_repo.fetch_embed_details(personagem_id)
+    dados, atributos, pericias, itens = await asyncio.gather(
+        character_repo.fetch_embed_details(personagem_id),
+        character_repo.list_attributes(personagem_id, limit=12),
+        skill_repo.list_skills_for_sheet(personagem_id, limit=10, order_by_name=True),
+        inventory_repo.list_recent_items(user_id, limit=8),
+    )
 
     if not dados:
         return None
@@ -171,12 +196,6 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         vigor_atual = vigor_max
     if toxicidade_atual is None:
         toxicidade_atual = 0
-
-    atributos, pericias, itens = await asyncio.gather(
-        character_repo.list_attributes(personagem_id, limit=12),
-        skill_repo.list_skills_for_sheet(personagem_id, limit=10, order_by_name=True),
-        inventory_repo.list_recent_items(user_id, limit=8),
-    )
     atributos_map = {nome: valor for nome, valor in atributos}
     derived_stats = character_repo.calculate_derived_stats(atributos_map)
 
@@ -205,11 +224,16 @@ async def construir_embed_ficha(db, personagem_id, user_id):
     embed.add_field(name="💰 Ouro", value=str(ouro), inline=True)
     embed.add_field(name="🧭 XP Atual", value=str(xp_atual), inline=True)
 
-    hp_bar = gerar_barra(hp_atual, hp_max, segmentos=5)
-    vigor_bar = gerar_barra(vigor_atual, vigor_max, segmentos=5)
+    hp_pct = _format_percentual(hp_atual, hp_max)
+    vigor_pct = _format_percentual(vigor_atual, vigor_max)
+
+    # UX: Add dynamic status bars (5 segments for inline fit)
+    hp_bar = gerar_barra(hp_atual, hp_max, 5)
+    vigor_bar = gerar_barra(vigor_atual, vigor_max, 5)
+
     recursos = (
-        f"❤️ HP {hp_bar} {hp_atual}/{hp_max}\n"
-        f"⚡ Vigor {vigor_bar} {vigor_atual}/{vigor_max}\n"
+        f"❤️ {hp_bar} {hp_atual}/{hp_max}\n"
+        f"⚡ {vigor_bar} {vigor_atual}/{vigor_max}\n"
         f"✨ MP {mp_max}\n"
         f"☠️ Toxicidade {toxicidade_atual}/{toxicidade_max}"
     )
@@ -1169,7 +1193,7 @@ class FichaView(BaseRPGView):
 
         encumbrance = len(itens)
         capacidade = 10 + (nivel * 2)
-        barra_encumbrance = gerar_barra(encumbrance, capacidade, segmentos=10, cor=False)
+        barra_encumbrance = _gerar_barra_encumbrance(encumbrance, capacidade)
 
         embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
         embed.add_field(
