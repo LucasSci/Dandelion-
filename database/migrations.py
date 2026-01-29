@@ -151,6 +151,21 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             """
         )
 
+    if not _table_exists(cursor, "rolagens_personagem"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rolagens_personagem (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                personagem_id INTEGER NOT NULL,
+                nome TEXT NOT NULL,
+                formula TEXT NOT NULL,
+                categoria TEXT,
+                ordem INTEGER DEFAULT 0,
+                FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE
+            );
+            """
+        )
+
     if not _table_exists(cursor, "alchemy_ingredients"):
         cursor.execute(
             """

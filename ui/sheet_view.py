@@ -10,12 +10,14 @@ from config import settings
 from data.repositories import (
     CharacterRepository,
     InventoryRepository,
+    RollsRepository,
     SkillRepository,
     SoloRepository,
 )
 from ui.base_view import BaseRPGView
 from ui.views import ConfirmarExclusaoView
 from utils import rolar_dados, rolar_pericia_explosiva, gerar_barra
+from utils.roll_templates import resolve_roll_template
 
 try:
     from utils.dc_table import DEFAULT_DC_THRESHOLDS, classificar_resultado
@@ -821,6 +823,36 @@ class RolagemCombateButton(ui.Button):
         await interaction.response.send_message(embed=embed)
 
 
+class RolagemPadraoButton(ui.Button):
+    def __init__(self, label: str, emoji: str, personagem_id: int, formula_template: str):
+        super().__init__(style=discord.ButtonStyle.primary, label=label, emoji=emoji, row=2)
+        self.personagem_id = personagem_id
+        self.formula_template = formula_template
+
+    async def callback(self, interaction: discord.Interaction):
+        character_repo = CharacterRepository(interaction.client.db)
+        atributos = await character_repo.list_attributes_dict(self.personagem_id)
+        formula_resolvida, missing = resolve_roll_template(self.formula_template, atributos)
+
+        if missing:
+            faltantes = ", ".join(sorted(set(missing)))
+            return await interaction.response.send_message(
+                f"⚠️ Atributos não encontrados na ficha: {faltantes}.",
+                ephemeral=True,
+            )
+
+        detalhes, total = rolar_dados(formula_resolvida)
+        if detalhes is None:
+            return await interaction.response.send_message("❌ Fórmula inválida.", ephemeral=True)
+
+        embed = discord.Embed(
+            title=f"🎲 {interaction.user.display_name} rolou {self.label}",
+            description=f"`{formula_resolvida}`\nResultado: {detalhes}\n**Total: {total}**",
+            color=0x3D5A80,
+        )
+        await interaction.response.send_message(embed=embed)
+
+
 class ExplorarConhecimentoButton(ui.Button):
     def __init__(self, personagem_id: int):
         super().__init__(
@@ -936,6 +968,10 @@ class FichaView(BaseRPGView):
                     is_active = mode == "magia"
                     item.disabled = is_active
                     item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
+                elif item.label == "Ações Padrão":
+                    is_active = mode == "acoes"
+                    item.disabled = is_active
+                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
                 elif item.label == "Inventário":
                     is_active = mode == "inventario"
                     item.disabled = is_active
@@ -964,7 +1000,11 @@ class FichaView(BaseRPGView):
     async def btn_atributos(self, interaction: discord.Interaction, button: ui.Button):
         await self.atualizar_botoes_atributos(interaction)
 
-    @ui.button(label="Inventário", emoji="🎒", style=discord.ButtonStyle.secondary, row=0)
+    @ui.button(label="Ações Padrão", emoji="🎬", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_acoes_padrao(self, interaction: discord.Interaction, button: ui.Button):
+        await self.mostrar_acoes_padrao(interaction)
+
+    @ui.button(label="Inventário", emoji="🎒", style=discord.ButtonStyle.secondary, row=1)
     async def btn_inventario(self, interaction: discord.Interaction, button: ui.Button):
         await self.mostrar_inventario(interaction)
 
@@ -1177,6 +1217,33 @@ class FichaView(BaseRPGView):
         self.add_item(FerimentosCriticosSelect())
 
         _set_footer_timestamp(embed, "Combate")
+
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    async def mostrar_acoes_padrao(self, interaction: discord.Interaction):
+        self.update_buttons_state("acoes")
+        self.clear_dynamic_buttons()
+
+        rolls_repo = RollsRepository(interaction.client.db)
+        rolagens = await rolls_repo.list_rolls(self.personagem_id)
+
+        embed = discord.Embed(title="🎬 Ações Padrão", color=0x3D5A80)
+        if not rolagens:
+            embed.description = "Nenhuma rolagem padrão cadastrada para este personagem."
+        else:
+            linhas = [
+                f"• **{nome}** `{formula}`" + (f" _({categoria})_" if categoria else "")
+                for _, nome, formula, categoria, _ in rolagens
+            ]
+            embed.add_field(name="Rolagens", value="\n".join(linhas), inline=False)
+
+            for _, nome, formula, _, _ in rolagens:
+                self.add_item(RolagemPadraoButton(nome, "🎲", self.personagem_id, formula))
+
+        _set_footer_timestamp(embed, "Ações padrão da ficha")
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)

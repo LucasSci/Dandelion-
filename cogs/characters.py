@@ -10,8 +10,10 @@ from discord import app_commands
 from data_cache import get_world_location_names
 from ui.modals import CriarFichaModal
 from ui.sheet_view import FichaView, construir_embed_ficha
-from data.repositories import CharacterRepository, DiarioRepository, SkillRepository
+from data.repositories import CharacterRepository, DiarioRepository, RollsRepository, SkillRepository
 from rpg_core.derived_stats import calculate_derived_stats
+from utils import rolar_dados
+from utils.roll_templates import resolve_roll_template
 LOCALIZACOES_ARMADURA = {
     "Cabeça": "cabeca",
     "Torso": "torso",
@@ -32,6 +34,7 @@ class Characters(commands.Cog):
         self.character_repo = CharacterRepository(bot.db)
         self.diario_repo = DiarioRepository(bot.db)
         self.skill_repo = SkillRepository(bot.db)
+        self.rolls_repo = RollsRepository(bot.db)
 
     # --- AUTOCOMPLETES ---
     async def personagens_disponiveis_autocomplete(self, interaction: discord.Interaction, current: str):
@@ -188,6 +191,160 @@ class Characters(commands.Cog):
             await interaction.response.send_message(
                 f"💸 **{target.display_name}** perdeu **{perda}** moedas de ouro.\n(Total: {novo_ouro})"
             )
+
+    # --- ROLAGENS PERSONALIZADAS (MESTRE) ---
+    async def _buscar_personagem_por_usuario(
+        self,
+        interaction: discord.Interaction,
+        usuario: Optional[discord.Member],
+    ) -> Optional[tuple[int, str]]:
+        target = usuario or interaction.user
+        dados = await self.character_repo.fetch_character_summary_by_user(target.id)
+        if not dados:
+            await interaction.response.send_message("❌ Esse usuário não tem ficha.", ephemeral=True)
+            return None
+        personagem_id, personagem_nome, _, _ = dados
+        return personagem_id, personagem_nome
+
+    async def _validar_formula_roll(
+        self,
+        personagem_id: int,
+        formula: str,
+    ) -> tuple[bool, str]:
+        atributos = await self.character_repo.list_attributes_dict(personagem_id)
+        formula_resolvida, missing = resolve_roll_template(formula, atributos)
+        if missing:
+            faltantes = ", ".join(sorted(set(missing)))
+            return False, f"⚠️ Atributos não encontrados na ficha: {faltantes}."
+
+        detalhes, _ = rolar_dados(formula_resolvida)
+        if detalhes is None:
+            return False, "❌ Fórmula inválida. Use padrões como 1d20+5 ou 1d20+{INT}."
+        return True, ""
+
+    @app_commands.command(
+        name="mestre_rolagem_add",
+        description="🔒 (Mestre) Cadastra uma rolagem padrão para um personagem",
+    )
+    @app_commands.check(is_mestre)
+    async def mestre_rolagem_add(
+        self,
+        interaction: discord.Interaction,
+        nome: str,
+        formula: str,
+        usuario: Optional[discord.Member] = None,
+        categoria: Optional[str] = None,
+        ordem: Optional[int] = None,
+    ):
+        personagem = await self._buscar_personagem_por_usuario(interaction, usuario)
+        if not personagem:
+            return
+        personagem_id, personagem_nome = personagem
+
+        valido, mensagem = await self._validar_formula_roll(personagem_id, formula)
+        if not valido:
+            return await interaction.response.send_message(mensagem, ephemeral=True)
+
+        roll_id = await self.rolls_repo.add_roll(
+            personagem_id=personagem_id,
+            nome=nome.strip(),
+            formula=formula.strip(),
+            categoria=categoria.strip() if categoria else None,
+            ordem=ordem,
+        )
+        await interaction.response.send_message(
+            f"✅ Rolagem **{nome}** cadastrada para **{personagem_nome}** (ID {roll_id}).",
+            ephemeral=True,
+        )
+
+    @app_commands.command(
+        name="mestre_rolagem_edit",
+        description="🔒 (Mestre) Edita uma rolagem padrão existente",
+    )
+    @app_commands.check(is_mestre)
+    async def mestre_rolagem_edit(
+        self,
+        interaction: discord.Interaction,
+        rolagem_id: int,
+        nome: Optional[str] = None,
+        formula: Optional[str] = None,
+        categoria: Optional[str] = None,
+        ordem: Optional[int] = None,
+    ):
+        roll = await self.rolls_repo.fetch_roll(rolagem_id)
+        if not roll:
+            return await interaction.response.send_message("❌ Rolagem não encontrada.", ephemeral=True)
+
+        roll_id, personagem_id, nome_atual, formula_atual, categoria_atual, ordem_atual = roll
+        nome_final = nome.strip() if nome else nome_atual
+        formula_final = formula.strip() if formula else formula_atual
+        categoria_final = categoria.strip() if categoria else categoria_atual
+        ordem_final = ordem if ordem is not None else ordem_atual
+
+        if formula:
+            valido, mensagem = await self._validar_formula_roll(personagem_id, formula_final)
+            if not valido:
+                return await interaction.response.send_message(mensagem, ephemeral=True)
+
+        await self.rolls_repo.update_roll(
+            roll_id=roll_id,
+            nome=nome_final,
+            formula=formula_final,
+            categoria=categoria_final,
+            ordem=ordem_final,
+        )
+        await interaction.response.send_message("✅ Rolagem atualizada com sucesso.", ephemeral=True)
+
+    @app_commands.command(
+        name="mestre_rolagem_remover",
+        description="🔒 (Mestre) Remove uma rolagem padrão",
+    )
+    @app_commands.check(is_mestre)
+    async def mestre_rolagem_remover(
+        self,
+        interaction: discord.Interaction,
+        rolagem_id: int,
+    ):
+        roll = await self.rolls_repo.fetch_roll(rolagem_id)
+        if not roll:
+            return await interaction.response.send_message("❌ Rolagem não encontrada.", ephemeral=True)
+
+        await self.rolls_repo.delete_roll(rolagem_id)
+        await interaction.response.send_message("🗑️ Rolagem removida.", ephemeral=True)
+
+    @app_commands.command(
+        name="mestre_rolagem_listar",
+        description="🔒 (Mestre) Lista rolagens padrão de um personagem",
+    )
+    @app_commands.check(is_mestre)
+    async def mestre_rolagem_listar(
+        self,
+        interaction: discord.Interaction,
+        usuario: Optional[discord.Member] = None,
+    ):
+        personagem = await self._buscar_personagem_por_usuario(interaction, usuario)
+        if not personagem:
+            return
+        personagem_id, personagem_nome = personagem
+
+        rolagens = await self.rolls_repo.list_rolls(personagem_id)
+        if not rolagens:
+            return await interaction.response.send_message(
+                f"📭 Nenhuma rolagem cadastrada para **{personagem_nome}**.",
+                ephemeral=True,
+            )
+
+        linhas = []
+        for roll_id, nome, formula, categoria, ordem in rolagens:
+            categoria_txt = f" • {categoria}" if categoria else ""
+            linhas.append(f"• **[{roll_id}] {nome}** `{formula}` (ordem {ordem}){categoria_txt}")
+
+        embed = discord.Embed(
+            title=f"🎲 Rolagens de {personagem_nome}",
+            description="\n".join(linhas),
+            color=0x4E8EFF,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # --- LOCALIZACAO / MUNDO ---
     @app_commands.command(name="localizacao", description="Mostra a localização atual do personagem")
