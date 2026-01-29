@@ -36,3 +36,7 @@
 ## 2024-05-24 - Actionable Permission Denied Messages
 **Learning:** Generic "Access Denied" messages frustrate users by blocking them without offering a path forward.
 **Action:** When blocking an interaction, always explain *why* (e.g., "This sheet belongs to @User") and provide a Call to Action (e.g., "Use /create to make yours") to convert the friction into engagement.
+
+## 2025-05-27 - Context-Aware Access Control
+**Learning:** Checking user state (e.g., "Has Character?") during permission checks transforms a negative "Access Denied" into a personalized onboarding flow (e.g., "Create yours" vs "View yours").
+**Action:** In `interaction_check`, perform lightweight state checks to offer the most relevant next step, rather than a generic "Access Denied" message.

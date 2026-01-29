@@ -1,6 +1,5 @@
 import discord
 from discord import ui
-
 from utils import gerar_barra
 
 # --- LINK EXTERNO (ROLL20) ---
@@ -23,7 +22,7 @@ class MestreView(ui.View):
         self.cog = cog
         self.channel_id = channel_id
 
-    @ui.button(label="▶️ Destravar / Próximo Turno", style=discord.ButtonStyle.success)
+    @ui.button(label="Destravar / Próximo Turno", emoji="▶️", style=discord.ButtonStyle.success)
     async def btn_proximo(self, interaction: discord.Interaction, button: ui.Button):
         # Verifica se é admin/mestre (pode ajustar a permissão conforme necessidade)
         if not interaction.user.guild_permissions.administrator:

@@ -103,11 +103,7 @@ async def adicionar_xp(db, user_id, xp_ganho, channel):
     await db.commit()
     await channel.send(msg)
 
-def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, cor_vazio="⬛"):
-    """
-    Gera uma barra visual de progresso/vida.
-    Se cor_cheio não for informada, usa cores dinâmicas baseadas em % (Verde/Amarelo/Vermelho).
-    """
+def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None):
     if maximo <= 0:
         pct = 0
     else:
@@ -118,7 +114,6 @@ def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, cor_vazio="⬛"):
     if cor_cheio:
         cor = cor_cheio
     else:
-        # Define a cor com base na porcentagem (lógica de HP)
         if pct > 0.6:
             cor = "🟩"  # Alta (Verde)
         elif pct > 0.3:
@@ -126,4 +121,4 @@ def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, cor_vazio="⬛"):
         else:
             cor = "🟥"  # Baixa/Crítica (Vermelho)
 
-    return cor * cheios + cor_vazio * (tamanho - cheios)
+    return cor * cheios + "⬛" * (tamanho - cheios)
