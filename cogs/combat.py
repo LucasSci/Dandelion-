@@ -670,8 +670,11 @@ class Combat(commands.Cog):
             if vivos:
                 xp_individual = xp_total // len(vivos)
                 msg_vitoria += f"\n🌟 O grupo recebeu **{xp_total} XP** ({xp_individual} p/ cada)."
-                for p in vivos:
-                    await aplicar_xp(self.bot.db, p['user_id'], xp_individual, interaction.channel)
+                # Bolt: Parallelized XP application to reduce wait time
+                await asyncio.gather(*(
+                    aplicar_xp(self.bot.db, p['user_id'], xp_individual, interaction.channel)
+                    for p in vivos
+                ))
             else:
                 msg_vitoria += "\n💀 Mas todos morreram..."
 
