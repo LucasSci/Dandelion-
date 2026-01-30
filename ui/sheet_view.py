@@ -561,13 +561,21 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
             )
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        linhas = []
-        for nome, dado, descricao in resultados:
-            dado_txt = f" ({dado})" if dado else ""
-            resumo = (descricao[:80] + "...") if descricao and len(descricao) > 80 else (descricao or "Sem descrição.")
-            linhas.append(f"• **{nome}**{dado_txt} — {resumo}")
+        embed = discord.Embed(
+            title=f"🔎 Resultados para '{self.termo.value}'",
+            color=0x5865f2
+        )
 
-        await interaction.response.send_message("\n".join(linhas), ephemeral=True)
+        for nome, dado, descricao in resultados:
+            dado_txt = f"🎲 {dado}" if dado else "✨ Passiva/Outros"
+            resumo = (descricao[:100] + "...") if descricao and len(descricao) > 100 else (descricao or "Sem descrição.")
+            embed.add_field(
+                name=f"{nome}",
+                value=f"{dado_txt}\n*{resumo}*",
+                inline=False
+            )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ==============================================================================
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)

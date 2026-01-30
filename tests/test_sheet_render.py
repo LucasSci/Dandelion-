@@ -25,7 +25,7 @@ class TestSheetRender(unittest.IsolatedAsyncioTestCase):
             # Setup data
             # fetch_embed_details returns tuple of 19 items
             dados_simulated = (
-                "Geralt", "Bruxo", "Humano", "Witcher", 10, "Story...", "img_url", 500,
+                "Geralt", "Bruxo", "Humano", "Witcher", "Masculino", 10, "Story...", "img_url", 500,
                 80, 100, 20, # hp_atual, hp_max, mp_max
                 15, 10, 5000, # ataque, defesa, xp_atual
                 20, 20, 0, 100, # vigor_atual, vigor_max, toxicidade_atual, toxicidade_max
