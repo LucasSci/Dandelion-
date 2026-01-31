@@ -97,8 +97,12 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
 
     # 4. Migração de Índices de Performance
     try:
-        if _table_exists(cursor, "armaduras_personagem"):
-            _add_columns_if_missing(cursor, "armaduras_personagem", [("reliability", "INTEGER DEFAULT 100")])
+        # NOCASE para Autocomplete mais rápido (LIKE optimization)
+        if _table_exists(cursor, "criaturas"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_criaturas_nome_nocase ON criaturas(nome COLLATE NOCASE);")
+        if _table_exists(cursor, "monsters"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_monsters_name_nocase ON monsters(name COLLATE NOCASE);")
+
         if _table_exists(cursor, "session_logs"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_logs_channel_id ON session_logs(channel_id);")
         if _table_exists(cursor, "quests"):

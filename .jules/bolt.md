@@ -20,3 +20,7 @@
 ## 2024-05-25 - [Async Export Optimization]
 **Learning:** Exporting heavy JSON data (`ficha_exportar`) involved multiple sequential DB fetches (skills, attrs, armor), causing noticeable latency.
 **Action:** Parallelized these fetches with `asyncio.gather`. Verified with `tests/test_characters_export_async.py` showing execution time reduction from ~0.3s to ~0.1s.
+
+## 2024-05-26 - [SQLite NOCASE Indexes]
+**Learning:** SQLite `LIKE` operator is case-insensitive by default for ASCII, but it CANNOT use a standard (BINARY) index for optimization unless the column is `COLLATE NOCASE`.
+**Action:** Always create indexes with `COLLATE NOCASE` (e.g., `CREATE INDEX ... ON table(col COLLATE NOCASE)`) if you intend to optimize `LIKE 'term%'` queries (autocomplete/search).
