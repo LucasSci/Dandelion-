@@ -103,7 +103,14 @@ async def adicionar_xp(db, user_id, xp_ganho, channel):
     await db.commit()
     await channel.send(msg)
 
-def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None):
+def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, **kwargs):
+    # Fix: Support legacy 'segmentos' parameter to prevent TypeError
+    if 'segmentos' in kwargs:
+        tamanho = kwargs['segmentos']
+
+    # Ignoring 'cor' kwarg intentionally to preserve original behavior,
+    # but accepting it to prevent TypeError.
+
     if maximo <= 0:
         pct = 0
     else:

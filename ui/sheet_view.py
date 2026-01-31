@@ -563,21 +563,20 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         embed = discord.Embed(
-            title=f"🔎 Resultados para '{termo_busca}'",
-            color=0x5865F2,
+            title=f"🔎 Resultados para '{self.termo.value}'",
+            color=0x5865F2  # Blurple
         )
 
         for nome, dado, descricao in resultados:
             dado_txt = f" `{dado}`" if dado else ""
-            resumo = (descricao[:120] + "...") if descricao and len(descricao) > 120 else (descricao or "Sem descrição.")
-            emoji = "🎲" if dado else "✨"
+            resumo = (descricao[:100] + "...") if descricao and len(descricao) > 100 else (descricao or "Sem descrição.")
             embed.add_field(
-                name=f"{emoji} {nome}{dado_txt}",
+                name=f"{nome}{dado_txt}",
                 value=resumo,
-                inline=False,
+                inline=False
             )
 
-        embed.set_footer(text="Use /magia para ver todas.")
+        embed.set_footer(text="Mostrando os 5 primeiros resultados.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ==============================================================================
