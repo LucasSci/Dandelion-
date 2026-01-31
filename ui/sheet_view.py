@@ -549,14 +549,15 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        termo = f"%{self.termo.value.strip()}%"
+        termo_busca = self.termo.value.strip()
+        termo_sql = f"%{termo_busca}%"
         skill_repo = SkillRepository(interaction.client.db)
-        resultados = await skill_repo.search_skills(self.personagem_id, termo, limit=5)
+        resultados = await skill_repo.search_skills(self.personagem_id, termo_sql, limit=5)
 
         if not resultados:
             embed = discord.Embed(
                 title="🔎 Nenhuma perícia encontrada",
-                description=f"Não encontramos nada com **'{self.termo.value}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
+                description=f"Não encontramos nada com **'{termo_busca}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
                 color=0xED4245
             )
             return await interaction.response.send_message(embed=embed, ephemeral=True)
