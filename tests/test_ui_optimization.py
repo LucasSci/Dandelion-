@@ -68,14 +68,14 @@ class TestSheetOptimization(unittest.IsolatedAsyncioTestCase):
 
         # Check that we have correct number of children
         # FichaView static buttons:
-        # Row 0: Geral, Combate, Magia, Atributos, Inventário (5 buttons)
-        # Row 1: Buscar, Nova Skill, Gerenciar (3 buttons)
-        # Total static = 8
+        # Row 0: Geral, Combate, Magia, Atributos, Ações Padrão (5 buttons)
+        # Row 1: Inventário, Buscar, Nova Skill, Gerenciar (4 buttons)
+        # Total static = 9
 
         # Added dynamic: 15 skills.
-        # Total = 23 (Safe under 25).
+        # Total = 24 (Safe under 25).
 
-        self.assertEqual(len(view.children), 23)
+        self.assertEqual(len(view.children), 24)
 
 if __name__ == "__main__":
     unittest.main()

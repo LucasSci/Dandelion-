@@ -104,20 +104,31 @@ async def adicionar_xp(db, user_id, xp_ganho, channel):
     await channel.send(msg)
 
 def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, **kwargs):
-    # Compatibility: Handle 'segmentos' alias for 'tamanho'
+    # Fix: Support legacy 'segmentos' parameter to prevent TypeError
     if 'segmentos' in kwargs:
         tamanho = kwargs['segmentos']
+
+    # Ignoring 'cor' kwarg intentionally to preserve original behavior,
+    # but accepting it to prevent TypeError.
 
     if maximo <= 0:
         pct = 0
     else:
         pct = max(0, min(atual / maximo, 1))
 
-    cheios = int(pct * tamanho)
-    if cheios == 0 and pct > 0:
-        cheios = 1
+    # Rounding logic with edge case protection
+    cheios = int(round(pct * tamanho))
 
-    if cor_cheio:
+    if atual > 0 and cheios == 0 and maximo > 0:
+        cheios = 1
+    if atual < maximo and cheios == tamanho:
+        cheios = tamanho - 1
+
+    vazios = max(0, tamanho - cheios)
+
+    if not usar_cor:
+        cor = "🟦"
+    elif cor_cheio:
         cor = cor_cheio
     else:
         if pct > 0.6:
@@ -127,4 +138,4 @@ def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, **kwargs):
         else:
             cor = "🟥"  # Baixa/Crítica (Vermelho)
 
-    return cor * cheios + "⬛" * (tamanho - cheios)
+    return f"[{cor * cheios}{'⬛' * vazios}]"

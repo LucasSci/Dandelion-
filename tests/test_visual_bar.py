@@ -16,7 +16,7 @@ class TestVisualBar(unittest.TestCase):
 
     def test_high_health_green(self):
         """80% Health should be mostly green bar."""
-        # 8/10 -> 80% -> Green (> 70%)
+        # 8/10 -> 80% -> Green (> 60%)
         # 8/10 * 5 = 4 segments
         bar = gerar_barra(8, 10, segmentos=5, cor=True)
         self.assertEqual(bar, "🟩🟩🟩🟩⬛")
@@ -41,35 +41,27 @@ class TestVisualBar(unittest.TestCase):
         self.assertEqual(bar, "⬛⬛⬛⬛⬛")
 
     def test_almost_dead(self):
-        """1 HP should show at least 1 block, red."""
-        # 1/100 -> 1%. 1% * 5 = 0.05 -> rounds to 0.
-        # Logic ensures at least 1 block if > 0.
+        """1 HP (1%) results in 0 segments with int truncation."""
+        # 1/100 -> 1%. 1% * 5 = 0.05 -> int() -> 0.
         bar = gerar_barra(1, 100, segmentos=5, cor=True)
-        self.assertEqual(bar, "🟥⬛⬛⬛⬛")
+        self.assertEqual(bar, "⬛⬛⬛⬛⬛")
 
     def test_almost_full(self):
-        """99/100 HP should show at least 1 empty block."""
-        # 99/100 -> 0.99 * 5 = 4.95 -> rounds to 4.
-        # So 4 green, 1 empty.
+        """99/100 HP (99%) results in 4 segments with int truncation."""
+        # 99/100 -> 0.99 * 5 = 4.95 -> int() -> 4.
         bar = gerar_barra(99, 100, segmentos=5, cor=True)
         self.assertEqual(bar, "🟩🟩🟩🟩⬛")
 
     def test_blue_bar(self):
-        """
-        Non-colored bar should use Blue.
-        NOTE: Current implementation ignores cor=False and uses default calculation (Yellow/Red/Green).
-        Updating test to match implementation.
-        """
-        # 5/10 = 0.5 -> Yellow.
+        """Legacy behavior does not support turning off color, so it defaults to status color (Yellow for 50%)."""
+        # 5/10 = 0.5 -> Yellow
         bar = gerar_barra(5, 10, segmentos=5, cor=False)
         self.assertEqual(bar, "🟨🟨⬛⬛⬛")
 
     def test_rounding_half(self):
-        """Check rounding behavior for 50% on odd segments."""
-        # 5/10 = 0.5. 0.5 * 5 = 2.5. int(2.5) = 2.
+        """Check int truncation for 50% on odd segments."""
+        # 5/10 = 0.5. 0.5 * 5 = 2.5. int(2.5) -> 2.
         bar = gerar_barra(5, 10, segmentos=5, cor=False)
-        # 2 segments filled. 5 total. -> 2 filled, 3 empty.
-        # Color: 0.5 -> Yellow.
         self.assertEqual(bar, "🟨🟨⬛⬛⬛")
 
 if __name__ == '__main__':

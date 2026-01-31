@@ -50,13 +50,12 @@ class TestCharacterCreationUX(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(embed, discord.Embed)
 
         # Check Content
-        self.assertIn("Geralt", embed.description)
+        self.assertIn("Geralt", embed.title)
         self.assertEqual(embed.thumbnail.url, "http://example.com/geralt.png")
 
         # Check Fields
         field_names = [f.name for f in embed.fields]
-        self.assertIn("Raça", field_names)
-        self.assertIn("Classe", field_names)
+        self.assertIn("Identidade", field_names)
 
         # Check Footer
         self.assertIn("/ficha", embed.footer.text)
