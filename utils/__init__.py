@@ -116,9 +116,19 @@ def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, **kwargs):
     else:
         pct = max(0, min(atual / maximo, 1))
 
-    cheios = int(pct * tamanho)
+    # Rounding logic with edge case protection
+    cheios = int(round(pct * tamanho))
 
-    if cor_cheio:
+    if atual > 0 and cheios == 0 and maximo > 0:
+        cheios = 1
+    if atual < maximo and cheios == tamanho:
+        cheios = tamanho - 1
+
+    vazios = max(0, tamanho - cheios)
+
+    if not usar_cor:
+        cor = "🟦"
+    elif cor_cheio:
         cor = cor_cheio
     else:
         if pct > 0.6:
@@ -128,4 +138,4 @@ def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, **kwargs):
         else:
             cor = "🟥"  # Baixa/Crítica (Vermelho)
 
-    return cor * cheios + "⬛" * (tamanho - cheios)
+    return f"[{cor * cheios}{'⬛' * vazios}]"
