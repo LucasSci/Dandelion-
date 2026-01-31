@@ -110,6 +110,7 @@ def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, **kwargs):
 
     # Ignoring 'cor' kwarg intentionally to preserve original behavior,
     # but accepting it to prevent TypeError.
+    usar_cor = kwargs.get('cor', True)
 
     if maximo <= 0:
         pct = 0
