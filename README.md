@@ -144,6 +144,22 @@ Você também precisará de:
 
 ---
 
+## 🖥️ Central Desktop (Controle Local do Bot)
+
+Se você precisa iniciar/parar o bot rapidamente e testar comandos fora do Discord, use o painel desktop:
+
+```bash
+python desktop_app.py
+```
+
+Recursos principais:
+
+* Botões para iniciar/parar o `bot.py` sem reabrir o terminal.
+* Logs do bot em tempo real.
+* Console de testes local para validar comandos antes de levar ao Discord.
+
+---
+
 ## 📦 Instalação Passo a Passo
 
 ### 1. Clone o repositório
