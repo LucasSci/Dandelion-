@@ -561,6 +561,24 @@ class Combat(commands.Cog):
         else:
             await self.atualizar_interface(interaction.channel)
 
+    async def _background_narrativa(self, channel, atacante, alvo, arma, dano):
+        session = self.sessions.get(channel.id)
+        if not session: return
+
+        ai = self.bot.get_cog("AIHandler")
+        if not ai: return
+
+        try:
+            resposta = await asyncio.wait_for(
+                ai.gerar_narrativa_combate(atacante, alvo, arma, dano),
+                timeout=10,
+            )
+            if resposta:
+                session['log'].append(f"🎭 {resposta}")
+                await self.atualizar_interface(channel)
+        except Exception:
+            pass
+
     async def atualizar_interface(self, channel, nova_mensagem=False):
         session = self.sessions.get(channel.id)
         if not session: return
@@ -641,18 +659,16 @@ class Combat(commands.Cog):
         monstro['hp_atual'] -= dano
         session['log'].append(narrativa)
         if dano > 0:
-            ai = self.bot.get_cog("AIHandler")
-            if ai:
-                arma = detalhes_skill['nome'] if detalhes_skill else "Ataque básico"
-                try:
-                    resposta = await asyncio.wait_for(
-                        ai.gerar_narrativa_combate(jogador['nome'], monstro['nome'], arma, dano),
-                        timeout=4,
-                    )
-                    if resposta:
-                        session['log'].append(f"🎭 {resposta}")
-                except asyncio.TimeoutError:
-                    pass
+            arma = detalhes_skill['nome'] if detalhes_skill else "Ataque básico"
+            asyncio.create_task(
+                self._background_narrativa(
+                    interaction.channel,
+                    jogador['nome'],
+                    monstro['nome'],
+                    arma,
+                    dano
+                )
+            )
 
         await interaction.response.defer()
         
@@ -707,17 +723,17 @@ class Combat(commands.Cog):
 
         alvo['hp'] -= dano
         session['log'].append(f"🔥 {monstro['nome']} atacou {alvo['nome']}! ({detalhes}) -> **{dano} dano**")
-        ai = self.bot.get_cog("AIHandler")
-        if ai and dano > 0:
-            try:
-                resposta = await asyncio.wait_for(
-                    ai.gerar_narrativa_combate(monstro['nome'], alvo['nome'], monstro['dano_base'], dano),
-                    timeout=4,
+
+        if dano > 0:
+            asyncio.create_task(
+                self._background_narrativa(
+                    channel,
+                    monstro['nome'],
+                    alvo['nome'],
+                    monstro['dano_base'],
+                    dano
                 )
-                if resposta:
-                    session['log'].append(f"🎭 {resposta}")
-            except asyncio.TimeoutError:
-                pass
+            )
         
         for p in session['ordem']:
             if p.get('user_id') == alvo['user_id']: p['hp'] = alvo['hp']

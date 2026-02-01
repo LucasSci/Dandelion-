@@ -608,13 +608,14 @@ class AcoesHabilidadeView(ui.View):
             await self.view_ficha.atualizar_botoes_habilidade(itx)
 
         async def cancelar(itx: discord.Interaction):
-            view_restore = AcoesHabilidadeView(self.skill_id, self.nome, self.dado, self.desc, self.view_ficha)
+            # UX Improvement: Restore the previous view so user doesn't lose context
+            view_restored = AcoesHabilidadeView(self.skill_id, self.nome, self.dado, self.desc, self.view_ficha)
             await itx.response.edit_message(
                 content=f"🛠️ Gerenciando: **{self.nome}**\nO que deseja fazer?",
-                view=view_restore
+                view=view_restored
             )
 
-        view_conf = ConfirmarExclusaoView(confirmar, cancel_callback=cancelar)
+        view_conf = ConfirmarExclusaoView(confirmar, cancelar)
         await interaction.response.edit_message(
             content=f"⚠️ Tem certeza que deseja excluir a habilidade **{self.nome}**?",
             view=view_conf
