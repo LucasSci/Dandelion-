@@ -47,8 +47,8 @@ class TestVisualBar(unittest.TestCase):
         self.assertEqual(bar, "[🟥⬛⬛⬛⬛]")
 
     def test_almost_full(self):
-        """99/100 HP (99%) results in 4 segments with int truncation."""
-        # 99/100 -> 0.99 * 5 = 4.95 -> int() -> 4.
+        """99/100 HP (99%) results in 4 segments (max-1 rule)."""
+        # 99/100 -> 99%. Rule: If < max, max segments-1.
         bar = gerar_barra(99, 100, segmentos=5, cor=True)
         self.assertEqual(bar, "[🟩🟩🟩🟩⬛]")
 

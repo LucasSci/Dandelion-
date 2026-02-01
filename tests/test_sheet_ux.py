@@ -72,5 +72,40 @@ class TestSheetUX(unittest.IsolatedAsyncioTestCase):
         # - Parent View Refresh
         mock_view_ficha.atualizar_botoes_habilidade.assert_called_with(mock_confirm_itx)
 
+    async def test_delete_skill_cancellation(self):
+        """
+        Verifies that clicking 'Cancel' on the delete confirmation view restores the AcoesHabilidadeView.
+        """
+        mock_view_ficha = AsyncMock()
+        mock_interaction = AsyncMock()
+        mock_interaction.response = AsyncMock()
+
+        # Instantiate the view
+        view = AcoesHabilidadeView(1, "Fireball", "1d6", "Boom", mock_view_ficha)
+
+        # Trigger delete button
+        await view.btn_excluir.callback(mock_interaction)
+
+        # Get the confirmation view
+        _, kwargs = mock_interaction.response.edit_message.call_args
+        sent_view = kwargs.get('view')
+
+        self.assertIsNotNone(sent_view.cancel_callback, "ConfirmarExclusaoView should have a cancel_callback")
+
+        # Simulate Cancel click
+        mock_cancel_itx = AsyncMock()
+        mock_cancel_itx.response = AsyncMock()
+
+        await sent_view.cancel_callback(mock_cancel_itx)
+
+        # Verify restoration
+        mock_cancel_itx.response.edit_message.assert_called_once()
+        _, restore_kwargs = mock_cancel_itx.response.edit_message.call_args
+        restored_view = restore_kwargs.get('view')
+
+        self.assertIsInstance(restored_view, AcoesHabilidadeView, "Should restore AcoesHabilidadeView")
+        self.assertEqual(restored_view.skill_id, 1, "Restored view should have correct skill ID")
+        self.assertEqual(restored_view.nome, "Fireball", "Restored view should have correct name")
+
 if __name__ == '__main__':
     unittest.main()
