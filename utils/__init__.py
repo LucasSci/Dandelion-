@@ -112,6 +112,8 @@ def gerar_barra(atual, maximo, tamanho=10, cor_cheio=None, **kwargs):
     # but accepting it to prevent TypeError.
     usar_cor = True
 
+    usar_cor = kwargs.get('cor', True)
+
     if maximo <= 0:
         pct = 0
     else:
