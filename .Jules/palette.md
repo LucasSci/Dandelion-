@@ -40,3 +40,7 @@
 ## 2025-05-27 - Context-Aware Access Control
 **Learning:** Checking user state (e.g., "Has Character?") during permission checks transforms a negative "Access Denied" into a personalized onboarding flow (e.g., "Create yours" vs "View yours").
 **Action:** In `interaction_check`, perform lightweight state checks to offer the most relevant next step, rather than a generic "Access Denied" message.
+
+## 2024-05-24 - Looping Navigation in Modals
+**Learning:** Modals that end in "dead ends" (success or empty results) force users to restart navigation flows manually. Attaching a "Retry" or "New Action" view to the result message keeps the user in the flow.
+**Action:** Always attach a View with a "Retry/New" button to the response of a Modal if the action is repeatable (like searching).
