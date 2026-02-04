@@ -461,6 +461,16 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         embed.add_field(name="🏆 Nível", value=nivel, inline=False)
         embed.add_field(name="Classificação", value=classificacao, inline=False)
 
+        # Palette: Semantic Colors for better UX
+        if nivel == "Falha":
+            embed.color = 0xED4245  # Red
+        elif nivel == "Vitória Marginal":
+            embed.color = 0xFEE75C  # Yellow
+        elif "Vitória" in nivel:
+            embed.color = 0x57F287  # Green
+        elif nivel == "Crítica":
+            embed.color = 0xFFD700  # Gold
+
         await interaction.response.send_message(embed=embed)
 
     def _parse_dificuldade(self) -> Optional[int]:
