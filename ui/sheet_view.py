@@ -560,7 +560,8 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
                 description=f"Não encontramos nada com **'{termo_busca}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
                 color=0xED4245
             )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
+            view = TentarBuscaNovamenteView(self.personagem_id)
+            return await interaction.response.send_message(embed=embed, ephemeral=True, view=view)
 
         embed = discord.Embed(
             title=f"🔎 Resultados para '{self.termo.value}'",
@@ -578,6 +579,15 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
 
         embed.set_footer(text="Mostrando os 5 primeiros resultados.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class TentarBuscaNovamenteView(ui.View):
+    def __init__(self, personagem_id):
+        super().__init__(timeout=60)
+        self.personagem_id = personagem_id
+
+    @ui.button(label="🔎 Tentar Novamente", style=discord.ButtonStyle.primary)
+    async def btn_retry(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
 
 # ==============================================================================
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)
