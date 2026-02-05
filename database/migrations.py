@@ -103,6 +103,13 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
         if _table_exists(cursor, "monsters"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_monsters_name_nocase ON monsters(name COLLATE NOCASE);")
 
+        if _table_exists(cursor, "personagens"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_personagens_nome_nocase ON personagens(nome COLLATE NOCASE);")
+        if _table_exists(cursor, "world_locations"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_world_locations_nome_nocase ON world_locations(nome COLLATE NOCASE);")
+        if _table_exists(cursor, "loja_itens"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_loja_itens_nome_nocase ON loja_itens(nome COLLATE NOCASE);")
+
         if _table_exists(cursor, "session_logs"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_logs_channel_id ON session_logs(channel_id);")
         if _table_exists(cursor, "quests"):

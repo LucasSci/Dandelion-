@@ -9,28 +9,28 @@ class CharacterRepository:
 
     async def list_available_names(self, current: str) -> list[tuple[str]]:
         async with self.db.execute(
-            "SELECT nome FROM personagens WHERE user_id IS NULL AND nome LIKE ? LIMIT 25",
+            "SELECT nome FROM personagens WHERE user_id IS NULL AND nome LIKE ? ORDER BY nome COLLATE NOCASE LIMIT 25",
             (f"%{current}%",),
         ) as cursor:
             return await cursor.fetchall()
 
     async def list_user_names(self, user_id: int, current: str) -> list[tuple[str]]:
         async with self.db.execute(
-            "SELECT nome FROM personagens WHERE user_id = ? AND nome LIKE ? LIMIT 25",
+            "SELECT nome FROM personagens WHERE user_id = ? AND nome LIKE ? ORDER BY nome COLLATE NOCASE LIMIT 25",
             (user_id, f"%{current}%"),
         ) as cursor:
             return await cursor.fetchall()
 
     async def list_all_names(self, current: str) -> list[tuple[str]]:
         async with self.db.execute(
-            "SELECT nome FROM personagens WHERE nome LIKE ? LIMIT 25",
+            "SELECT nome FROM personagens WHERE nome LIKE ? ORDER BY nome COLLATE NOCASE LIMIT 25",
             (f"%{current}%",),
         ) as cursor:
             return await cursor.fetchall()
 
     async def list_location_names(self, current: str) -> list[tuple[str]]:
         async with self.db.execute(
-            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome LIMIT 25",
+            "SELECT nome FROM world_locations WHERE nome LIKE ? ORDER BY nome COLLATE NOCASE LIMIT 25",
             (f"%{current}%",),
         ) as cursor:
             return await cursor.fetchall()
@@ -302,7 +302,7 @@ class CharacterRepository:
 
     async def list_characters(self, limit: int = 20) -> list[tuple[str, Optional[int]]]:
         limit = int(limit)
-        async with self.db.execute(f"SELECT nome, user_id FROM personagens LIMIT {limit}") as cursor:
+        async with self.db.execute(f"SELECT nome, user_id FROM personagens ORDER BY nome COLLATE NOCASE LIMIT {limit}") as cursor:
             return await cursor.fetchall()
 
     async def list_characters_filtered(
@@ -328,7 +328,7 @@ class CharacterRepository:
         query = "SELECT nome, user_id, raca, classe, genero FROM personagens"
         if filtros:
             query += " WHERE " + " AND ".join(filtros)
-        query += " LIMIT ?"
+        query += " ORDER BY nome COLLATE NOCASE LIMIT ?"
         params.append(limit)
         async with self.db.execute(query, params) as cursor:
             return await cursor.fetchall()
