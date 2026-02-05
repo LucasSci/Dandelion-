@@ -560,7 +560,7 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
                 description=f"Não encontramos nada com **'{termo_busca}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
                 color=0xED4245
             )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
+            return await interaction.response.send_message(embed=embed, ephemeral=True, view=BuscarNovamenteView(self.personagem_id))
 
         embed = discord.Embed(
             title=f"🔎 Resultados para '{self.termo.value}'",
@@ -582,6 +582,15 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
 # ==============================================================================
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)
 # ==============================================================================
+
+class BuscarNovamenteView(ui.View):
+    def __init__(self, personagem_id):
+        super().__init__(timeout=60)
+        self.personagem_id = personagem_id
+
+    @ui.button(label="Buscar Novamente", emoji="🔎", style=discord.ButtonStyle.primary)
+    async def btn_buscar(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
 
 class AcoesHabilidadeView(ui.View):
     def __init__(self, skill_id, nome, dado, desc, view_ficha):
