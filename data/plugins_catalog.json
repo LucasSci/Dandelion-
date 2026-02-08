@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "plugins": [
+    {
+      "id": "example-echo",
+      "name": "Example Echo",
+      "version": "1.0.0",
+      "description": "Plugin de exemplo que ecoa prompts de narrativa.",
+      "source_path": "data/plugins/example_echo_plugin",
+      "manifest_path": "data/plugins/example_echo_plugin/manifest.json",
+      "checksum_sha256": "ee577cd2ad2fc78634f6fd5eeb90f7739b4dca4f4bbb71960c144fbf19064a20"
+    }
+  ]
+}
