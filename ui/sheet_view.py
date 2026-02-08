@@ -902,10 +902,14 @@ class HabilidadeButton(ui.Button):
                 vigor_atual = vigor_max
 
             if vigor_atual < self.vigor_cost:
-                return await interaction.response.send_message(
-                    "⚠️ Vigor insuficiente para conjurar.",
-                    ephemeral=True
+                vigor_bar = gerar_barra(vigor_atual, vigor_max, tamanho=5)
+                embed_erro = discord.Embed(
+                    title="⚠️ Vigor Insuficiente",
+                    description=f"Você precisa de **{self.vigor_cost}** Vigor para usar **{self.nome_habilidade}**, mas tem apenas **{vigor_atual}**.",
+                    color=0xED4245
                 )
+                embed_erro.add_field(name="Vigor Atual", value=f"{vigor_bar} {vigor_atual}/{vigor_max}", inline=False)
+                return await interaction.response.send_message(embed=embed_erro, ephemeral=True)
 
             novo_vigor = max(vigor_atual - self.vigor_cost, 0)
             await character_repo.update_vigor(self.personagem_id, novo_vigor)
