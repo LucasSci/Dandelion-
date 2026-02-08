@@ -1,5 +1,6 @@
 import discord
 import random
+import asyncio
 from discord.ext import commands
 from discord import app_commands, ui
 from typing import Optional
@@ -158,11 +159,17 @@ class LojaView(ui.View):
     async def atualizar_comprar(self, i):
         self.limpar_dinamico()
         self.cache = {}
-        # ORDER BY id DESC para novos itens aparecerem primeiro
-        async with self.db.execute("SELECT id, nome, tipo, preco, estoque, efeito FROM loja_itens ORDER BY id DESC") as c:
-            itens = await c.fetchall()
-        async with self.db.execute("SELECT ouro FROM personagens WHERE user_id=?", (self.uid,)) as c:
-            ouro = (await c.fetchone() or [0])[0]
+
+        async def fetch_itens():
+            # ORDER BY id DESC para novos itens aparecerem primeiro
+            async with self.db.execute("SELECT id, nome, tipo, preco, estoque, efeito FROM loja_itens ORDER BY id DESC") as c:
+                return await c.fetchall()
+
+        async def fetch_ouro():
+            async with self.db.execute("SELECT ouro FROM personagens WHERE user_id=?", (self.uid,)) as c:
+                return (await c.fetchone() or [0])[0]
+
+        itens, ouro = await asyncio.gather(fetch_itens(), fetch_ouro())
 
         itens_ajustados = []
         for id_item, nome, tipo, preco, estoque, efeito in itens:
@@ -178,10 +185,16 @@ class LojaView(ui.View):
 
     async def atualizar_vender(self, i):
         self.limpar_dinamico()
-        async with self.db.execute("SELECT id, nome, tipo, valor FROM inventario WHERE user_id=?", (self.uid,)) as c:
-            inv = await c.fetchall()
-        async with self.db.execute("SELECT ouro FROM personagens WHERE user_id=?", (self.uid,)) as c:
-            ouro = (await c.fetchone() or [0])[0]
+
+        async def fetch_inv():
+            async with self.db.execute("SELECT id, nome, tipo, valor FROM inventario WHERE user_id=?", (self.uid,)) as c:
+                return await c.fetchall()
+
+        async def fetch_ouro():
+            async with self.db.execute("SELECT ouro FROM personagens WHERE user_id=?", (self.uid,)) as c:
+                return (await c.fetchone() or [0])[0]
+
+        inv, ouro = await asyncio.gather(fetch_inv(), fetch_ouro())
         
         emb = discord.Embed(title="💰 Venda", description=f"Saldo: **{ouro}G** (Pagamos 70%)", color=0x2ecc71)
         if inv: self.add_item(SelectVender(inv))
@@ -197,27 +210,32 @@ class Shop(commands.Cog):
     def is_mestre(i: discord.Interaction): return i.user.guild_permissions.administrator
 
     async def _calcular_multiplicadores(self, user_id: int, localizacao_id: int | None) -> tuple[float, dict[str, float]]:
-        async with self.bot.db.execute(
-            "SELECT COALESCE(SUM(reputacao), 0) FROM reputacoes WHERE user_id = ?",
-            (user_id,),
-        ) as cursor:
-            reputacao_total = (await cursor.fetchone() or [0])[0]
+        async def fetch_reputacao():
+            async with self.bot.db.execute(
+                "SELECT COALESCE(SUM(reputacao), 0) FROM reputacoes WHERE user_id = ?",
+                (user_id,),
+            ) as cursor:
+                return (await cursor.fetchone() or [0])[0]
 
-        bonus = max(-0.2, min(0.2, reputacao_total / 100))
-        rep_multiplier = 1 - bonus
-
-        economy_mods = {}
-        if localizacao_id:
+        async def fetch_economy():
+            if not localizacao_id:
+                return []
             async with self.bot.db.execute(
                 "SELECT categoria, modificador FROM economia_regional WHERE localizacao_id = ?",
                 (localizacao_id,),
             ) as cursor:
-                rows = await cursor.fetchall()
-            economy_mods = {categoria: modificador for categoria, modificador in rows}
+                return await cursor.fetchall()
+
+        reputacao_total, economy_rows = await asyncio.gather(fetch_reputacao(), fetch_economy())
+
+        bonus = max(-0.2, min(0.2, reputacao_total / 100))
+        rep_multiplier = 1 - bonus
+
+        economy_mods = {categoria: modificador for categoria, modificador in economy_rows}
         return rep_multiplier, economy_mods
 
     async def ac_item(self, i, current: str):
-        async with self.bot.db.execute("SELECT nome FROM loja_itens WHERE nome LIKE ? LIMIT 25", (f'%{current}%',)) as c:
+        async with self.bot.db.execute("SELECT nome FROM loja_itens WHERE nome LIKE ? ORDER BY nome COLLATE NOCASE LIMIT 25", (f'%{current}%',)) as c:
             return [app_commands.Choice(name=r[0], value=r[0]) for r in await c.fetchall()]
 
     @app_commands.command(name="loja", description="🏪 Abre a loja")

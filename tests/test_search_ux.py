@@ -1,7 +1,7 @@
 import sys
 import os
 import unittest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Ensure root is in path
 sys.path.append(os.getcwd())
@@ -10,49 +10,48 @@ import discord
 from ui.sheet_view import BuscarPericiaModal
 
 class TestSearchUX(unittest.IsolatedAsyncioTestCase):
-    async def test_search_results_use_embed(self):
+    async def test_search_no_results_has_retry_button(self):
         """
-        Verifies that BuscarPericiaModal returns search results in a discord.Embed.
+        Verifies that when a search yields no results, the response includes a 'Try Again' button.
         """
-        # Patch SkillRepository where it is imported/used in sheet_view.py
-        with patch('ui.sheet_view.SkillRepository') as mock_repo_cls:
-            # Setup mock repository instance
-            mock_repo_instance = mock_repo_cls.return_value
-            # Mock search_skills return value (list of tuples: name, dice, description)
-            mock_repo_instance.search_skills = AsyncMock(return_value=[
-                ("Bola de Fogo", "4d6", "Uma grande bola de fogo."),
-                ("Curar Ferimentos", "1d8", "Cura um aliado.")
-            ])
+        personagem_id = 123
+        modal = BuscarPericiaModal(personagem_id)
+        modal.termo._value = "SkillInexistente"
 
-            # Instantiate Modal
-            modal = BuscarPericiaModal(personagem_id=1)
-            modal.termo._value = "Fogo" # Simulate input
+        # Mock interaction
+        interaction = AsyncMock()
+        interaction.client.db = AsyncMock()
+        interaction.response = AsyncMock()
 
-            # Mock interaction
-            mock_interaction = AsyncMock()
-            mock_interaction.response = AsyncMock()
-            mock_interaction.client.db = MagicMock() # Mock db connection
+        # Patch SkillRepository in ui.sheet_view
+        with patch("ui.sheet_view.SkillRepository") as MockRepoClass:
+            mock_repo = MockRepoClass.return_value
+            # search_skills returns empty list
+            mock_repo.search_skills = AsyncMock(return_value=[])
 
             # Execute
-            await modal.on_submit(mock_interaction)
+            await modal.on_submit(interaction)
 
-            # Verify
-            mock_repo_instance.search_skills.assert_called_once()
+            # Assert response
+            interaction.response.send_message.assert_called_once()
+            kwargs = interaction.response.send_message.call_args.kwargs
 
-            # Check if send_message was called
-            mock_interaction.response.send_message.assert_called_once()
+            # Check for embed
+            self.assertIn("embed", kwargs)
+            embed = kwargs["embed"]
+            self.assertIn("Nenhuma perícia encontrada", embed.title)
 
-            # Get arguments passed to send_message
-            kwargs = mock_interaction.response.send_message.call_args.kwargs
+            # Check for View (the new UX feature)
+            self.assertIn("view", kwargs, "Response should contain a View for navigation")
+            view = kwargs["view"]
+            self.assertIsInstance(view, discord.ui.View)
 
-            # Assert that 'embed' is present and is an instance of discord.Embed
-            embed = kwargs.get('embed')
-            self.assertIsNotNone(embed, "Search results should be sent as an Embed, not plain text.")
-            self.assertIsInstance(embed, discord.Embed)
+            # Check for button
+            self.assertTrue(len(view.children) > 0, "View should have at least one button")
 
-            # Optional: verify embed content
-            self.assertIn("Bola de Fogo", embed.description or str(embed.fields))
+            button = view.children[0]
+            self.assertIsInstance(button, discord.ui.Button)
+            self.assertTrue("Tentar" in button.label or "Buscar" in button.label, "Button should clearly indicate retry")
 
-if __name__ == '__main__':
-    from unittest.mock import MagicMock # re-import for use inside test function if needed
+if __name__ == "__main__":
     unittest.main()

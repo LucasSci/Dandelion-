@@ -16,6 +16,7 @@ from data.repositories import (
     SoloRepository,
 )
 from ui.base_view import BaseRPGView
+from ui.design_system import apply_navigation_state
 from ui.views import ConfirmarExclusaoView
 from utils import rolar_dados, rolar_pericia_explosiva, gerar_barra
 from utils.i18n import (
@@ -595,6 +596,17 @@ class RolarPericiaModal(ui.Modal):
         embed.add_field(name=ctx.t("ui.sheet.level"), value=nivel, inline=False)
         embed.add_field(name=ctx.t("ui.sheet.classification"), value=classificacao, inline=False)
 
+        # Palette: UX Improvement - Color coded results
+        color_map = {
+            "Falha": 0xED4245,           # Red
+            "Vitória Marginal": 0xFEE75C,# Yellow
+            "Vitória": 0x57F287,         # Green
+            "Vitória Maior": 0x57F287,   # Green
+            "Crítica": 0x57F287,         # Green
+            "Sucesso": 0x57F287,         # Green (via _avaliar_dificuldade fallback)
+        }
+        embed.color = color_map.get(nivel, 0x2b2d31)
+
         await interaction.response.send_message(embed=embed)
 
     def _parse_dificuldade(self) -> Optional[int]:
@@ -700,13 +712,16 @@ class BuscarPericiaModal(ui.Modal):
         skill_repo = SkillRepository(interaction.client.db)
         resultados = await skill_repo.search_skills(self.personagem_id, termo_sql, limit=5)
 
+        # Palette: Add "New Search" view to allow immediate retry
+        view_retry = NovaBuscaView(self.personagem_id)
+
         if not resultados:
             embed = discord.Embed(
                 title=ctx.t("ui.sheet.no_skills_found_title"),
                 description=ctx.t("ui.sheet.no_skills_found_desc", term=termo_busca),
                 color=0xED4245
             )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
+            return await interaction.response.send_message(embed=embed, ephemeral=True, view=view_retry)
 
         embed = discord.Embed(
             title=ctx.t("ui.sheet.search_results_title", term=self.termo.value),
@@ -722,12 +737,30 @@ class BuscarPericiaModal(ui.Modal):
                 inline=False
             )
 
-        embed.set_footer(text=ctx.t("ui.sheet.showing_first_results"))
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        embed.set_footer(text="Mostrando os 5 primeiros resultados.")
+        await interaction.response.send_message(embed=embed, ephemeral=True, view=view_retry)
+
+class TentarBuscaNovamenteView(ui.View):
+    def __init__(self, personagem_id):
+        super().__init__(timeout=60)
+        self.personagem_id = personagem_id
+
+    @ui.button(label="🔎 Tentar Novamente", style=discord.ButtonStyle.primary)
+    async def btn_retry(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
 
 # ==============================================================================
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)
 # ==============================================================================
+
+class NovaBuscaView(ui.View):
+    def __init__(self, personagem_id):
+        super().__init__(timeout=60)
+        self.personagem_id = personagem_id
+
+    @ui.button(label="Nova Busca", emoji="🔎", style=discord.ButtonStyle.primary)
+    async def btn_nova_busca(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
 
 class AcoesHabilidadeView(ui.View):
     def __init__(self, skill_id, nome, dado, desc, view_ficha, locale: str | None = None):
@@ -1018,10 +1051,14 @@ class HabilidadeButton(ui.Button):
                 vigor_atual = vigor_max
 
             if vigor_atual < self.vigor_cost:
-                return await interaction.response.send_message(
-                    ctx.t("ui.sheet.insufficient_vigor"),
-                    ephemeral=True
+                vigor_bar = gerar_barra(vigor_atual, vigor_max, tamanho=5)
+                embed_erro = discord.Embed(
+                    title="⚠️ Vigor Insuficiente",
+                    description=f"Você precisa de **{self.vigor_cost}** Vigor para usar **{self.nome_habilidade}**, mas tem apenas **{vigor_atual}**.",
+                    color=0xED4245
                 )
+                embed_erro.add_field(name="Vigor Atual", value=f"{vigor_bar} {vigor_atual}/{vigor_max}", inline=False)
+                return await interaction.response.send_message(embed=embed_erro, ephemeral=True)
 
             novo_vigor = max(vigor_atual - self.vigor_cost, 0)
             await character_repo.update_vigor(self.personagem_id, novo_vigor)
@@ -1262,40 +1299,24 @@ class FichaView(BaseRPGView):
             item.is_static = True
 
     def update_buttons_state(self, mode: str):
+        navigation_map = {
+            "Geral": "geral",
+            "Combate": "combate",
+            "Atributos": "atributos",
+            "Magia/Alquimia": "magia",
+            "Ações Padrão": "acoes",
+            "Inventário": "inventario",
+        }
+        apply_navigation_state(self, mode, navigation_map)
         for item in self.children:
-            if isinstance(item, ui.Button) and item.label:
-                view_key = getattr(item, "view_key", None)
-                if view_key == "geral":
-                    is_active = mode == "geral"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif view_key == "combate":
-                    is_active = mode == "combate"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif view_key == "atributos":
-                    is_active = mode == "atributos"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif view_key == "magia":
-                    is_active = mode == "magia"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif view_key == "acoes":
-                    is_active = mode == "acoes"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif view_key == "inventario":
-                    is_active = mode == "inventario"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif view_key == "buscar":
-                    item.disabled = (mode != "geral")
-                    item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
-                elif view_key in {"nova_skill", "gerenciar"}:
-                    item.disabled = (mode != "magia")
-                    is_new_skill = view_key == "nova_skill"
-                    item.style = discord.ButtonStyle.success if is_new_skill and mode == "magia" else discord.ButtonStyle.secondary
+            if not isinstance(item, ui.Button) or not item.label:
+                continue
+            if item.label == "Buscar Perícia":
+                item.disabled = (mode != "geral")
+                item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
+            elif item.label in {"Nova Skill", "Gerenciar"}:
+                item.disabled = (mode != "magia")
+                item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
 
     # --- NAVEGAÇÃO (ROW 0) ---
     @ui.button(label="Geral", emoji="📜", style=discord.ButtonStyle.secondary, row=0)
