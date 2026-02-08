@@ -834,6 +834,8 @@ class PocaoSelect(ui.Select):
 
         embed.add_field(name="☠️ Toxicidade", value=f"{tox_bar} +{custo_toxicidade} ({nova_toxicidade}/{toxicidade_max})")
         await interaction.response.send_message(embed=embed, ephemeral=True)
+        if self.view:
+            await self.view.atualizar_botoes_habilidade(interaction, target_message=interaction.message)
 
 class PocaoView(ui.View):
     def __init__(self, potions, personagem_id):
@@ -900,6 +902,8 @@ class HabilidadeButton(ui.Button):
                 embed.add_field(name="🎲 Rolagem", value=f"`{self.dado_habilidade}`\nResult: {detalhes}\n# **{total}**")
         
         await interaction.response.send_message(embed=embed)
+        if self.view:
+            await self.view.atualizar_botoes_habilidade(interaction, target_message=interaction.message)
 
 class AtributoButton(ui.Button):
     def __init__(self, nome, valor):
@@ -1060,6 +1064,11 @@ class FichaView(BaseRPGView):
         self.personagem_id = personagem_id
         self._mark_static_items()
         self.update_buttons_state("geral")
+        self.message = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        self.message = interaction.message
+        return await super().interaction_check(interaction)
 
     def _mark_static_items(self):
         for item in self.children:
@@ -1165,7 +1174,7 @@ class FichaView(BaseRPGView):
         nome, raca, classe, genero, imagem_url = identidade
         _apply_embed_identity(embed, nome, classe, raca, genero, imagem_url)
 
-    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
+    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction, target_message: discord.Message = None):
         self.update_buttons_state("magia")
         self.clear_dynamic_buttons()
 
@@ -1221,6 +1230,10 @@ class FichaView(BaseRPGView):
             embed.add_field(name="🧪 Poções", value="Nenhuma poção no inventário.", inline=False)
 
         _set_footer_timestamp(embed, "Magia & Alquimia")
+
+        if target_message:
+            await target_message.edit(embed=embed, view=self)
+            return
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
