@@ -155,6 +155,17 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             """
         )
 
+    if not _table_exists(cursor, "user_dashboards"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_dashboards (
+                user_id INTEGER PRIMARY KEY,
+                layout_json TEXT NOT NULL,
+                atualizado_em TEXT DEFAULT (datetime('now'))
+            );
+            """
+        )
+
     if not _table_exists(cursor, "rolagens_personagem"):
         cursor.execute(
             """

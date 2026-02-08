@@ -15,6 +15,7 @@ from data.repositories import (
     SoloRepository,
 )
 from ui.base_view import BaseRPGView
+from ui.design_system import apply_navigation_state
 from ui.views import ConfirmarExclusaoView
 from utils import rolar_dados, rolar_pericia_explosiva, gerar_barra
 from utils.roll_templates import resolve_roll_template
@@ -986,38 +987,24 @@ class FichaView(BaseRPGView):
             item.is_static = True
 
     def update_buttons_state(self, mode: str):
+        navigation_map = {
+            "Geral": "geral",
+            "Combate": "combate",
+            "Atributos": "atributos",
+            "Magia/Alquimia": "magia",
+            "Ações Padrão": "acoes",
+            "Inventário": "inventario",
+        }
+        apply_navigation_state(self, mode, navigation_map)
         for item in self.children:
-            if isinstance(item, ui.Button) and item.label:
-                if item.label == "Geral":
-                    is_active = mode == "geral"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Combate":
-                    is_active = mode == "combate"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Atributos":
-                    is_active = mode == "atributos"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Magia/Alquimia":
-                    is_active = mode == "magia"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Ações Padrão":
-                    is_active = mode == "acoes"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Inventário":
-                    is_active = mode == "inventario"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Buscar Perícia":
-                    item.disabled = (mode != "geral")
-                    item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
-                elif item.label in {"Nova Skill", "Gerenciar"}:
-                    item.disabled = (mode != "magia")
-                    item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
+            if not isinstance(item, ui.Button) or not item.label:
+                continue
+            if item.label == "Buscar Perícia":
+                item.disabled = (mode != "geral")
+                item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
+            elif item.label in {"Nova Skill", "Gerenciar"}:
+                item.disabled = (mode != "magia")
+                item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
 
     # --- NAVEGAÇÃO (ROW 0) ---
     @ui.button(label="Geral", emoji="📜", style=discord.ButtonStyle.secondary, row=0)
