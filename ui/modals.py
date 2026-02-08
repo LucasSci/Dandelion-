@@ -25,12 +25,6 @@ class CriarFichaModal(ui.Modal):
             label=translate("ui.character_create.class_label", locale=locale),
             placeholder=translate("ui.character_create.class_placeholder", locale=locale),
         )
-        self.genero = ui.TextInput(
-            label=translate("ui.character_create.gender_label", locale=locale),
-            placeholder=translate("ui.character_create.gender_placeholder", locale=locale),
-            required=False,
-        )
-
         # Conformidade verificada: required=False em campos opcionais
         self.historia = ui.TextInput(
             label=translate("ui.character_create.history_label", locale=locale),
@@ -49,7 +43,6 @@ class CriarFichaModal(ui.Modal):
         self.add_item(self.nome)
         self.add_item(self.raca)
         self.add_item(self.classe)
-        self.add_item(self.genero)
         self.add_item(self.historia)
         self.add_item(self.imagem)
 
@@ -66,6 +59,7 @@ class CriarFichaModal(ui.Modal):
         try:
             # Não usamos 'async with db' aqui, pois a conexão é persistente. 
             # Usamos apenas o execute.
+            genero_value = ""
             await db.execute("""
                 INSERT INTO personagens
                 (user_id, nome, raca, classe, genero, historia, imagem_url, ouro)
@@ -75,7 +69,7 @@ class CriarFichaModal(ui.Modal):
                 self.nome.value.strip(),
                 self.raca.value,
                 self.classe.value,
-                self.genero.value,
+                genero_value,
                 self.historia.value,
                 self.imagem.value
             ))
@@ -99,7 +93,7 @@ class CriarFichaModal(ui.Modal):
             # Identity Field
             raca = self.raca.value or ctx.t("ui.common.unknown")
             classe = self.classe.value or ctx.t("ui.common.adventurer")
-            genero = self.genero.value or ctx.t("ui.common.not_informed")
+            genero = genero_value or ctx.t("ui.common.not_informed")
             embed.add_field(
                 name=ctx.t("ui.character_create.identity_field"),
                 value=f"**{raca}** • *{classe}* • {genero}",
