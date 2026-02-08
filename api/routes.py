@@ -4,6 +4,7 @@ from typing import Any, List, Tuple
 
 from fastapi import APIRouter, Depends, FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+from strawberry.fastapi import GraphQLRouter
 
 from api.security import authorize, authorize_websocket
 from vtt_engine.grid_system import GridMap
@@ -154,10 +155,7 @@ class MapGenerateRequest(BaseModel):
 
 class MapGenerateResponse(BaseModel):
     grid: List[List[int]]
-    biome: str
-    clima: str | None
-    grid_mode: str
-    scale_meters: float
+    metadata: dict
 
 
 @router.post("/generate_map", response_model=None, dependencies=[authorize("vtt:map:generate")])
@@ -208,5 +206,10 @@ def generate_map(payload: GenerateMapRequest) -> GenerateMapResponse:
         }
         return GenerateMapResponse(grid=grid_map.grid, metadata=metadata)
 
+graphql_router = GraphQLRouter(
+    schema,
+    dependencies=[Depends(require_api_key), Depends(rate_limiter)],
+)
 
 app.include_router(router)
+app.include_router(graphql_router, prefix="/v1/graphql", tags=["graphql"])

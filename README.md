@@ -33,6 +33,16 @@ O **Dandelion** é um bot de Discord focado no gerenciamento de campanhas de RPG
 
 ---
 
+## 🔌 API (REST + GraphQL)
+
+A API do Dandelion oferece endpoints REST e GraphQL com autenticação por API key, versionamento `/v1` e rate limiting. A documentação OpenAPI é exposta automaticamente via FastAPI.
+
+* Documentação completa: `docs/API.md`
+* Swagger UI: `/docs`
+* OpenAPI JSON: `/openapi.json`
+
+---
+
 ## 🧭 Roadmap de Ideias (Em Estudo)
 
 > Estes itens representam o **futuro desejado** do projeto. O progresso pode ser acompanhado pelo comando `/roadmap`.
