@@ -100,13 +100,48 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
         # NOCASE para Autocomplete mais rápido (LIKE optimization)
         if _table_exists(cursor, "criaturas"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_criaturas_nome_nocase ON criaturas(nome COLLATE NOCASE);")
+        if _table_exists(cursor, "world_locations"):
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_world_locations_nome_nocase ON world_locations(nome COLLATE NOCASE);"
+            )
+        if _table_exists(cursor, "personagens"):
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_personagens_nome_nocase ON personagens(nome COLLATE NOCASE);"
+            )
         if _table_exists(cursor, "monsters"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_monsters_name_nocase ON monsters(name COLLATE NOCASE);")
 
         if _table_exists(cursor, "session_logs"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_logs_channel_id ON session_logs(channel_id);")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_session_logs_channel_timestamp ON session_logs(channel_id, timestamp);"
+            )
         if _table_exists(cursor, "quests"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_quests_thread_id ON quests(thread_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_quests_status ON quests(status);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_quests_regiao ON quests(regiao);")
+        if _table_exists(cursor, "quest_participantes"):
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_quest_participantes_quest_id ON quest_participantes(quest_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_quest_participantes_user_id ON quest_participantes(user_id);"
+            )
+        if _table_exists(cursor, "memoria_campanha"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_memoria_campanha_tipo ON memoria_campanha(tipo);")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memoria_campanha_data_registro ON memoria_campanha(data_registro);"
+            )
+        if _table_exists(cursor, "lore_entries"):
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lore_entries_atualizado_em ON lore_entries(atualizado_em);"
+            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_lore_entries_owner_id ON lore_entries(owner_id);")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lore_entries_private_owner ON lore_entries(is_private, owner_id);"
+            )
+        if _table_exists(cursor, "npc_profiles"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_npc_profiles_nome ON npc_profiles(nome);")
         print("⚡ Índices de performance aplicados.")
     except Exception as e:
         print(f"⚠️ Erro ao aplicar índices: {e}")
@@ -289,6 +324,7 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 personagem_id INTEGER NOT NULL,
                 session_log_id INTEGER,
+                memoria_id INTEGER,
                 descricao_fato TEXT NOT NULL,
                 relevancia INTEGER DEFAULT 0,
                 criado_em TEXT DEFAULT (datetime('now')),
@@ -299,11 +335,62 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
         )
 
     if _table_exists(cursor, "mencoes_personagem"):
+        _add_columns_if_missing(cursor, "mencoes_personagem", [("memoria_id", "INTEGER")])
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_personagem_id ON mencoes_personagem(personagem_id);"
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_session_log_id ON mencoes_personagem(session_log_id);"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_memoria_id ON mencoes_personagem(memoria_id);"
+        )
+
+    if not _table_exists(cursor, "session_logs_archive"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_logs_archive (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_id INTEGER,
+                channel_id INTEGER,
+                user_name TEXT,
+                content TEXT,
+                is_bot BOOLEAN,
+                timestamp TEXT,
+                archived_at TEXT DEFAULT (datetime('now'))
+            );
+            """
+        )
+
+    if not _table_exists(cursor, "memoria_campanha_archive"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memoria_campanha_archive (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_id INTEGER,
+                tipo TEXT,
+                conteudo TEXT,
+                data_registro TEXT,
+                archived_at TEXT DEFAULT (datetime('now'))
+            );
+            """
+        )
+
+    if not _table_exists(cursor, "mencoes_personagem_archive"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mencoes_personagem_archive (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_id INTEGER,
+                personagem_id INTEGER NOT NULL,
+                session_log_id INTEGER,
+                memoria_id INTEGER,
+                descricao_fato TEXT NOT NULL,
+                relevancia INTEGER DEFAULT 0,
+                criado_em TEXT,
+                archived_at TEXT DEFAULT (datetime('now'))
+            );
+            """
         )
 
     if not _table_exists(cursor, "economia_regional"):

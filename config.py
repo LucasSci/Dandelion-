@@ -16,6 +16,11 @@ class Settings:
     default_character_thumbnail_url: Optional[str]
     log_level: str
     http_timeout_seconds: float
+    retention_days_session_logs: int
+    retention_days_memoria_campanha: int
+    retention_days_mencoes_personagem: int
+    archive_enabled: bool
+    archive_after_days: int
     sync_commands: bool
     extensions: Tuple[str, ...]
     optional_extensions: Tuple[str, ...]
@@ -31,6 +36,11 @@ def load_settings() -> Settings:
         default_character_thumbnail_url=os.getenv("DEFAULT_CHARACTER_THUMBNAIL_URL"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         http_timeout_seconds=float(os.getenv("HTTP_TIMEOUT_SECONDS", "20")),
+        retention_days_session_logs=int(os.getenv("RETENTION_DAYS_SESSION_LOGS", "30")),
+        retention_days_memoria_campanha=int(os.getenv("RETENTION_DAYS_MEMORIA_CAMPANHA", "180")),
+        retention_days_mencoes_personagem=int(os.getenv("RETENTION_DAYS_MENCOES_PERSONAGEM", "180")),
+        archive_enabled=os.getenv("ARCHIVE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"},
+        archive_after_days=int(os.getenv("ARCHIVE_AFTER_DAYS", "90")),
         sync_commands=sync_commands,
         extensions=(
             "cogs.system",

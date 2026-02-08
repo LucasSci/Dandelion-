@@ -12,6 +12,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from openai import OpenAI
 from data.repositories import DiaryRepository
+from data_cache import get_personagens_para_mencoes
 
 try:
     from discord.ext import voice_recv
@@ -124,8 +125,7 @@ class Scribe(commands.Cog):
     async def _registrar_mencoes(self, session_log_id: int, content: str) -> None:
         if not content:
             return
-        async with self.bot.db.execute("SELECT id, nome FROM personagens WHERE nome IS NOT NULL") as cursor:
-            personagens = await cursor.fetchall()
+        personagens = await get_personagens_para_mencoes(self.bot.db)
         if not personagens:
             return
 
@@ -346,6 +346,15 @@ class Scribe(commands.Cog):
             f"🔊 *Dandelion afina o alaúde e se junta à call* (**{target_channel.name}**)."
         )
 
+    async def _enqueue_summary(self, channel, transcricoes: list[str]) -> None:
+        resumo = await self._resumir_conversa(transcricoes)
+        if resumo:
+            await channel.send(f"📝 **Resumo da call:**\n{resumo}")
+        elif transcricoes:
+            await channel.send("⚠️ A transcrição foi gerada, mas não consegui resumir o conteúdo.")
+        else:
+            await channel.send("⚠️ Não consegui capturar áudio suficiente para transcrever.")
+
     async def _leave_voice(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
             await interaction.response.send_message(
@@ -410,13 +419,10 @@ class Scribe(commands.Cog):
         if not channel:
             return
 
-        resumo = await self._resumir_conversa(transcricoes)
-        if resumo:
-            await channel.send(f"📝 **Resumo da call:**\n{resumo}")
-        elif transcricoes:
-            await channel.send("⚠️ A transcrição foi gerada, mas não consegui resumir o conteúdo.")
+        if getattr(self.bot, "task_queue", None):
+            await self.bot.task_queue.enqueue(self._enqueue_summary, channel, transcricoes)
         else:
-            await channel.send("⚠️ Não consegui capturar áudio suficiente para transcrever.")
+            await self._enqueue_summary(channel, transcricoes)
 
     # --- Comandos de Controle ---
 
