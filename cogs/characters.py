@@ -700,13 +700,23 @@ class Characters(commands.Cog):
     async def criar_ficha(self, interaction: discord.Interaction):
         if await self.character_repo.user_has_character(interaction.user.id):
             return await interaction.response.send_message("❌ Você já tem um personagem! Use `/devolver_ficha` antes.", ephemeral=True)
-        await interaction.response.send_modal(CriarFichaModal(target_user_id='proprio'))
+        await interaction.response.send_modal(
+            CriarFichaModal(
+                target_user_id="proprio",
+                locale=str(getattr(interaction, "locale", None) or getattr(interaction, "guild_locale", None) or ""),
+            )
+        )
 
     @app_commands.command(name="mestre_criar", description="🔒 (Mestre) Cria ficha")
     @app_commands.check(is_mestre)
     async def mestre_criar(self, interaction: discord.Interaction, usuario: discord.Member = None):
         target_id = usuario.id if usuario else None
-        await interaction.response.send_modal(CriarFichaModal(target_user_id=target_id))
+        await interaction.response.send_modal(
+            CriarFichaModal(
+                target_user_id=target_id,
+                locale=str(getattr(interaction, "locale", None) or getattr(interaction, "guild_locale", None) or ""),
+            )
+        )
 
     @app_commands.command(name="assumir_personagem", description="Pegue uma ficha do Pool")
     @app_commands.autocomplete(nome_personagem=personagens_disponiveis_autocomplete)
@@ -755,11 +765,21 @@ class Characters(commands.Cog):
         if not char_id:
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        embed = await construir_embed_ficha(self.bot.db, char_id, target.id)
+        embed = await construir_embed_ficha(
+            self.bot.db,
+            char_id,
+            target.id,
+            locale=str(getattr(interaction, "locale", None) or getattr(interaction, "guild_locale", None) or ""),
+        )
         if not embed:
             return await interaction.response.send_message("❌ Nenhuma ficha encontrada.", ephemeral=True)
 
-        view = FichaView(self.bot, personagem_id=char_id, user_id_dono=target.id)
+        view = FichaView(
+            self.bot,
+            personagem_id=char_id,
+            user_id_dono=target.id,
+            locale=str(getattr(interaction, "locale", None) or getattr(interaction, "guild_locale", None) or ""),
+        )
 
         await interaction.response.send_message(embed=embed, view=view)
 

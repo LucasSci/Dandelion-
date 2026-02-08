@@ -432,6 +432,20 @@ O bot utiliza **Slash Commands** (`/`). Digite `/` no Discord para ver o menu in
 
 ---
 
+## 📖 Documentação
+
+Documentação técnica e guias rápidos estão em [`docs/`](docs/):
+
+- [Arquitetura](docs/architecture.md)
+- [Setup & Configuração](docs/setup.md)
+- [Fluxo de Deploy](docs/deploy.md)
+- [Padrões de Código](docs/code-standards.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Guia rápido para contribuidores](docs/quickstart.md)
+- [FAQ](docs/faq.md)
+
+---
+
 ## ⚠️ Solução de Problemas Comuns
 
 1. **Erro `Privileged Intents`:**

@@ -1,6 +1,8 @@
 import discord
 from discord import ui
 
+from utils.i18n import get_interaction_context
+
 
 class BaseRPGView(ui.View):
     def __init__(self, bot, user_id_dono, timeout=180):
@@ -26,17 +28,11 @@ class BaseRPGView(ui.View):
             pass
 
         if has_char:
-            msg = (
-                f"⛔ **Acesso Negado**\n"
-                f"Esta ficha pertence a <@{self.dono_id}>.\n"
-                f"💡 **Você já tem um personagem!** Use `/ficha` para ver o seu ou `/criar_ficha` para criar um novo."
-            )
+            ctx = get_interaction_context(interaction)
+            msg = ctx.t("ui.access_denied.has_character", owner_id=self.dono_id)
         else:
-            msg = (
-                f"⛔ **Acesso Negado**\n"
-                f"Esta ficha pertence a <@{self.dono_id}>.\n"
-                f"✨ **Quer jogar?** Use `/criar_ficha` para começar sua aventura!"
-            )
+            ctx = get_interaction_context(interaction)
+            msg = ctx.t("ui.access_denied.no_character", owner_id=self.dono_id)
 
         await interaction.response.send_message(msg, ephemeral=True)
         return False

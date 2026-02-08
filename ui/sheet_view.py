@@ -1,6 +1,7 @@
 import asyncio
 import io
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
 import discord
@@ -18,6 +19,14 @@ from ui.base_view import BaseRPGView
 from ui.design_system import apply_navigation_state
 from ui.views import ConfirmarExclusaoView
 from utils import rolar_dados, rolar_pericia_explosiva, gerar_barra
+from utils.i18n import (
+    I18nContext,
+    format_currency,
+    format_datetime,
+    get_interaction_context,
+    resolve_locale,
+    translate,
+)
 from utils.roll_templates import resolve_roll_template
 
 try:
@@ -34,9 +43,9 @@ except Exception:  # pragma: no cover - fallback for mocked utils module in test
 
 DEFAULT_THUMBNAIL_URL = "https://placehold.co/256x256/png?text=Ficha"
 
-def _format_dual_column(items, name_width=12, value_width=5):
+def _format_dual_column(items, name_width=12, value_width=5, ctx: Optional[I18nContext] = None):
     if not items:
-        return "_Nenhum registrado._"
+        return ctx.t("ui.common.none_registered") if ctx else "_Nenhum registrado._"
 
     lines = []
     for idx in range(0, len(items), 2):
@@ -56,9 +65,9 @@ def _format_dual_column(items, name_width=12, value_width=5):
     return "```\n" + "\n".join(lines) + "\n```"
 
 
-def _format_list(items, prefix="• "):
+def _format_list(items, prefix="• ", ctx: Optional[I18nContext] = None):
     if not items:
-        return "_Nenhum registrado._"
+        return ctx.t("ui.common.none_registered") if ctx else "_Nenhum registrado._"
     return "\n".join([f"{prefix}{item}" for item in items])
 
 
@@ -69,9 +78,9 @@ def _format_percentual(atual, maximo):
     return f"{int(round(pct * 100))}%"
 
 
-def _format_receitas_conhecidas(receitas):
+def _format_receitas_conhecidas(receitas, ctx: Optional[I18nContext] = None):
     if not receitas:
-        return "_Nenhuma receita desbloqueada._"
+        return ctx.t("ui.common.none_unlocked") if ctx else "_Nenhuma receita desbloqueada._"
     return "\n".join([f"• **{nome}** ({base})" for nome, base in receitas])
 
 
@@ -106,12 +115,17 @@ def _gerar_barra_encumbrance(encumbrance_atual: int, capacidade_maxima: int, seg
     return f"{cor * preenchidos}{'⬛' * vazios}"
 
 
-def _set_footer_timestamp(embed: discord.Embed, texto_base: str = "") -> None:
-    timestamp = f"<t:{int(time.time())}:R>"
+def _set_footer_timestamp(
+    embed: discord.Embed,
+    texto_base: str = "",
+    ctx: Optional[I18nContext] = None,
+) -> None:
+    now = datetime.now(timezone.utc)
+    localized = format_datetime(now, locale=ctx.locale if ctx else None, timezone=ctx.timezone if ctx else None)
     if texto_base:
-        embed.set_footer(text=f"{texto_base} • Atualizado {timestamp}")
+        embed.set_footer(text=f"{texto_base} • {localized}")
     else:
-        embed.set_footer(text=f"Atualizado {timestamp}")
+        embed.set_footer(text=localized)
 
 
 def _build_author_name(
@@ -119,6 +133,7 @@ def _build_author_name(
     classe: Optional[str],
     raca: Optional[str],
     genero: Optional[str],
+    ctx: Optional[I18nContext] = None,
 ) -> str:
     identity_bits = [item for item in (classe, raca, genero) if item]
     if nome and identity_bits:
@@ -127,7 +142,7 @@ def _build_author_name(
         return nome
     if identity_bits:
         return " • ".join(identity_bits)
-    return "Ficha de Personagem"
+    return ctx.t("ui.common.character_sheet") if ctx else "Ficha de Personagem"
 
 
 def _apply_embed_identity(
@@ -137,8 +152,9 @@ def _apply_embed_identity(
     raca: Optional[str],
     genero: Optional[str],
     imagem_url: Optional[str],
+    ctx: Optional[I18nContext] = None,
 ) -> None:
-    author_name = _build_author_name(nome, classe, raca, genero)
+    author_name = _build_author_name(nome, classe, raca, genero, ctx)
     embed.set_author(name=f"📜 {author_name}")
     thumbnail_url = imagem_url or settings.default_character_thumbnail_url
     if thumbnail_url:
@@ -150,12 +166,13 @@ def _apply_embed_metadata(
     titulo: Optional[str],
     imagem_url: Optional[str],
     footer_text: str,
+    ctx: Optional[I18nContext] = None,
 ) -> None:
-    embed.set_author(name=titulo or "Sem título")
+    embed.set_author(name=titulo or (ctx.t("ui.common.no_title") if ctx else "Sem título"))
     thumbnail_url = imagem_url or DEFAULT_THUMBNAIL_URL
     if thumbnail_url:
         embed.set_thumbnail(url=thumbnail_url)
-    _set_footer_timestamp(embed, footer_text)
+    _set_footer_timestamp(embed, footer_text, ctx=ctx)
 
 
 def _split_text(texto: str, limite: int = 3900) -> list[str]:
@@ -211,7 +228,12 @@ async def _table_exists(db, table: str) -> bool:
         return await cursor.fetchone() is not None
 
 
-async def construir_embed_ficha(db, personagem_id, user_id):
+async def construir_embed_ficha(db, personagem_id, user_id, locale: str | None = None):
+    ctx = I18nContext(
+        locale=resolve_locale(locale),
+        timezone=settings.default_timezone,
+        currency=settings.default_currency,
+    )
     character_repo = CharacterRepository(db)
     inventory_repo = InventoryRepository(db)
     skill_repo = SkillRepository(db)
@@ -245,11 +267,8 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         for nome_item, tipo in itens
     ]
 
-    embed = discord.Embed(
-        title=f"📜 {nome}",
-        color=_cor_por_hp(hp_atual, hp_max),
-    )
-    _apply_embed_identity(embed, nome, classe, raca, genero, img)
+    embed = discord.Embed(title=f"📜 {nome}", color=_cor_por_hp(hp_atual, hp_max))
+    _apply_embed_identity(embed, nome, classe, raca, genero, img, ctx)
     identidade_partes = []
     if classe:
         identidade_partes.append(f"*{classe}*")
@@ -257,20 +276,20 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         identidade_partes.append(f"**{raca}**")
     if genero:
         identidade_partes.append(genero)
-    identidade_texto = " • ".join(identidade_partes) if identidade_partes else "Identidade indisponível"
+    identidade_texto = " • ".join(identidade_partes) if identidade_partes else ctx.t("ui.common.no_record")
     embed.add_field(
-        name="📖 Identidade",
+        name=ctx.t("ui.sheet.identity"),
         value=f"{identidade_texto} • Nível **{nivel}**",
         inline=False,
     )
     embed.add_field(
-        name="📝 História",
-        value=historia or "_Sem registro._",
+        name=ctx.t("ui.sheet.history"),
+        value=historia or ctx.t("ui.common.no_record"),
         inline=False,
     )
-    embed.add_field(name="📍 Localização", value=local or "Desconhecida", inline=True)
-    embed.add_field(name="💰 Ouro", value=str(ouro), inline=True)
-    embed.add_field(name="🧭 XP Atual", value=str(xp_atual), inline=True)
+    embed.add_field(name=ctx.t("ui.sheet.location"), value=local or ctx.t("ui.common.unknown"), inline=True)
+    embed.add_field(name=ctx.t("ui.sheet.gold"), value=ctx.format_currency(ouro or 0), inline=True)
+    embed.add_field(name=ctx.t("ui.sheet.xp"), value=str(xp_atual), inline=True)
 
     hp_pct = _format_percentual(hp_atual, hp_max)
     vigor_pct = _format_percentual(vigor_atual, vigor_max)
@@ -285,15 +304,19 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         f"✨ MP {mp_max}\n"
         f"☠️ Toxicidade {toxicidade_atual}/{toxicidade_max}"
     )
-    embed.add_field(name="Recursos", value=recursos, inline=True)
+    embed.add_field(name=ctx.t("ui.sheet.resources"), value=recursos, inline=True)
     embed.add_field(
-        name="⚔️ Combate & Magia",
-        value=f"Ataque **{ataque}** • Defesa **{defesa}** • MP **{mp_max}**",
+        name=ctx.t("ui.sheet.combat_magic"),
+        value=(
+            f"{ctx.t('ui.sheet.attack')} **{ataque}**"
+            f" • {ctx.t('ui.sheet.current_sp')} **{defesa}**"
+            f" • MP **{mp_max}**"
+        ),
         inline=True
     )
     embed.add_field(
-        name="🧠 Atributos",
-        value=_format_dual_column(atributos, name_width=10, value_width=3),
+        name=ctx.t("ui.sheet.attributes"),
+        value=_format_dual_column(atributos, name_width=10, value_width=3, ctx=ctx),
         inline=True
     )
     derived_items = [
@@ -306,44 +329,58 @@ async def construir_embed_ficha(db, personagem_id, user_id):
         ("Recovery", derived_stats["Recovery"]),
     ]
     embed.add_field(
-        name="📊 Derivados",
-        value=_format_dual_column(derived_items, name_width=9, value_width=5),
+        name=ctx.t("ui.sheet.derived"),
+        value=_format_dual_column(derived_items, name_width=9, value_width=5, ctx=ctx),
         inline=True
     )
     embed.add_field(
-        name="✨ Perícias & Sinais",
-        value=_format_dual_column(pericias_formatadas, name_width=12, value_width=6),
+        name=ctx.t("ui.sheet.skills_signs"),
+        value=_format_dual_column(pericias_formatadas, name_width=12, value_width=6, ctx=ctx),
         inline=True
     )
     embed.add_field(
-        name="🎒 Equipamentos em Destaque",
-        value=_format_list(itens_formatados),
+        name=ctx.t("ui.sheet.highlight_items"),
+        value=_format_list(itens_formatados, ctx=ctx),
         inline=False
     )
 
-    _set_footer_timestamp(embed, "Ficha estilo pergaminho • Visual inspirado em crônicas de bruxos")
+    _set_footer_timestamp(embed, ctx.t("ui.sheet.scroll_footer"), ctx=ctx)
     return embed
 
 # ==============================================================================
 # 1. MODAIS (CRIAR E EDITAR)
 # ==============================================================================
 
-class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
-    def __init__(self, personagem_id, view_pai):
-        super().__init__()
+class NovaHabilidadeModal(ui.Modal):
+    def __init__(self, personagem_id, view_pai, locale: str | None = None):
+        locale = resolve_locale(locale)
+        super().__init__(title=translate("ui.sheet.new_skill_title", locale=locale))
         self.personagem_id = personagem_id
         self.view_pai = view_pai
+        self.locale = locale
 
-    nome = ui.TextInput(label="Nome da Habilidade", placeholder="Ex: Bola de Fogo")
-    dado = ui.TextInput(label="Dano/Efeito (Dados)", placeholder="Ex: 4d6 (Deixe vazio se não tiver)", required=False)
-    descricao = ui.TextInput(
-        label="Descrição",
-        style=discord.TextStyle.paragraph,
-        required=False,
-        placeholder="Ex: Dispara uma esfera flamejante..."
-    )
+        self.nome = ui.TextInput(
+            label=translate("ui.sheet.skill_name_label", locale=locale),
+            placeholder=translate("ui.sheet.skill_name_placeholder", locale=locale),
+        )
+        self.dado = ui.TextInput(
+            label=translate("ui.sheet.skill_damage_label", locale=locale),
+            placeholder=translate("ui.sheet.skill_damage_placeholder", locale=locale),
+            required=False,
+        )
+        self.descricao = ui.TextInput(
+            label=translate("ui.sheet.skill_desc_label", locale=locale),
+            style=discord.TextStyle.paragraph,
+            required=False,
+            placeholder=translate("ui.sheet.skill_desc_placeholder", locale=locale),
+        )
+
+        self.add_item(self.nome)
+        self.add_item(self.dado)
+        self.add_item(self.descricao)
 
     async def on_submit(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         if self.dado.value:
             detalhes, _ = rolar_dados(self.dado.value)
             if detalhes is None:
@@ -377,21 +414,35 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
-class EditarHabilidadeModal(ui.Modal, title="✏️ Editar Habilidade"):
-    def __init__(self, skill_id, current_nome, current_dado, current_desc, view_pai):
-        super().__init__()
+class EditarHabilidadeModal(ui.Modal):
+    def __init__(self, skill_id, current_nome, current_dado, current_desc, view_pai, locale: str | None = None):
+        locale = resolve_locale(locale)
+        super().__init__(title=translate("ui.sheet.edit_skill_title", locale=locale))
         self.skill_id = skill_id
         self.view_pai = view_pai
-        
-        self.nome_input = ui.TextInput(label="Nome", default=current_nome)
-        self.dado_input = ui.TextInput(label="Dano/Efeito", default=current_dado, required=False)
-        self.desc_input = ui.TextInput(label="Descrição", default=current_desc, style=discord.TextStyle.paragraph, required=False)
-        
+
+        self.nome_input = ui.TextInput(
+            label=translate("ui.sheet.skill_name_label", locale=locale),
+            default=current_nome,
+        )
+        self.dado_input = ui.TextInput(
+            label=translate("ui.sheet.skill_damage_label", locale=locale),
+            default=current_dado,
+            required=False,
+        )
+        self.desc_input = ui.TextInput(
+            label=translate("ui.sheet.skill_desc_label", locale=locale),
+            default=current_desc,
+            style=discord.TextStyle.paragraph,
+            required=False,
+        )
+
         self.add_item(self.nome_input)
         self.add_item(self.dado_input)
         self.add_item(self.desc_input)
 
     async def on_submit(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         if self.dado_input.value:
             detalhes, _ = rolar_dados(self.dado_input.value)
             if detalhes is None:
@@ -424,11 +475,13 @@ class EditarHabilidadeModal(ui.Modal, title="✏️ Editar Habilidade"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
-class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
-    def __init__(self, atributo_nome: str, atributo_valor: int):
-        super().__init__()
+class RolarPericiaModal(ui.Modal):
+    def __init__(self, atributo_nome: str, atributo_valor: int, locale: str | None = None):
+        locale = resolve_locale(locale)
+        super().__init__(title=translate("ui.sheet.roll_skill_title", locale=locale))
         self.atributo_nome = atributo_nome
         self.atributo_valor = atributo_valor
+        self.locale = locale
         self.dcs = {
             "Fácil": 10,
             "Média": 15,
@@ -437,56 +490,63 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         }
 
         self.pericia_nome = ui.TextInput(
-            label="Nome da Perícia (opcional)",
+            label=translate("ui.sheet.skill_optional_label", locale=locale),
             required=False,
-            placeholder="Ex: Atletismo (ou deixe vazio)"
+            placeholder=translate("ui.sheet.skill_optional_placeholder", locale=locale),
         )
         self.pericia_valor = ui.TextInput(
-            label="Valor da Perícia",
-            placeholder="Ex: 4 (Deixe vazio para 0)",
-            required=False
+            label=translate("ui.sheet.skill_value_label", locale=locale),
+            placeholder=translate("ui.sheet.skill_value_placeholder", locale=locale),
+            required=False,
         )
         self.dificuldade_input = ui.TextInput(
-            label="DC / Nível de Dificuldade (opcional)",
+            label=translate("ui.sheet.difficulty_label", locale=locale),
             required=False,
-            placeholder="Ex: 15 ou Médio",
+            placeholder=translate("ui.sheet.difficulty_placeholder", locale=locale),
         )
 
         self.add_item(self.pericia_nome)
         self.add_item(self.pericia_valor)
         self.add_item(self.dificuldade_input)
 
+    def _t(self, key: str, **kwargs) -> str:
+        return translate(key, locale=self.locale, **kwargs)
+
     async def on_submit(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         try:
             val_str = self.pericia_valor.value
             pericia_valor = int(val_str) if val_str else 0
         except ValueError:
-            return await interaction.response.send_message("❌ Valor da perícia inválido.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.invalid_skill_value"),
+                ephemeral=True,
+            )
 
         dc_informada = self._parse_dificuldade()
 
         rolagens, total, direcao = rolar_pericia_explosiva(self.atributo_valor, pericia_valor)
         classificacao = classificar_resultado(total, dc_informada)
 
-        etiqueta = self.pericia_nome.value.strip() if self.pericia_nome.value else "Perícia"
+        etiqueta = self.pericia_nome.value.strip() if self.pericia_nome.value else ctx.t("ui.sheet.skill_label_default")
         detalhes_rolagem = ", ".join(map(str, rolagens))
         explosao_txt = ""
         if direcao == 1:
-            explosao_txt = " (Explosão para cima)"
+            explosao_txt = ctx.t("ui.sheet.explosion_up")
         elif direcao == -1:
-            explosao_txt = " (Explosão para baixo)"
+            explosao_txt = ctx.t("ui.sheet.explosion_down")
 
         embed = discord.Embed(
             title=f"🎯 {etiqueta} - {self.atributo_nome}",
             color=0x2b2d31
         )
         embed.add_field(
-            name="Rolagem",
+            name=ctx.t("ui.sheet.roll_field"),
             value=f"[{detalhes_rolagem}]{explosao_txt}",
             inline=False
         )
         embed.add_field(
-            name="Fórmula",
+            name=ctx.t("ui.sheet.formula"),
             value=f"1d10 + Stat({self.atributo_valor}) + Skill({pericia_valor})",
             inline=False
         )
@@ -494,47 +554,47 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             embed.add_field(name="DC", value=str(dc_informada), inline=True)
         else:
             tabela_txt = "/".join(map(str, DEFAULT_DC_THRESHOLDS))
-            embed.add_field(name="Tabela de Dificuldade", value=tabela_txt, inline=True)
-        embed.add_field(name="Total", value=f"# **{total}**", inline=False)
+            embed.add_field(name=ctx.t("ui.sheet.difficulty_table"), value=tabela_txt, inline=True)
+        embed.add_field(name=ctx.t("ui.sheet.total"), value=f"# **{total}**", inline=False)
         resultado = self._avaliar_dificuldade(total)
         if resultado:
             embed.add_field(
-                name=f"Resultado vs DC {resultado['dc']} ({resultado['rotulo']})",
-                value=f"{resultado['texto']} (Margem {resultado['margem']:+})",
+                name=ctx.t("ui.sheet.result_vs_dc", dc=resultado["dc"], label=resultado["rotulo"]),
+                value=f"{resultado['texto']} ({ctx.t('ui.sheet.margin')} {resultado['margem']:+})",
                 inline=False,
             )
         dcs_texto = "\n".join([f"• **{nome}**: {valor}" for nome, valor in self.dcs.items()])
-        embed.add_field(name="📊 DCs de Referência", value=dcs_texto, inline=False)
+        embed.add_field(name=ctx.t("ui.sheet.reference_dcs"), value=dcs_texto, inline=False)
 
         if dc_informada is not None:
             margem = total - dc_informada
             if margem < 0:
-                nivel = "Falha"
+                nivel = ctx.t("ui.sheet.failure")
             elif margem == 0:
-                nivel = "Vitória Marginal"
+                nivel = ctx.t("ui.sheet.marginal_success")
             elif margem < 10:
-                nivel = "Vitória"
+                nivel = ctx.t("ui.sheet.success")
             else:
-                nivel = "Crítica"
+                nivel = ctx.t("ui.sheet.critical")
             embed.add_field(
-                name="🎯 Comparação com DC",
-                value=f"DC **{dc_informada}** (Diferença: {margem:+d})",
+                name=ctx.t("ui.sheet.dc_comparison"),
+                value=f"DC **{dc_informada}** ({ctx.t('ui.sheet.difference')}: {margem:+d})",
                 inline=False
             )
         else:
             if total >= self.dcs["Extrema"]:
-                nivel = "Crítica"
+                nivel = ctx.t("ui.sheet.critical")
             elif total >= self.dcs["Difícil"]:
-                nivel = "Vitória Maior"
+                nivel = ctx.t("ui.sheet.major_success")
             elif total >= self.dcs["Média"]:
-                nivel = "Vitória"
+                nivel = ctx.t("ui.sheet.success")
             elif total >= self.dcs["Fácil"]:
-                nivel = "Vitória Marginal"
+                nivel = ctx.t("ui.sheet.marginal_success")
             else:
-                nivel = "Falha"
+                nivel = ctx.t("ui.sheet.failure")
 
-        embed.add_field(name="🏆 Nível", value=nivel, inline=False)
-        embed.add_field(name="Classificação", value=classificacao, inline=False)
+        embed.add_field(name=ctx.t("ui.sheet.level"), value=nivel, inline=False)
+        embed.add_field(name=ctx.t("ui.sheet.classification"), value=classificacao, inline=False)
 
         # Palette: UX Improvement - Color coded results
         color_map = {
@@ -563,6 +623,10 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             "difícil": 20,
             "epico": 25,
             "épico": 25,
+            "easy": 10,
+            "medium": 15,
+            "hard": 20,
+            "extreme": 25,
         }
         dificuldade_normalizada = dificuldade_raw.lower()
         dc = tabela_dificuldade.get(dificuldade_normalizada)
@@ -587,6 +651,10 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             "difícil": 20,
             "epico": 25,
             "épico": 25,
+            "easy": 10,
+            "medium": 15,
+            "hard": 20,
+            "extreme": 25,
         }
         dificuldade_normalizada = dificuldade_raw.lower()
         dc = tabela_dificuldade.get(dificuldade_normalizada)
@@ -594,26 +662,26 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         if dc is None:
             try:
                 dc = int(dificuldade_raw)
-                rotulo = "Personalizada"
+                rotulo = self._t("ui.sheet.custom")
             except ValueError:
                 return None
 
         margem = total - dc
         if margem < 0:
-            texto = "Falha"
+            texto = self._t("ui.sheet.failure")
         elif margem < 5:
-            texto = "Vitória Marginal"
+            texto = self._t("ui.sheet.marginal_success")
         elif margem < 10:
-            texto = "Sucesso"
+            texto = self._t("ui.sheet.success")
         else:
-            texto = "Crítica"
+            texto = self._t("ui.sheet.critical")
 
         if dc in tabela_dificuldade.values():
             rotulo = {
-                10: "Fácil",
-                15: "Médio",
-                20: "Difícil",
-                25: "Épico",
+                10: self._t("ui.sheet.easy"),
+                15: self._t("ui.sheet.medium"),
+                20: self._t("ui.sheet.hard"),
+                25: self._t("ui.sheet.extreme"),
             }.get(dc, rotulo)
 
         return {
@@ -623,18 +691,22 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
             "rotulo": rotulo,
         }
 
-class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
-    def __init__(self, personagem_id):
-        super().__init__()
+class BuscarPericiaModal(ui.Modal):
+    def __init__(self, personagem_id, locale: str | None = None):
+        locale = resolve_locale(locale)
+        super().__init__(title=translate("ui.sheet.search_skill_title", locale=locale))
         self.personagem_id = personagem_id
+        self.locale = locale
 
-    termo = ui.TextInput(
-        label="Nome ou parte do nome",
-        placeholder="Ex: Espada, Esquiva, Igni",
-        required=True
-    )
+        self.termo = ui.TextInput(
+            label=translate("ui.sheet.search_skill_label", locale=locale),
+            placeholder=translate("ui.sheet.search_skill_placeholder", locale=locale),
+            required=True,
+        )
+        self.add_item(self.termo)
 
     async def on_submit(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         termo_busca = self.termo.value.strip()
         termo_sql = f"%{termo_busca}%"
         skill_repo = SkillRepository(interaction.client.db)
@@ -645,20 +717,20 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
 
         if not resultados:
             embed = discord.Embed(
-                title="🔎 Nenhuma perícia encontrada",
-                description=f"Não encontramos nada com **'{termo_busca}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
+                title=ctx.t("ui.sheet.no_skills_found_title"),
+                description=ctx.t("ui.sheet.no_skills_found_desc", term=termo_busca),
                 color=0xED4245
             )
             return await interaction.response.send_message(embed=embed, ephemeral=True, view=view_retry)
 
         embed = discord.Embed(
-            title=f"🔎 Resultados para '{self.termo.value}'",
+            title=ctx.t("ui.sheet.search_results_title", term=self.termo.value),
             color=0x5865F2  # Blurple
         )
 
         for nome, dado, descricao in resultados:
             dado_txt = f" `{dado}`" if dado else ""
-            resumo = (descricao[:100] + "...") if descricao and len(descricao) > 100 else (descricao or "Sem descrição.")
+            resumo = (descricao[:100] + "...") if descricao and len(descricao) > 100 else (descricao or ctx.t("ui.common.no_description"))
             embed.add_field(
                 name=f"{nome}{dado_txt}",
                 value=resumo,
@@ -691,18 +763,36 @@ class NovaBuscaView(ui.View):
         await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
 
 class AcoesHabilidadeView(ui.View):
-    def __init__(self, skill_id, nome, dado, desc, view_ficha):
+    def __init__(self, skill_id, nome, dado, desc, view_ficha, locale: str | None = None):
         super().__init__(timeout=60)
         self.skill_id = skill_id
         self.nome = nome
         self.dado = dado
         self.desc = desc
         self.view_ficha = view_ficha
+        self.locale = resolve_locale(locale)
+        self._apply_labels()
+
+    def _apply_labels(self) -> None:
+        for child in self.children:
+            if not isinstance(child, ui.Button):
+                continue
+            if child.callback.__name__ == "btn_editar":
+                child.label = translate("ui.sheet.edit_label", locale=self.locale)
+            elif child.callback.__name__ == "btn_excluir":
+                child.label = translate("ui.sheet.delete_label", locale=self.locale)
 
     @ui.button(label="Editar", emoji="✏️", style=discord.ButtonStyle.primary)
     async def btn_editar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(
-            EditarHabilidadeModal(self.skill_id, self.nome, self.dado, self.desc, self.view_ficha)
+            EditarHabilidadeModal(
+                self.skill_id,
+                self.nome,
+                self.dado,
+                self.desc,
+                self.view_ficha,
+                locale=self.locale,
+            )
         )
 
     @ui.button(label="Excluir", emoji="🗑️", style=discord.ButtonStyle.danger)
@@ -722,15 +812,22 @@ class AcoesHabilidadeView(ui.View):
 
         async def cancelar(itx: discord.Interaction):
             # UX Improvement: Restore the previous view so user doesn't lose context
-            view_restored = AcoesHabilidadeView(self.skill_id, self.nome, self.dado, self.desc, self.view_ficha)
+            view_restored = AcoesHabilidadeView(
+                self.skill_id,
+                self.nome,
+                self.dado,
+                self.desc,
+                self.view_ficha,
+                locale=self.locale,
+            )
             await itx.response.edit_message(
-                content=f"🛠️ Gerenciando: **{self.nome}**\nO que deseja fazer?",
+                content=translate("ui.sheet.manage_skill_title", locale=self.locale, name=self.nome),
                 view=view_restored
             )
 
-        view_conf = ConfirmarExclusaoView(confirmar, cancelar)
+        view_conf = ConfirmarExclusaoView(confirmar, cancelar, locale=self.locale)
         await interaction.response.edit_message(
-            content=f"⚠️ Tem certeza que deseja excluir a habilidade **{self.nome}**?",
+            content=translate("ui.sheet.confirm_delete_skill", locale=self.locale, name=self.nome),
             view=view_conf
         )
         # Não chamamos self.stop() aqui porque queremos que esta view continue ativa
@@ -739,13 +836,14 @@ class AcoesHabilidadeView(ui.View):
         self.stop()
 
 class SelecionarHabilidadeSelect(ui.Select):
-    def __init__(self, skills, view_ficha):
+    def __init__(self, skills, view_ficha, locale: str | None = None):
         self.skills_map = {str(s[0]): s for s in skills}
+        self.locale = resolve_locale(locale)
         
         options = []
         for id_skill, nome, dado, desc in skills:
             desc_curta = f"({dado}) " if dado else ""
-            desc_curta += desc[:50] if desc else "Sem descrição"
+            desc_curta += desc[:50] if desc else translate("ui.common.no_description", locale=self.locale)
             
             # UX Improvement: Use consistent emojis for skill types
             emoji = "🎲" if dado else "✨"
@@ -757,31 +855,39 @@ class SelecionarHabilidadeSelect(ui.Select):
                 emoji=emoji
             ))
 
-        super().__init__(placeholder="✨ Escolha uma habilidade para gerenciar...", min_values=1, max_values=1, options=options)
+        super().__init__(
+            placeholder=translate("ui.sheet.select_skill_placeholder", locale=self.locale),
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
         self.view_ficha = view_ficha
 
     async def callback(self, interaction: discord.Interaction):
         skill_id = self.values[0]
         data = self.skills_map.get(skill_id)
         if not data:
-            return await interaction.response.send_message("❌ Habilidade não encontrada.", ephemeral=True)
+            return await interaction.response.send_message(
+                translate("ui.sheet.skill_not_found", locale=self.locale),
+                ephemeral=True,
+            )
             
         id_skill, nome, dado, desc = data
         
-        view = AcoesHabilidadeView(id_skill, nome, dado, desc, self.view_ficha)
+        view = AcoesHabilidadeView(id_skill, nome, dado, desc, self.view_ficha, locale=self.locale)
         await interaction.response.send_message(
-            f"🛠️ Gerenciando: **{nome}**\nO que deseja fazer?", 
+            translate("ui.sheet.manage_skill_title", locale=self.locale, name=nome),
             view=view, 
             ephemeral=True
         )
 
 class GerenciarHabilidadesView(ui.View):
-    def __init__(self, skills, view_ficha):
+    def __init__(self, skills, view_ficha, locale: str | None = None):
         super().__init__(timeout=60)
-        self.add_item(SelecionarHabilidadeSelect(skills, view_ficha))
+        self.add_item(SelecionarHabilidadeSelect(skills, view_ficha, locale=locale))
 
 class FerimentosCriticosSelect(ui.Select):
-    def __init__(self):
+    def __init__(self, locale: str | None = None):
         ferimentos = [
             ("Fratura", "Movimento reduzido e penalidade em testes físicos."),
             ("Sangramento", "Perde HP por turno até estancar."),
@@ -789,6 +895,7 @@ class FerimentosCriticosSelect(ui.Select):
             ("Perfuração", "Ações de combate com desvantagem."),
             ("Queimadura", "Resistência reduzida e dor contínua.")
         ]
+        self.locale = resolve_locale(locale)
 
         options = [
             discord.SelectOption(
@@ -798,42 +905,64 @@ class FerimentosCriticosSelect(ui.Select):
                 emoji="🩸"
             ) for nome, desc in ferimentos
         ]
-        super().__init__(placeholder="🩸 Ferimentos Críticos (tabela)", min_values=1, max_values=1, options=options)
+        super().__init__(
+            placeholder=translate("ui.sheet.ferimentos_placeholder", locale=self.locale),
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
         self.ferimentos_map = {nome: desc for nome, desc in ferimentos}
         self.row = 3
 
     async def callback(self, interaction: discord.Interaction):
         ferimento = self.values[0]
-        desc = self.ferimentos_map.get(ferimento, "Sem detalhes.")
-        embed = discord.Embed(title=f"🩸 {ferimento}", description=desc, color=0x8B1A1A)
+        desc = self.ferimentos_map.get(
+            ferimento,
+            translate("ui.sheet.ferimentos_no_details", locale=self.locale),
+        )
+        embed = discord.Embed(
+            title=translate("ui.sheet.ferimentos_title", locale=self.locale, name=ferimento),
+            description=desc,
+            color=0x8B1A1A,
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class FerimentosCriticosView(ui.View):
-    def __init__(self):
+    def __init__(self, locale: str | None = None):
         super().__init__(timeout=120)
-        self.add_item(FerimentosCriticosSelect())
+        self.add_item(FerimentosCriticosSelect(locale=locale))
 
 class PocaoSelect(ui.Select):
-    def __init__(self, potions, personagem_id):
+    def __init__(self, potions, personagem_id, locale: str | None = None):
         self.personagem_id = personagem_id
         self.potion_map = {str(p[0]): p for p in potions}
+        self.locale = resolve_locale(locale)
         options = [
             discord.SelectOption(
                 label=nome[:100],
                 value=str(item_id),
-                description=(efeito or "Sem efeito")[:100],
+                description=(efeito or translate("ui.common.no_effect", locale=self.locale))[:100],
                 emoji="🧪"
             )
             for item_id, nome, efeito in potions
         ]
-        super().__init__(placeholder="🧪 Consumir poção", min_values=1, max_values=1, options=options)
+        super().__init__(
+            placeholder=translate("ui.sheet.potion_placeholder", locale=self.locale),
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
         self.row = 3
 
     async def callback(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         item_id = self.values[0]
         potion = self.potion_map.get(item_id)
         if not potion:
-            return await interaction.response.send_message("❌ Poção não encontrada.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.potion_not_found"),
+                ephemeral=True,
+            )
 
         _, nome, efeito = potion
         character_repo = CharacterRepository(interaction.client.db)
@@ -841,7 +970,10 @@ class PocaoSelect(ui.Select):
         row = await character_repo.fetch_toxicity(self.personagem_id)
 
         if not row:
-            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.character_not_found"),
+                ephemeral=True,
+            )
 
         toxicidade_atual, toxicidade_max = row
         custo_toxicidade = 10
@@ -851,9 +983,9 @@ class PocaoSelect(ui.Select):
         await inventory_repo.delete_item(item_id)
 
         embed = discord.Embed(
-            title=f"🧪 {interaction.user.display_name} consumiu {nome}",
-            description=efeito or "Efeito não descrito.",
-            color=0x4B7B6F
+            title=ctx.t("ui.sheet.potion_consumed_title", name=interaction.user.display_name, potion=nome),
+            description=efeito or ctx.t("ui.sheet.potion_effect_default"),
+            color=0x4B7B6F,
         )
 
         pct = nova_toxicidade / toxicidade_max if toxicidade_max > 0 else 0
@@ -865,22 +997,25 @@ class PocaoSelect(ui.Select):
             cor = "🟥"
         tox_bar = gerar_barra(nova_toxicidade, toxicidade_max, tamanho=5, cor_cheio=cor)
 
-        embed.add_field(name="☠️ Toxicidade", value=f"{tox_bar} +{custo_toxicidade} ({nova_toxicidade}/{toxicidade_max})")
+        embed.add_field(
+            name=ctx.t("ui.sheet.toxicity"),
+            value=f"{tox_bar} +{custo_toxicidade} ({nova_toxicidade}/{toxicidade_max})",
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
         if self.view:
             await self.view.atualizar_botoes_habilidade(interaction, target_message=interaction.message)
 
 class PocaoView(ui.View):
-    def __init__(self, potions, personagem_id):
+    def __init__(self, potions, personagem_id, locale: str | None = None):
         super().__init__(timeout=120)
-        self.add_item(PocaoSelect(potions, personagem_id))
+        self.add_item(PocaoSelect(potions, personagem_id, locale=locale))
 
 # ==============================================================================
 # 3. COMPONENTES DA FICHA PRINCIPAL
 # ==============================================================================
 
 class HabilidadeButton(ui.Button):
-    def __init__(self, nome, dado, descricao, personagem_id=None, vigor_cost=0):
+    def __init__(self, nome, dado, descricao, personagem_id=None, vigor_cost=0, locale: str | None = None):
         if dado:
             emoji = "🎲"
             style = discord.ButtonStyle.primary
@@ -896,15 +1031,20 @@ class HabilidadeButton(ui.Button):
         self.desc_habilidade = descricao
         self.personagem_id = personagem_id
         self.vigor_cost = vigor_cost
+        self.locale = resolve_locale(locale)
 
     async def callback(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         vigor_feedback = None
         if self.personagem_id and self.vigor_cost:
             character_repo = CharacterRepository(interaction.client.db)
             row = await character_repo.fetch_vigor(self.personagem_id)
 
             if not row:
-                return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+                return await interaction.response.send_message(
+                    ctx.t("ui.sheet.character_not_found"),
+                    ephemeral=True,
+                )
 
             vigor_atual, vigor_max = row
             if vigor_atual is None:
@@ -925,9 +1065,12 @@ class HabilidadeButton(ui.Button):
 
             # Palette: Add visual feedback for Vigor cost
             bar = gerar_barra(novo_vigor, vigor_max, tamanho=5)
-            vigor_feedback = f"Vigor: {bar} {novo_vigor}/{vigor_max}"
+            vigor_feedback = f"{ctx.t('ui.sheet.vigor')}: {bar} {novo_vigor}/{vigor_max}"
 
-        embed = discord.Embed(title=f"⚔️ {interaction.user.display_name} usou {self.nome_habilidade}", color=0xFF5500)
+        embed = discord.Embed(
+            title=ctx.t("ui.sheet.use_skill_title", name=interaction.user.display_name, skill=self.nome_habilidade),
+            color=0xFF5500,
+        )
         embed.description = self.desc_habilidade or "..."
 
         if vigor_feedback:
@@ -936,57 +1079,73 @@ class HabilidadeButton(ui.Button):
         if self.dado_habilidade:
             detalhes, total = rolar_dados(self.dado_habilidade)
             if detalhes:
-                embed.add_field(name="🎲 Rolagem", value=f"`{self.dado_habilidade}`\nResult: {detalhes}\n# **{total}**")
+                embed.add_field(
+                    name=ctx.t("ui.sheet.roll_field_title"),
+                    value=f"`{self.dado_habilidade}`\n{ctx.t('ui.sheet.result')}: {detalhes}\n# **{total}**",
+                )
         
         await interaction.response.send_message(embed=embed)
         if self.view:
             await self.view.atualizar_botoes_habilidade(interaction, target_message=interaction.message)
 
 class AtributoButton(ui.Button):
-    def __init__(self, nome, valor):
+    def __init__(self, nome, valor, locale: str | None = None):
         label_btn = f"{nome} ({valor})"
         super().__init__(style=discord.ButtonStyle.secondary, label=label_btn, emoji="🎯", row=None)
         self.nome_atributo = nome
         self.valor_atributo = valor
+        self.locale = resolve_locale(locale)
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(RolarPericiaModal(self.nome_atributo, self.valor_atributo))
+        await interaction.response.send_modal(
+            RolarPericiaModal(self.nome_atributo, self.valor_atributo, locale=self.locale)
+        )
 
 
 class RolagemCombateButton(ui.Button):
-    def __init__(self, label, emoji, personagem_id, formula_template):
+    def __init__(self, label, emoji, personagem_id, formula_template, locale: str | None = None):
         super().__init__(style=discord.ButtonStyle.primary, label=label, emoji=emoji, row=2)
         self.personagem_id = personagem_id
         self.formula_template = formula_template
+        self.locale = resolve_locale(locale)
 
     async def callback(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         character_repo = CharacterRepository(interaction.client.db)
         ataque = await character_repo.fetch_attack(self.personagem_id)
 
         if ataque is None:
-            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.character_not_found"),
+                ephemeral=True,
+            )
 
         ataque = ataque or 0
         formula = self.formula_template.format(ataque=ataque)
         detalhes, total = rolar_dados(formula)
         if detalhes is None:
-            return await interaction.response.send_message("❌ Fórmula inválida.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.invalid_formula"),
+                ephemeral=True,
+            )
 
         embed = discord.Embed(
-            title=f"🎲 {interaction.user.display_name} rolou {self.label}",
-            description=f"`{formula}`\nResultado: {detalhes}\n**Total: {total}**",
-            color=0xB5651D
+            title=ctx.t("ui.sheet.roll_result_title", name=interaction.user.display_name, label=self.label),
+            description=f"`{formula}`\n{ctx.t('ui.sheet.result')}: {detalhes}\n**{ctx.t('ui.sheet.total')}: {total}**",
+            color=0xB5651D,
         )
         await interaction.response.send_message(embed=embed)
 
 
 class RolagemPadraoButton(ui.Button):
-    def __init__(self, label: str, emoji: str, personagem_id: int, formula_template: str):
+    def __init__(self, label: str, emoji: str, personagem_id: int, formula_template: str, locale: str | None = None):
         super().__init__(style=discord.ButtonStyle.primary, label=label, emoji=emoji, row=2)
         self.personagem_id = personagem_id
         self.formula_template = formula_template
+        self.locale = resolve_locale(locale)
 
     async def callback(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         character_repo = CharacterRepository(interaction.client.db)
         atributos = await character_repo.list_attributes_dict(self.personagem_id)
         formula_resolvida, missing = resolve_roll_template(self.formula_template, atributos)
@@ -994,45 +1153,50 @@ class RolagemPadraoButton(ui.Button):
         if missing:
             faltantes = ", ".join(sorted(set(missing)))
             return await interaction.response.send_message(
-                f"⚠️ Atributos não encontrados na ficha: {faltantes}.",
+                ctx.t("ui.sheet.attributes_missing", missing=faltantes),
                 ephemeral=True,
             )
 
         detalhes, total = rolar_dados(formula_resolvida)
         if detalhes is None:
-            return await interaction.response.send_message("❌ Fórmula inválida.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.invalid_formula"),
+                ephemeral=True,
+            )
 
         embed = discord.Embed(
-            title=f"🎲 {interaction.user.display_name} rolou {self.label}",
-            description=f"`{formula_resolvida}`\nResultado: {detalhes}\n**Total: {total}**",
+            title=ctx.t("ui.sheet.roll_result_title", name=interaction.user.display_name, label=self.label),
+            description=f"`{formula_resolvida}`\n{ctx.t('ui.sheet.result')}: {detalhes}\n**{ctx.t('ui.sheet.total')}: {total}**",
             color=0x3D5A80,
         )
         await interaction.response.send_message(embed=embed)
 
 
 class ExplorarConhecimentoButton(ui.Button):
-    def __init__(self, personagem_id: int):
+    def __init__(self, personagem_id: int, locale: str | None = None):
         super().__init__(
             style=discord.ButtonStyle.secondary,
-            label="Explorar Conhecimento",
+            label=translate("ui.sheet.explore_knowledge", locale=resolve_locale(locale)),
             emoji="📚",
             row=2,
         )
         self.personagem_id = personagem_id
+        self.locale = resolve_locale(locale)
 
     async def callback(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         db = interaction.client.db
         required_tables = ("lore_entry_tags", "lore_tags", "lore_entries")
         for table in required_tables:
             if not await _table_exists(db, table):
                 return await interaction.response.send_message(
-                    "⚠️ O sistema de tags de lore ainda não está disponível.",
+                    ctx.t("ui.sheet.lore_tags_unavailable"),
                     ephemeral=True,
                 )
 
         if not await _table_exists(db, "personagem_tags"):
             return await interaction.response.send_message(
-                "⚠️ Nenhuma tag foi associada ao seu personagem ainda.",
+                ctx.t("ui.sheet.lore_no_tags"),
                 ephemeral=True,
             )
 
@@ -1044,7 +1208,7 @@ class ExplorarConhecimentoButton(ui.Button):
 
         if not tag_ids:
             return await interaction.response.send_message(
-                "⚠️ Nenhuma tag foi associada ao seu personagem ainda.",
+                ctx.t("ui.sheet.lore_no_tags"),
                 ephemeral=True,
             )
 
@@ -1071,7 +1235,7 @@ class ExplorarConhecimentoButton(ui.Button):
 
         if not rows:
             return await interaction.response.send_message(
-                "📭 Nenhum lore compatível com as tags do seu personagem foi encontrado.",
+                ctx.t("ui.sheet.lore_none_found"),
                 ephemeral=True,
             )
 
@@ -1087,8 +1251,8 @@ class ExplorarConhecimentoButton(ui.Button):
                     color=0x2E7D32,
                 )
                 if tags:
-                    embed.add_field(name="Tags", value=tags, inline=False)
-                _set_footer_timestamp(embed, "Explorar Conhecimento")
+                    embed.add_field(name=ctx.t("ui.sheet.lore_tags"), value=tags, inline=False)
+                _set_footer_timestamp(embed, ctx.t("ui.sheet.lore_footer"), ctx=ctx)
                 embeds.append(embed)
 
         await interaction.response.send_message(embed=embeds[0], ephemeral=True)
@@ -1096,16 +1260,39 @@ class ExplorarConhecimentoButton(ui.Button):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
 class FichaView(BaseRPGView):
-    def __init__(self, bot, personagem_id, user_id_dono):
+    def __init__(self, bot, personagem_id, user_id_dono, locale: str | None = None):
         super().__init__(bot, user_id_dono, timeout=None)
         self.personagem_id = personagem_id
+        self.locale = resolve_locale(locale)
         self._mark_static_items()
+        self._apply_labels()
         self.update_buttons_state("geral")
         self.message = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         self.message = interaction.message
         return await super().interaction_check(interaction)
+
+    def _apply_labels(self) -> None:
+        label_map = {
+            "btn_geral": ("geral", "ui.sheet.general"),
+            "btn_combate": ("combate", "ui.sheet.combat"),
+            "btn_magia": ("magia", "ui.sheet.magic_alchemy"),
+            "btn_atributos": ("atributos", "ui.sheet.attributes_nav"),
+            "btn_acoes_padrao": ("acoes", "ui.sheet.standard_actions"),
+            "btn_inventario": ("inventario", "ui.sheet.inventory"),
+            "btn_buscar": ("buscar", "ui.sheet.search_skill"),
+            "btn_add_skill": ("nova_skill", "ui.sheet.new_skill"),
+            "btn_gerenciar": ("gerenciar", "ui.sheet.manage"),
+        }
+        for child in self.children:
+            if not isinstance(child, ui.Button):
+                continue
+            callback_name = child.callback.__name__
+            if callback_name in label_map:
+                key, i18n_key = label_map[callback_name]
+                child.label = translate(i18n_key, locale=self.locale)
+                child.view_key = key
 
     def _mark_static_items(self):
         for item in self.children:
@@ -1159,22 +1346,29 @@ class FichaView(BaseRPGView):
     # --- AÇÕES (ROW 1) ---
     @ui.button(label="Buscar Perícia", emoji="🔎", style=discord.ButtonStyle.secondary, row=1)
     async def btn_buscar(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
+        ctx = get_interaction_context(interaction)
+        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id, locale=ctx.locale))
 
     @ui.button(label="Nova Skill", emoji="➕", style=discord.ButtonStyle.success, row=1)
     async def btn_add_skill(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self))
+        ctx = get_interaction_context(interaction)
+        await interaction.response.send_modal(NovaHabilidadeModal(self.personagem_id, self, locale=ctx.locale))
 
     @ui.button(label="Gerenciar", emoji="⚙️", style=discord.ButtonStyle.secondary, row=1)
     async def btn_gerenciar(self, interaction: discord.Interaction, button: ui.Button):
+        ctx = get_interaction_context(interaction)
         skill_repo = SkillRepository(interaction.client.db)
         skills = await skill_repo.list_skills(self.personagem_id)
 
         if not skills:
-            return await interaction.response.send_message("❌ Você não tem habilidades para gerenciar.", ephemeral=True)
+            return await interaction.response.send_message(ctx.t("ui.sheet.no_skills_to_manage"), ephemeral=True)
 
-        view_gerenciar = GerenciarHabilidadesView(skills, self)
-        await interaction.response.send_message("Selecione a habilidade que deseja editar ou excluir:", view=view_gerenciar, ephemeral=True)
+        view_gerenciar = GerenciarHabilidadesView(skills, self, locale=ctx.locale)
+        await interaction.response.send_message(
+            ctx.t("ui.sheet.select_skill_manage"),
+            view=view_gerenciar,
+            ephemeral=True,
+        )
 
     # --- MÉTODOS DE EXIBIÇÃO ---
     
@@ -1182,7 +1376,13 @@ class FichaView(BaseRPGView):
         self.update_buttons_state("geral")
         
         db = interaction.client.db
-        embed = await construir_embed_ficha(db, self.personagem_id, interaction.user.id)
+        ctx = get_interaction_context(interaction)
+        embed = await construir_embed_ficha(
+            db,
+            self.personagem_id,
+            interaction.user.id,
+            locale=ctx.locale,
+        )
         if not embed:
             return
 
@@ -1195,7 +1395,8 @@ class FichaView(BaseRPGView):
         if not identidade:
             return
         nome, raca, classe, genero, imagem_url = identidade
-        _apply_embed_identity(embed, nome, classe, raca, genero, imagem_url)
+        ctx = get_interaction_context(interaction)
+        _apply_embed_identity(embed, nome, classe, raca, genero, imagem_url, ctx)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction, target_message: discord.Message = None):
         self.update_buttons_state("magia")
@@ -1213,7 +1414,10 @@ class FichaView(BaseRPGView):
         )
 
         if not recursos:
-            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.character_not_found"),
+                ephemeral=True,
+            )
 
         vigor_atual, vigor_max, toxicidade_atual, toxicidade_max = recursos
         if vigor_atual is None: vigor_atual = vigor_max
@@ -1229,30 +1433,47 @@ class FichaView(BaseRPGView):
             or (nome and "pocao" in nome.lower())
         ]
 
-        embed = discord.Embed(title="✨ Magia & Alquimia", color=0x8E7CC3)
+        embed = discord.Embed(title=ctx.t("ui.sheet.magic_title"), color=0x8E7CC3)
         vigor_bar = gerar_barra(vigor_atual, vigor_max, segmentos=5)
-        embed.add_field(name="⚡ Vigor", value=f"{vigor_bar} {vigor_atual}/{vigor_max}", inline=True)
-        embed.add_field(name="☠️ Toxicidade", value=f"{toxicidade_atual}/{toxicidade_max}", inline=True)
+        embed.add_field(name=ctx.t("ui.sheet.vigor"), value=f"{vigor_bar} {vigor_atual}/{vigor_max}", inline=True)
+        embed.add_field(name=ctx.t("ui.sheet.toxicity"), value=f"{toxicidade_atual}/{toxicidade_max}", inline=True)
 
         if not skills:
-            embed.add_field(name="Sinais/Feitiços", value="Nenhuma habilidade aprendida. Clique em '➕ Nova Skill'.", inline=False)
+            embed.add_field(
+                name=ctx.t("ui.sheet.signals_spells"),
+                value=ctx.t("ui.sheet.no_skills_learned"),
+                inline=False,
+            )
         else:
-            embed.add_field(name="Sinais/Feitiços", value="Clique para conjurar (gasta 1 vigor).", inline=False)
+            embed.add_field(
+                name=ctx.t("ui.sheet.signals_spells"),
+                value=ctx.t("ui.sheet.skills_hint"),
+                inline=False,
+            )
 
         for nome, dado, desc in skills:
-            self.add_item(HabilidadeButton(nome, dado, desc, personagem_id=self.personagem_id, vigor_cost=1))
+            self.add_item(
+                HabilidadeButton(
+                    nome,
+                    dado,
+                    desc,
+                    personagem_id=self.personagem_id,
+                    vigor_cost=1,
+                    locale=ctx.locale,
+                )
+            )
 
         if potions:
             embed.add_field(
-                name="🧪 Poções",
-                value=f"{len(potions)} disponíveis (selecione abaixo para consumir).",
+                name=ctx.t("ui.sheet.potions"),
+                value=ctx.t("ui.sheet.potions_available", count=len(potions)),
                 inline=False
             )
-            self.add_item(PocaoSelect(potions, self.personagem_id))
+            self.add_item(PocaoSelect(potions, self.personagem_id, locale=ctx.locale))
         else:
-            embed.add_field(name="🧪 Poções", value="Nenhuma poção no inventário.", inline=False)
+            embed.add_field(name=ctx.t("ui.sheet.potions"), value=ctx.t("ui.sheet.no_potions"), inline=False)
 
-        _set_footer_timestamp(embed, "Magia & Alquimia")
+        _set_footer_timestamp(embed, ctx.t("ui.sheet.magic_footer"), ctx=ctx)
 
         if target_message:
             await target_message.edit(embed=embed, view=self)
@@ -1264,6 +1485,7 @@ class FichaView(BaseRPGView):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def mostrar_cronicas(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         self.update_buttons_state("cronicas")
         self.clear_dynamic_buttons()
 
@@ -1271,22 +1493,25 @@ class FichaView(BaseRPGView):
         dados = await character_repo.fetch_embed_details(self.personagem_id)
 
         if not dados:
-            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.character_not_found"),
+                ephemeral=True,
+            )
 
         nome, _, classe, _, historia, img, _, _, _, _, _, _, _, _, _, _, _, _ = dados
-        titulo = classe or "Sem título"
+        titulo = classe or ctx.t("ui.common.no_title")
         resumo_historia = (historia or "").strip()
         if not resumo_historia:
-            resumo_historia = "_Sem trajetória registrada._"
+            resumo_historia = ctx.t("ui.sheet.no_story")
         elif len(resumo_historia) > 600:
             resumo_historia = f"{resumo_historia[:600]}..."
 
         embed = discord.Embed(
-            title="📖 Crônicas",
+            title=ctx.t("ui.sheet.chronicles_title"),
             description=f"**{nome}** — {titulo}",
             color=0x8B5E34,
         )
-        embed.add_field(name="🧭 Trajetória", value=resumo_historia, inline=False)
+        embed.add_field(name=ctx.t("ui.sheet.chronicles_path"), value=resumo_historia, inline=False)
 
         async with interaction.client.db.execute(
             """
@@ -1305,17 +1530,17 @@ class FichaView(BaseRPGView):
             for evento_id, conteudo in mencoes:
                 trecho = conteudo[:140] + ("..." if len(conteudo) > 140 else "")
                 linhas.append(f"• **[{evento_id}]** {trecho}")
-            embed.add_field(name="📝 Menções recentes", value="\n".join(linhas), inline=False)
+            embed.add_field(name=ctx.t("ui.sheet.recent_mentions"), value="\n".join(linhas), inline=False)
         else:
             embed.add_field(
-                name="📝 Menções recentes",
-                value="_Nenhuma menção recente no diário._",
+                name=ctx.t("ui.sheet.recent_mentions"),
+                value=ctx.t("ui.sheet.no_mentions"),
                 inline=False,
             )
 
         if img:
             embed.set_thumbnail(url=img)
-        _set_footer_timestamp(embed, "Crônicas do personagem")
+        _set_footer_timestamp(embed, ctx.t("ui.sheet.chronicles_footer"), ctx=ctx)
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -1323,6 +1548,7 @@ class FichaView(BaseRPGView):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def mostrar_combate(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         self.update_buttons_state("combate")
         self.clear_dynamic_buttons()
 
@@ -1336,7 +1562,10 @@ class FichaView(BaseRPGView):
         )
 
         if not dados:
-            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.character_not_found"),
+                ephemeral=True,
+            )
 
         hp_atual, hp_max, ataque, defesa = dados
         if hp_atual is None:
@@ -1352,23 +1581,29 @@ class FichaView(BaseRPGView):
             if "armadura" in tipo_lower or "armor" in tipo_lower or "escudo" in nome_lower:
                 armaduras.append((nome, efeito))
 
-        armas_txt = "\n".join([f"• **{n}** — {e or 'Sem efeito'}" for n, e in armas]) or "Sem armas equipadas."
-        armaduras_txt = "\n".join([f"• **{n}** — {e or 'Sem efeito'}" for n, e in armaduras]) or "Sem armaduras registradas."
+        armas_txt = (
+            "\n".join([f"• **{n}** — {e or ctx.t('ui.common.no_effect')}" for n, e in armas])
+            or ctx.t("ui.common.no_items")
+        )
+        armaduras_txt = (
+            "\n".join([f"• **{n}** — {e or ctx.t('ui.common.no_effect')}" for n, e in armaduras])
+            or ctx.t("ui.common.no_items")
+        )
 
         hp_bar = gerar_barra(hp_atual, hp_max, segmentos=5)
-        embed = discord.Embed(title="⚔️ Combate", color=_cor_por_hp(hp_atual, hp_max))
-        embed.add_field(name="❤️ Vida", value=f"{hp_bar} {hp_atual}/{hp_max}", inline=True)
-        embed.add_field(name="⚔️ Ataque", value=str(ataque), inline=True)
-        embed.add_field(name="🛡️ SP Atual", value=str(defesa), inline=True)
-        embed.add_field(name="Armas", value=armas_txt, inline=False)
-        embed.add_field(name="Armadura", value=armaduras_txt, inline=False)
-        embed.add_field(name="Ferimentos Críticos", value="Use a tabela interativa abaixo.", inline=False)
+        embed = discord.Embed(title=ctx.t("ui.sheet.combat_title"), color=_cor_por_hp(hp_atual, hp_max))
+        embed.add_field(name=ctx.t("ui.sheet.life"), value=f"{hp_bar} {hp_atual}/{hp_max}", inline=True)
+        embed.add_field(name=ctx.t("ui.sheet.attack"), value=str(ataque), inline=True)
+        embed.add_field(name=ctx.t("ui.sheet.current_sp"), value=str(defesa), inline=True)
+        embed.add_field(name=ctx.t("ui.sheet.weapons"), value=armas_txt, inline=False)
+        embed.add_field(name=ctx.t("ui.sheet.armor"), value=armaduras_txt, inline=False)
+        embed.add_field(name=ctx.t("ui.sheet.critical_wounds"), value=ctx.t("ui.sheet.critical_wounds_hint"), inline=False)
 
-        self.add_item(RolagemCombateButton("Roll to Hit", "🎯", self.personagem_id, "1d20+{ataque}"))
-        self.add_item(RolagemCombateButton("Roll Damage", "💥", self.personagem_id, "1d6+{ataque}"))
-        self.add_item(FerimentosCriticosSelect())
+        self.add_item(RolagemCombateButton(ctx.t("ui.sheet.roll_to_hit"), "🎯", self.personagem_id, "1d20+{ataque}", locale=ctx.locale))
+        self.add_item(RolagemCombateButton(ctx.t("ui.sheet.roll_damage"), "💥", self.personagem_id, "1d6+{ataque}", locale=ctx.locale))
+        self.add_item(FerimentosCriticosSelect(locale=ctx.locale))
 
-        _set_footer_timestamp(embed, "Combate")
+        _set_footer_timestamp(embed, ctx.t("ui.sheet.combat_footer"), ctx=ctx)
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -1376,26 +1611,27 @@ class FichaView(BaseRPGView):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def mostrar_acoes_padrao(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         self.update_buttons_state("acoes")
         self.clear_dynamic_buttons()
 
         rolls_repo = RollsRepository(interaction.client.db)
         rolagens = await rolls_repo.list_rolls(self.personagem_id)
 
-        embed = discord.Embed(title="🎬 Ações Padrão", color=0x3D5A80)
+        embed = discord.Embed(title=ctx.t("ui.sheet.standard_actions_title"), color=0x3D5A80)
         if not rolagens:
-            embed.description = "Nenhuma rolagem padrão cadastrada para este personagem."
+            embed.description = ctx.t("ui.sheet.no_standard_rolls")
         else:
             linhas = [
                 f"• **{nome}** `{formula}`" + (f" _({categoria})_" if categoria else "")
                 for _, nome, formula, categoria, _ in rolagens
             ]
-            embed.add_field(name="Rolagens", value="\n".join(linhas), inline=False)
+            embed.add_field(name=ctx.t("ui.sheet.rolls"), value="\n".join(linhas), inline=False)
 
             for _, nome, formula, _, _ in rolagens:
-                self.add_item(RolagemPadraoButton(nome, "🎲", self.personagem_id, formula))
+                self.add_item(RolagemPadraoButton(nome, "🎲", self.personagem_id, formula, locale=ctx.locale))
 
-        _set_footer_timestamp(embed, "Ações padrão da ficha")
+        _set_footer_timestamp(embed, ctx.t("ui.sheet.standard_actions_footer"), ctx=ctx)
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -1403,6 +1639,7 @@ class FichaView(BaseRPGView):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def mostrar_inventario(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         self.update_buttons_state("inventario")
         self.clear_dynamic_buttons()
 
@@ -1417,10 +1654,10 @@ class FichaView(BaseRPGView):
         nivel = nivel if nivel is not None else 1
 
         if not itens:
-            descricao = "🎒 Seu inventário está vazio.\n\nVisite a **/loja** para comprar equipamentos ou explore o mundo para encontrar tesouros!"
+            descricao = ctx.t("ui.sheet.inventory_empty")
         else:
             descricao = "\n".join([
-                f"• **{nome}** ({tipo}) — 💰 {valor}\n  {efeito or 'Sem efeito'}"
+                f"• **{nome}** ({tipo}) — 💰 {ctx.format_currency(valor)}\n  {efeito or ctx.t('ui.common.no_effect')}"
                 for nome, tipo, valor, efeito in itens[:20]
             ])
 
@@ -1428,13 +1665,13 @@ class FichaView(BaseRPGView):
         capacidade = 10 + (nivel * 2)
         barra_encumbrance = _gerar_barra_encumbrance(encumbrance, capacidade)
 
-        embed = discord.Embed(title="🎒 Inventário", description=descricao, color=0xC9B78C)
+        embed = discord.Embed(title=ctx.t("ui.sheet.inventory_title"), description=descricao, color=0xC9B78C)
         embed.add_field(
-            name="Encumbrance",
-            value=f"{barra_encumbrance} {encumbrance}/{capacidade} (1 por item)",
+            name=ctx.t("ui.sheet.encumbrance"),
+            value=f"{barra_encumbrance} {ctx.t('ui.sheet.encumbrance_hint', value=f'{encumbrance}/{capacidade}')}",
             inline=False,
         )
-        _set_footer_timestamp(embed, "Inventário")
+        _set_footer_timestamp(embed, ctx.t("ui.sheet.inventory_footer"), ctx=ctx)
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -1442,6 +1679,7 @@ class FichaView(BaseRPGView):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def atualizar_botoes_atributos(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         self.update_buttons_state("atributos")
         self.clear_dynamic_buttons()
 
@@ -1450,20 +1688,20 @@ class FichaView(BaseRPGView):
         atributos_map = {nome: valor for nome, valor in atributos}
         derived_stats = character_repo.calculate_derived_stats(atributos_map)
 
-        embed = discord.Embed(title="🎯 Atributos", color=0x5865f2)
+        embed = discord.Embed(title=ctx.t("ui.sheet.attributes_title"), color=0x5865f2)
         if not atributos:
-            embed.description = "Nenhum atributo cadastrado. Use /atributo_definir para criar."
+            embed.description = ctx.t("ui.sheet.no_attributes")
         else:
-            embed.description = "Clique em um atributo para rolar uma perícia."
+            embed.description = ctx.t("ui.sheet.attributes_hint")
             for nome, valor in atributos:
-                self.add_item(AtributoButton(nome, valor))
+                self.add_item(AtributoButton(nome, valor, locale=ctx.locale))
             embed.add_field(
-                name="🧠 Atributos",
-                value=_format_dual_column(atributos, name_width=10, value_width=3),
+                name=ctx.t("ui.sheet.attributes"),
+                value=_format_dual_column(atributos, name_width=10, value_width=3, ctx=ctx),
                 inline=True
             )
             embed.add_field(
-                name="📊 Derivados",
+                name=ctx.t("ui.sheet.derived"),
                 value=_format_dual_column(
                     [
                         ("Stun", derived_stats["Stun"]),
@@ -1476,12 +1714,13 @@ class FichaView(BaseRPGView):
                     ],
                     name_width=9,
                     value_width=5,
+                    ctx=ctx,
                 ),
                 inline=True,
             )
-        self.add_item(ExplorarConhecimentoButton(self.personagem_id))
+        self.add_item(ExplorarConhecimentoButton(self.personagem_id, locale=ctx.locale))
 
-        _set_footer_timestamp(embed, "Atributos")
+        _set_footer_timestamp(embed, ctx.t("ui.sheet.attributes_footer"), ctx=ctx)
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
@@ -1489,20 +1728,24 @@ class FichaView(BaseRPGView):
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def mostrar_minha_lore(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         character_repo = CharacterRepository(interaction.client.db)
         dados = await character_repo.fetch_embed_details(self.personagem_id)
 
         if not dados:
-            return await interaction.response.send_message("❌ Personagem não encontrado.", ephemeral=True)
+            return await interaction.response.send_message(
+                ctx.t("ui.sheet.character_not_found"),
+                ephemeral=True,
+            )
 
         nome, _, classe, _, historia, img, _, _, _, _, _, _, _, _, _, _, _, _ = dados
-        titulo = classe or "Sem título"
+        titulo = classe or ctx.t("ui.common.no_title")
         historia = (historia or "").strip()
 
         if not historia:
             embed = discord.Embed(
-                title=f"📚 Minha Lore — {nome}",
-                description="_Biografia ainda não registrada._",
+                title=ctx.t("ui.sheet.my_lore_title", name=nome),
+                description=ctx.t("ui.sheet.lore_unregistered"),
                 color=0x5C7AEA,
             )
             if img:
@@ -1511,7 +1754,7 @@ class FichaView(BaseRPGView):
 
         if len(historia) <= 3800:
             embed = discord.Embed(
-                title=f"📚 Minha Lore — {nome}",
+                title=ctx.t("ui.sheet.my_lore_title", name=nome),
                 description=historia,
                 color=0x5C7AEA,
             )
@@ -1523,11 +1766,12 @@ class FichaView(BaseRPGView):
         buffer = io.BytesIO(historia.encode("utf-8"))
         arquivo = discord.File(fp=buffer, filename=f"lore_{nome}.txt")
         return await interaction.response.send_message(
-            content=f"📚 **{nome}, {titulo}** — biografia completa em anexo.",
+            content=ctx.t("ui.sheet.lore_file", name=nome, title=titulo),
             file=arquivo,
             ephemeral=True,
         )
     async def mostrar_diario(self, interaction: discord.Interaction):
+        ctx = get_interaction_context(interaction)
         db = interaction.client.db
         async with db.execute(
             """
@@ -1541,7 +1785,7 @@ class FichaView(BaseRPGView):
             rows = await cursor.fetchall()
 
         if not rows:
-            mensagem = "📭 O diário está vazio. A IA não sabe nada sobre sua história atual."
+            mensagem = ctx.t("ui.sheet.campaign_log_empty")
             if interaction.response.is_done():
                 return await interaction.followup.send(mensagem, ephemeral=True)
             return await interaction.response.send_message(mensagem, ephemeral=True)
@@ -1555,11 +1799,11 @@ class FichaView(BaseRPGView):
         embeds = []
         for parte in _split_text(texto, 3800):
             embed = discord.Embed(
-                title="📖 Diário da Campanha",
+                title=ctx.t("ui.sheet.campaign_log_title"),
                 description=parte or "—",
                 color=0xA84300,
             )
-            embed.set_footer(text="Linha do tempo registrada até agora.")
+            embed.set_footer(text=ctx.t("ui.sheet.campaign_log_footer"))
             embeds.append(embed)
 
         if interaction.response.is_done():
