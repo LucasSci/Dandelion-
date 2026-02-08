@@ -1,29 +1,29 @@
-# 🧭 Arquitetura
+# Arquitetura e responsabilidades dos módulos
 
 ## Visão geral
+Este repositório segue um fluxo típico de bot Discord: **cogs** recebem comandos e delegam para serviços, que orquestram regras de negócio e dependências. Persistência e integrações externas ficam em **infra**. Regras de domínio permanecem isoladas em módulos próprios.
 
-O Dandelion é composto por um bot Discord, uma camada de persistência SQLite, módulos de regras e um serviço HTTP/WebSocket opcional para integração com VTT.
+## Mapeamento de módulos
 
-## Componentes principais
+| Camada | Módulo | Responsabilidade principal |
+| --- | --- | --- |
+| Apresentação | `cogs/` | Comandos do Discord, orquestração de respostas e validações de UI. |
+| Apresentação | `ui/` | Views e componentes de interação (embeds, botões, modais). |
+| Aplicação | `application/services/` | Casos de uso e fluxos de campanha (ex.: campanha solo). |
+| Aplicação | `application/models/` | Objetos de transporte de dados entre camadas. |
+| Aplicação | `application/ports/` | Interfaces (ports) para integrações externas e repositórios. |
+| Domínio | `rpg_core/` | Regras e cálculos de sistema (atributos, stats derivados, schemas). |
+| Infra | `infrastructure/repositories/` | Adaptações para persistência em banco/SQLite. |
+| Infra | `data/repositories/` | Implementações concretas de acesso ao banco (SQL assíncrono). |
+| Infra | `database/` | Conexão, migrações e schema do banco. |
+| Suporte | `utils/` | Utilitários comuns (ex.: parsing de dados/rolagens). |
+| Suporte | `scripts/` | Scripts auxiliares e tarefas pontuais. |
 
-### Bot Discord
-- **Ponto de entrada**: `bot.py` instancia o `DandelionBot`, inicializa o banco e carrega as extensões/cogs. O bot mantém sessão HTTP e conexão persistente com SQLite para atender comandos e integrações. 
-- **Configuração**: `config.py` centraliza as variáveis de ambiente (tokens, URLs e flags). 
+## Separação de responsabilidades
 
-### Cogs e UI
-- **Cogs**: ficam em `cogs/` e são carregadas pelo `DandelionBot` com base nas listas `extensions` e `optional_extensions` do settings. 
-- **UI**: componentes de interface (views/modais) para Discord estão em `ui/`.
+- **Aplicação**: consolida regras de fluxo (como avanço de campanha) e expõe resultados prontos para a camada de apresentação.
+- **Infra**: concentra acesso a banco e integrações externas; a aplicação depende apenas de interfaces (`ports`).
+- **Domínio**: mantém regras de jogo isoladas para reutilização.
 
-### Persistência
-- **SQLite**: o banco é inicializado via `database.init_db`, que aplica schema, migrações e seeds na inicialização. 
-- **Seeds**: dados iniciais e bestiário ficam em `data/seeds/` e são aplicados via `database/seeds.py`.
-
-### API/VTT
-- **FastAPI**: `api/routes.py` expõe endpoints HTTP para rolagens e atualização de combate, além de WebSocket para eventos de VTT.
-- **Motor de grid**: `vtt_engine/grid_system.py` fornece geração de mapas, custos de terreno e pathfinding.
-
-## Fluxo de dados (alto nível)
-1. Usuário aciona um slash command no Discord.
-2. O `DandelionBot` encaminha para a cog correspondente.
-3. A cog aplica regras (ex.: `witcher_rules.py`) e lê/escreve no SQLite.
-4. (Opcional) eventos de combate/mapa podem ser enviados/recebidos via API/VTT.
+## Integrações externas
+As integrações externas (banco de dados, APIs ou outros serviços) devem ser consumidas por meio de interfaces definidas em `application/ports/` e implementadas em `infrastructure/`.
