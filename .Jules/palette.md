@@ -41,6 +41,6 @@
 **Learning:** Checking user state (e.g., "Has Character?") during permission checks transforms a negative "Access Denied" into a personalized onboarding flow (e.g., "Create yours" vs "View yours").
 **Action:** In `interaction_check`, perform lightweight state checks to offer the most relevant next step, rather than a generic "Access Denied" message.
 
-## 2024-05-24 - Looping Navigation in Modals
-**Learning:** Modals that end in "dead ends" (success or empty results) force users to restart navigation flows manually. Attaching a "Retry" or "New Action" view to the result message keeps the user in the flow.
-**Action:** Always attach a View with a "Retry/New" button to the response of a Modal if the action is repeatable (like searching).
+## 2026-01-21 - Rich Success States
+**Learning:** Text-only feedback for complex actions (like creating a skill with stats) feels "thin" and leaves users wondering if all data was captured correctly.
+**Action:** Use rich Embeds for success states of complex creation/edit actions to validate the input back to the user and increase the sense of accomplishment.
