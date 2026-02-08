@@ -49,6 +49,7 @@ def load_settings() -> Settings:
             "cogs.alchemy",
             "cogs.bestiary",
             "cogs.combat",
+            "cogs.feedback_support",
             "cogs.command_tester",
             "cogs.scribe",
             "cogs.quests",
