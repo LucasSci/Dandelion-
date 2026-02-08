@@ -19,6 +19,10 @@ class Settings:
     sync_commands: bool
     extensions: Tuple[str, ...]
     optional_extensions: Tuple[str, ...]
+    default_locale: str
+    default_timezone: str
+    default_currency: str
+    priority_languages: Tuple[str, ...]
 
 
 def load_settings() -> Settings:
@@ -50,6 +54,14 @@ def load_settings() -> Settings:
             "cogs.solo",
         ),
         optional_extensions=("cogs.shop",),
+        default_locale=os.getenv("DEFAULT_LOCALE", "pt-BR"),
+        default_timezone=os.getenv("DEFAULT_TIMEZONE", "UTC"),
+        default_currency=os.getenv("DEFAULT_CURRENCY", "BRL"),
+        priority_languages=tuple(
+            lang.strip()
+            for lang in os.getenv("PRIORITY_LANGUAGES", "pt-BR,en-US,es-ES").split(",")
+            if lang.strip()
+        ),
     )
 
 

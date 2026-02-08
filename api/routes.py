@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any, List, Tuple
 
-from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from vtt_engine.grid_system import GridMap
 from witcher_rules import rolar_pericia
 from witcher_rules import rolar_d10_explosivo
+from utils.i18n import get_request_locale, translate
 
 
 router = APIRouter()
@@ -115,9 +116,13 @@ def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
 
 
 @router.post("/vtt/event", response_model=None)
-async def vtt_event(payload: VTTEvent) -> dict[str, str]:
+async def vtt_event(payload: VTTEvent, request: Request) -> dict[str, str]:
     await ws_manager.broadcast({"event": payload.event_type, "data": payload.payload})
-    return {"status": "ok"}
+    locale = get_request_locale(request)
+    return {
+        "status": translate("api.status.ok", locale=locale),
+        "message": translate("api.status.event_received", locale=locale),
+    }
 
 
 @router.websocket("/ws/vtt")
