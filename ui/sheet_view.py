@@ -628,13 +628,16 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
         skill_repo = SkillRepository(interaction.client.db)
         resultados = await skill_repo.search_skills(self.personagem_id, termo_sql, limit=5)
 
+        # Palette: Add "New Search" view to allow immediate retry
+        view_retry = NovaBuscaView(self.personagem_id)
+
         if not resultados:
             embed = discord.Embed(
                 title="🔎 Nenhuma perícia encontrada",
                 description=f"Não encontramos nada com **'{termo_busca}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
                 color=0xED4245
             )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
+            return await interaction.response.send_message(embed=embed, ephemeral=True, view=view_retry)
 
         embed = discord.Embed(
             title=f"🔎 Resultados para '{self.termo.value}'",
@@ -651,11 +654,20 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
             )
 
         embed.set_footer(text="Mostrando os 5 primeiros resultados.")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True, view=view_retry)
 
 # ==============================================================================
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)
 # ==============================================================================
+
+class NovaBuscaView(ui.View):
+    def __init__(self, personagem_id):
+        super().__init__(timeout=60)
+        self.personagem_id = personagem_id
+
+    @ui.button(label="Nova Busca", emoji="🔎", style=discord.ButtonStyle.primary)
+    async def btn_nova_busca(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
 
 class AcoesHabilidadeView(ui.View):
     def __init__(self, skill_id, nome, dado, desc, view_ficha):
