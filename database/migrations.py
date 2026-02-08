@@ -30,6 +30,8 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     # 1. Migração Personagens (HP Atual, MP, etc)
     personagens_extras = [
         ("titulo", "TEXT"),
+        ("historia", "TEXT"),
+        ("imagem_url", "TEXT"),
         ("hp_max", "INTEGER DEFAULT 30"),
         ("mp_max", "INTEGER DEFAULT 10"),
         ("vigor_max", "INTEGER DEFAULT 10"),
