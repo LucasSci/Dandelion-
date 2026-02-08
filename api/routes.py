@@ -9,6 +9,7 @@ from api.security import authorize, authorize_websocket
 from vtt_engine.grid_system import GridMap
 from witcher_rules import rolar_pericia
 from witcher_rules import rolar_d10_explosivo
+from utils.i18n import get_request_locale, translate
 
 
 router = APIRouter()
