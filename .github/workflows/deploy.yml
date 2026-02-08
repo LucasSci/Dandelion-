@@ -1,0 +1,100 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Ambiente de destino"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      canary_percent:
+        description: "Percentual de tráfego no canário"
+        required: false
+        default: "10"
+  push:
+    branches:
+      - develop
+      - main
+    tags:
+      - "v*"
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy canary (dev)
+        env:
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
+          RELEASE_ID: ${{ github.sha }}
+        run: |
+          ./scripts/deploy.sh canary dev 10
+          ./scripts/deploy.sh healthcheck dev
+          ./scripts/deploy.sh promote dev
+      - name: Rollback on failure (dev)
+        if: failure()
+        run: ./scripts/deploy.sh rollback dev
+
+  deploy-staging:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy canary (staging)
+        env:
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
+          RELEASE_ID: ${{ github.sha }}
+        run: |
+          ./scripts/deploy.sh canary staging 10
+          ./scripts/deploy.sh healthcheck staging
+          ./scripts/deploy.sh promote staging
+      - name: Rollback on failure (staging)
+        if: failure()
+        run: ./scripts/deploy.sh rollback staging
+
+  deploy-prod:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy canary (prod)
+        env:
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
+          RELEASE_ID: ${{ github.ref_name }}
+        run: |
+          ./scripts/deploy.sh canary prod 5
+          ./scripts/deploy.sh healthcheck prod
+          ./scripts/deploy.sh promote prod
+      - name: Rollback on failure (prod)
+        if: failure()
+        run: ./scripts/deploy.sh rollback prod
+
+  deploy-manual:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target_environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy canary (manual)
+        env:
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
+          RELEASE_ID: ${{ github.sha }}
+        run: |
+          ./scripts/deploy.sh canary ${{ inputs.target_environment }} ${{ inputs.canary_percent }}
+          ./scripts/deploy.sh healthcheck ${{ inputs.target_environment }}
+          ./scripts/deploy.sh promote ${{ inputs.target_environment }}
+      - name: Rollback on failure (manual)
+        if: failure()
+        run: ./scripts/deploy.sh rollback ${{ inputs.target_environment }}
