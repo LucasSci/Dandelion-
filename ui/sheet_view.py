@@ -15,6 +15,7 @@ from data.repositories import (
     SoloRepository,
 )
 from ui.base_view import BaseRPGView
+from ui.design_system import apply_navigation_state
 from ui.views import ConfirmarExclusaoView
 from utils import rolar_dados, rolar_pericia_explosiva, gerar_barra
 from utils.roll_templates import resolve_roll_template
@@ -171,6 +172,37 @@ def _resumir_texto(texto: str, limite: int = 180) -> str:
     return f"{texto[:limite]}..."
 
 
+def _criar_embed_erro_formula(input_str: str) -> discord.Embed:
+    """Gera um Embed de erro amigável para fórmulas de dados inválidas."""
+    input_clean = input_str.strip()
+
+    embed = discord.Embed(
+        title="❌ Fórmula Inválida",
+        description=f"Não entendi a fórmula `{input_clean}`.",
+        color=0xED4245
+    )
+
+    # Tentativa de correção (Sugestão inteligente)
+    import re
+    # Se começou com 'd' seguido de número (ex: d20), esqueceu a quantidade
+    if re.match(r"^d\d+", input_clean, re.IGNORECASE):
+        sugestao = f"1{input_clean}"
+        embed.description = f"Você quis dizer `{sugestao}`?"
+        embed.add_field(name="💡 Dica", value=f"Sempre indique a quantidade de dados (ex: **1**d20).")
+
+    # Se digitou apenas texto (ex: 'Fogo')
+    elif re.match(r"^[a-zA-Z\s]+$", input_clean):
+        embed.add_field(name="💡 Dica", value="Use notação de dados padrão (ex: 4d6). O nome da habilidade vai em outro campo!")
+
+    embed.add_field(
+        name="✅ Formatos Válidos",
+        value="• `1d20` (Um dado de 20 faces)\n• `2d6+3` (Dois dados de 6 faces mais 3)\n• `10` (Valor fixo)",
+        inline=False
+    )
+
+    return embed
+
+
 async def _table_exists(db, table: str) -> bool:
     async with db.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
@@ -315,12 +347,34 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
         if self.dado.value:
             detalhes, _ = rolar_dados(self.dado.value)
             if detalhes is None:
-                return await interaction.response.send_message("❌ Fórmula inválida. Use ex: `1d20+5` ou `10`", ephemeral=True)
+                embed = discord.Embed(
+                    title="❌ Fórmula Inválida",
+                    description=f"Não consegui entender a fórmula **`{self.dado.value}`**.",
+                    color=0xED4245
+                )
+                embed.add_field(
+                    name="💡 Exemplos de Fórmulas",
+                    value="• `1d20+5` (Um d20 mais 5)\n• `2d6` (Dois d6)\n• `d10` (Um d10)\n• `10` (Valor fixo)",
+                    inline=False
+                )
+                return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         skill_repo = SkillRepository(interaction.client.db)
         await skill_repo.add_skill(self.personagem_id, self.nome.value, self.descricao.value, self.dado.value)
         
-        await interaction.response.send_message(f"✅ Habilidade **{self.nome.value}** aprendida!", ephemeral=True)
+        # Rich Success State
+        embed = discord.Embed(
+            title="✨ Habilidade Aprendida!",
+            color=0x57F287
+        )
+        embed.add_field(name="Nome", value=self.nome.value, inline=True)
+        if self.dado.value:
+            embed.add_field(name="Dano/Efeito", value=self.dado.value, inline=True)
+        if self.descricao.value:
+            embed.add_field(name="Descrição", value=self.descricao.value, inline=False)
+        embed.set_footer(text="Habilidade adicionada à sua ficha.")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
 class EditarHabilidadeModal(ui.Modal, title="✏️ Editar Habilidade"):
@@ -341,12 +395,33 @@ class EditarHabilidadeModal(ui.Modal, title="✏️ Editar Habilidade"):
         if self.dado_input.value:
             detalhes, _ = rolar_dados(self.dado_input.value)
             if detalhes is None:
-                return await interaction.response.send_message("❌ Fórmula inválida.", ephemeral=True)
+                embed = discord.Embed(
+                    title="❌ Fórmula Inválida",
+                    description=f"Não consegui entender a fórmula **`{self.dado_input.value}`**.",
+                    color=0xED4245
+                )
+                embed.add_field(
+                    name="💡 Exemplos de Fórmulas",
+                    value="• `1d20+5` (Um d20 mais 5)\n• `2d6` (Dois d6)\n• `d10` (Um d10)\n• `10` (Valor fixo)",
+                    inline=False
+                )
+                return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         skill_repo = SkillRepository(interaction.client.db)
         await skill_repo.update_skill(self.skill_id, self.nome_input.value, self.dado_input.value, self.desc_input.value)
         
-        await interaction.response.send_message(f"✅ Habilidade **{self.nome_input.value}** atualizada!", ephemeral=True)
+        # Rich Success State
+        embed = discord.Embed(
+            title="✏️ Habilidade Atualizada!",
+            color=0xFEE75C
+        )
+        embed.add_field(name="Nome", value=self.nome_input.value, inline=True)
+        if self.dado_input.value:
+            embed.add_field(name="Dano/Efeito", value=self.dado_input.value, inline=True)
+        if self.desc_input.value:
+            embed.add_field(name="Descrição", value=self.desc_input.value, inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
 class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
@@ -461,6 +536,17 @@ class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
         embed.add_field(name="🏆 Nível", value=nivel, inline=False)
         embed.add_field(name="Classificação", value=classificacao, inline=False)
 
+        # Palette: UX Improvement - Color coded results
+        color_map = {
+            "Falha": 0xED4245,           # Red
+            "Vitória Marginal": 0xFEE75C,# Yellow
+            "Vitória": 0x57F287,         # Green
+            "Vitória Maior": 0x57F287,   # Green
+            "Crítica": 0x57F287,         # Green
+            "Sucesso": 0x57F287,         # Green (via _avaliar_dificuldade fallback)
+        }
+        embed.color = color_map.get(nivel, 0x2b2d31)
+
         await interaction.response.send_message(embed=embed)
 
     def _parse_dificuldade(self) -> Optional[int]:
@@ -554,14 +640,16 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
         skill_repo = SkillRepository(interaction.client.db)
         resultados = await skill_repo.search_skills(self.personagem_id, termo_sql, limit=5)
 
+        # Palette: Add "New Search" view to allow immediate retry
+        view_retry = NovaBuscaView(self.personagem_id)
+
         if not resultados:
             embed = discord.Embed(
                 title="🔎 Nenhuma perícia encontrada",
                 description=f"Não encontramos nada com **'{termo_busca}'**.\n\n💡 **Dica:** Tente buscar por partes do nome (ex: 'Fogo' em vez de 'Bola de Fogo') ou verifique se a habilidade já foi criada na aba **Magia**.",
                 color=0xED4245
             )
-            view = TentarBuscaNovamenteView(self.personagem_id)
-            return await interaction.response.send_message(embed=embed, ephemeral=True, view=view)
+            return await interaction.response.send_message(embed=embed, ephemeral=True, view=view_retry)
 
         embed = discord.Embed(
             title=f"🔎 Resultados para '{self.termo.value}'",
@@ -578,7 +666,7 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
             )
 
         embed.set_footer(text="Mostrando os 5 primeiros resultados.")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True, view=view_retry)
 
 class TentarBuscaNovamenteView(ui.View):
     def __init__(self, personagem_id):
@@ -592,6 +680,15 @@ class TentarBuscaNovamenteView(ui.View):
 # ==============================================================================
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)
 # ==============================================================================
+
+class NovaBuscaView(ui.View):
+    def __init__(self, personagem_id):
+        super().__init__(timeout=60)
+        self.personagem_id = personagem_id
+
+    @ui.button(label="Nova Busca", emoji="🔎", style=discord.ButtonStyle.primary)
+    async def btn_nova_busca(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
 
 class AcoesHabilidadeView(ui.View):
     def __init__(self, skill_id, nome, dado, desc, view_ficha):
@@ -614,7 +711,13 @@ class AcoesHabilidadeView(ui.View):
             skill_repo = SkillRepository(itx.client.db)
             await skill_repo.delete_skill(self.skill_id)
 
-            await itx.response.edit_message(content=f"🗑️ Habilidade **{self.nome}** removida.", view=None)
+            # Rich Success State
+            embed = discord.Embed(
+                title="🗑️ Habilidade Removida",
+                description=f"A habilidade **{self.nome}** foi excluída da sua ficha.",
+                color=0xED4245
+            )
+            await itx.response.edit_message(content=None, embed=embed, view=None)
             await self.view_ficha.atualizar_botoes_habilidade(itx)
 
         async def cancelar(itx: discord.Interaction):
@@ -764,6 +867,8 @@ class PocaoSelect(ui.Select):
 
         embed.add_field(name="☠️ Toxicidade", value=f"{tox_bar} +{custo_toxicidade} ({nova_toxicidade}/{toxicidade_max})")
         await interaction.response.send_message(embed=embed, ephemeral=True)
+        if self.view:
+            await self.view.atualizar_botoes_habilidade(interaction, target_message=interaction.message)
 
 class PocaoView(ui.View):
     def __init__(self, potions, personagem_id):
@@ -806,10 +911,14 @@ class HabilidadeButton(ui.Button):
                 vigor_atual = vigor_max
 
             if vigor_atual < self.vigor_cost:
-                return await interaction.response.send_message(
-                    "⚠️ Vigor insuficiente para conjurar.",
-                    ephemeral=True
+                vigor_bar = gerar_barra(vigor_atual, vigor_max, tamanho=5)
+                embed_erro = discord.Embed(
+                    title="⚠️ Vigor Insuficiente",
+                    description=f"Você precisa de **{self.vigor_cost}** Vigor para usar **{self.nome_habilidade}**, mas tem apenas **{vigor_atual}**.",
+                    color=0xED4245
                 )
+                embed_erro.add_field(name="Vigor Atual", value=f"{vigor_bar} {vigor_atual}/{vigor_max}", inline=False)
+                return await interaction.response.send_message(embed=embed_erro, ephemeral=True)
 
             novo_vigor = max(vigor_atual - self.vigor_cost, 0)
             await character_repo.update_vigor(self.personagem_id, novo_vigor)
@@ -830,6 +939,8 @@ class HabilidadeButton(ui.Button):
                 embed.add_field(name="🎲 Rolagem", value=f"`{self.dado_habilidade}`\nResult: {detalhes}\n# **{total}**")
         
         await interaction.response.send_message(embed=embed)
+        if self.view:
+            await self.view.atualizar_botoes_habilidade(interaction, target_message=interaction.message)
 
 class AtributoButton(ui.Button):
     def __init__(self, nome, valor):
@@ -990,44 +1101,35 @@ class FichaView(BaseRPGView):
         self.personagem_id = personagem_id
         self._mark_static_items()
         self.update_buttons_state("geral")
+        self.message = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        self.message = interaction.message
+        return await super().interaction_check(interaction)
 
     def _mark_static_items(self):
         for item in self.children:
             item.is_static = True
 
     def update_buttons_state(self, mode: str):
+        navigation_map = {
+            "Geral": "geral",
+            "Combate": "combate",
+            "Atributos": "atributos",
+            "Magia/Alquimia": "magia",
+            "Ações Padrão": "acoes",
+            "Inventário": "inventario",
+        }
+        apply_navigation_state(self, mode, navigation_map)
         for item in self.children:
-            if isinstance(item, ui.Button) and item.label:
-                if item.label == "Geral":
-                    is_active = mode == "geral"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Combate":
-                    is_active = mode == "combate"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Atributos":
-                    is_active = mode == "atributos"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Magia/Alquimia":
-                    is_active = mode == "magia"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Ações Padrão":
-                    is_active = mode == "acoes"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Inventário":
-                    is_active = mode == "inventario"
-                    item.disabled = is_active
-                    item.style = discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary
-                elif item.label == "Buscar Perícia":
-                    item.disabled = (mode != "geral")
-                    item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
-                elif item.label in {"Nova Skill", "Gerenciar"}:
-                    item.disabled = (mode != "magia")
-                    item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
+            if not isinstance(item, ui.Button) or not item.label:
+                continue
+            if item.label == "Buscar Perícia":
+                item.disabled = (mode != "geral")
+                item.style = discord.ButtonStyle.primary if mode == "geral" else discord.ButtonStyle.secondary
+            elif item.label in {"Nova Skill", "Gerenciar"}:
+                item.disabled = (mode != "magia")
+                item.style = discord.ButtonStyle.success if item.label == "Nova Skill" and mode == "magia" else discord.ButtonStyle.secondary
 
     # --- NAVEGAÇÃO (ROW 0) ---
     @ui.button(label="Geral", emoji="📜", style=discord.ButtonStyle.secondary, row=0)
@@ -1095,7 +1197,7 @@ class FichaView(BaseRPGView):
         nome, raca, classe, genero, imagem_url = identidade
         _apply_embed_identity(embed, nome, classe, raca, genero, imagem_url)
 
-    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction):
+    async def atualizar_botoes_habilidade(self, interaction: discord.Interaction, target_message: discord.Message = None):
         self.update_buttons_state("magia")
         self.clear_dynamic_buttons()
 
@@ -1151,6 +1253,10 @@ class FichaView(BaseRPGView):
             embed.add_field(name="🧪 Poções", value="Nenhuma poção no inventário.", inline=False)
 
         _set_footer_timestamp(embed, "Magia & Alquimia")
+
+        if target_message:
+            await target_message.edit(embed=embed, view=self)
+            return
 
         if interaction.response.is_done():
             await interaction.edit_original_response(embed=embed, view=self)
