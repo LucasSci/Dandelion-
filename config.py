@@ -44,6 +44,7 @@ def load_settings() -> Settings:
         sync_commands=sync_commands,
         extensions=(
             "cogs.system",
+            "cogs.experience",
             "cogs.ai_handler",
             "cogs.alchemy",
             "cogs.bestiary",

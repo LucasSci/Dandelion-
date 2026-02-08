@@ -3,7 +3,7 @@ import re
 
 from witcher_rules import rolar_d10_explosivo
 
-_DICE_PATTERN = re.compile(r"(\d+)d(\d+)(?:([+-])(\d+))?")
+_DICE_PATTERN = re.compile(r"(\d*)d(\d+)(?:([+-])(\d+))?")
 _XP_TABLE = {
     1: 300,
     2: 900,
@@ -37,7 +37,8 @@ def rolar_dados(formula: str):
         return None, 0
     
     qtd, lados, sinal, bonus = match.groups()
-    qtd, lados = int(qtd), int(lados)
+    qtd = int(qtd) if qtd else 1
+    lados = int(lados)
     if qtd <= 0 or lados <= 0:
         return None, 0
     bonus = int(bonus) if bonus else 0

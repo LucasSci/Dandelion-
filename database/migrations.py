@@ -118,30 +118,13 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             )
         if _table_exists(cursor, "quests"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_quests_thread_id ON quests(thread_id);")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_quests_status ON quests(status);")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_quests_regiao ON quests(regiao);")
-        if _table_exists(cursor, "quest_participantes"):
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_quest_participantes_quest_id ON quest_participantes(quest_id);"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_quest_participantes_user_id ON quest_participantes(user_id);"
-            )
-        if _table_exists(cursor, "memoria_campanha"):
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_memoria_campanha_tipo ON memoria_campanha(tipo);")
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_memoria_campanha_data_registro ON memoria_campanha(data_registro);"
-            )
-        if _table_exists(cursor, "lore_entries"):
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_lore_entries_atualizado_em ON lore_entries(atualizado_em);"
-            )
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_lore_entries_owner_id ON lore_entries(owner_id);")
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_lore_entries_private_owner ON lore_entries(is_private, owner_id);"
-            )
-        if _table_exists(cursor, "npc_profiles"):
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_npc_profiles_nome ON npc_profiles(nome);")
+
+        if _table_exists(cursor, "rolagens_personagem"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rolagens_personagem_pid_ordem ON rolagens_personagem(personagem_id, ordem);")
+
+        if _table_exists(cursor, "habilidades_personagem"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_habilidades_personagem_pid_nome ON habilidades_personagem(personagem_id, nome COLLATE NOCASE);")
+
         print("⚡ Índices de performance aplicados.")
     except Exception as e:
         print(f"⚠️ Erro ao aplicar índices: {e}")
@@ -186,6 +169,17 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
                 quantidade INTEGER DEFAULT 0,
                 atualizado_em TEXT DEFAULT (datetime('now')),
                 UNIQUE(user_id, nome)
+            );
+            """
+        )
+
+    if not _table_exists(cursor, "user_dashboards"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_dashboards (
+                user_id INTEGER PRIMARY KEY,
+                layout_json TEXT NOT NULL,
+                atualizado_em TEXT DEFAULT (datetime('now'))
             );
             """
         )
@@ -285,14 +279,12 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
                 personagem_id INTEGER NOT NULL,
                 sessao_id INTEGER NOT NULL,
                 criado_em TEXT DEFAULT (datetime('now')),
+                log_id INTEGER,
+                descricao_fato TEXT,
+                relevancia INTEGER DEFAULT 1,
                 UNIQUE(personagem_id, sessao_id),
                 FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
-                FOREIGN KEY(sessao_id) REFERENCES memoria_campanha(id) ON DELETE CASCADE
-                log_id INTEGER,
-                descricao_fato TEXT NOT NULL,
-                relevancia INTEGER DEFAULT 1,
-                criado_em TEXT DEFAULT (datetime('now')),
-                FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+                FOREIGN KEY(sessao_id) REFERENCES memoria_campanha(id) ON DELETE CASCADE,
                 FOREIGN KEY(log_id) REFERENCES session_logs(id) ON DELETE SET NULL
             );
             """
