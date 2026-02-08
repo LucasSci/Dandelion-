@@ -171,6 +171,37 @@ def _resumir_texto(texto: str, limite: int = 180) -> str:
     return f"{texto[:limite]}..."
 
 
+def _criar_embed_erro_formula(input_str: str) -> discord.Embed:
+    """Gera um Embed de erro amigável para fórmulas de dados inválidas."""
+    input_clean = input_str.strip()
+
+    embed = discord.Embed(
+        title="❌ Fórmula Inválida",
+        description=f"Não entendi a fórmula `{input_clean}`.",
+        color=0xED4245
+    )
+
+    # Tentativa de correção (Sugestão inteligente)
+    import re
+    # Se começou com 'd' seguido de número (ex: d20), esqueceu a quantidade
+    if re.match(r"^d\d+", input_clean, re.IGNORECASE):
+        sugestao = f"1{input_clean}"
+        embed.description = f"Você quis dizer `{sugestao}`?"
+        embed.add_field(name="💡 Dica", value=f"Sempre indique a quantidade de dados (ex: **1**d20).")
+
+    # Se digitou apenas texto (ex: 'Fogo')
+    elif re.match(r"^[a-zA-Z\s]+$", input_clean):
+        embed.add_field(name="💡 Dica", value="Use notação de dados padrão (ex: 4d6). O nome da habilidade vai em outro campo!")
+
+    embed.add_field(
+        name="✅ Formatos Válidos",
+        value="• `1d20` (Um dado de 20 faces)\n• `2d6+3` (Dois dados de 6 faces mais 3)\n• `10` (Valor fixo)",
+        inline=False
+    )
+
+    return embed
+
+
 async def _table_exists(db, table: str) -> bool:
     async with db.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
