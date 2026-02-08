@@ -93,6 +93,47 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
     if _table_exists(cursor, "armaduras_personagem"):
         _add_columns_if_missing(cursor, "armaduras_personagem", armaduras_extras)
 
+    feedback_entries_extras = [
+        ("user_id", "INTEGER"),
+        ("guild_id", "INTEGER"),
+        ("channel_id", "INTEGER"),
+        ("feedback_type", "TEXT"),
+        ("score", "INTEGER"),
+        ("sentiment", "TEXT"),
+        ("comentario", "TEXT"),
+        ("contexto", "TEXT"),
+        ("criado_em", "TEXT DEFAULT (datetime('now'))"),
+    ]
+    if _table_exists(cursor, "feedback_entries"):
+        _add_columns_if_missing(cursor, "feedback_entries", feedback_entries_extras)
+
+    support_tickets_extras = [
+        ("user_id", "INTEGER"),
+        ("guild_id", "INTEGER"),
+        ("channel_id", "INTEGER"),
+        ("titulo", "TEXT"),
+        ("descricao", "TEXT"),
+        ("categoria", "TEXT"),
+        ("prioridade", "TEXT"),
+        ("status", "TEXT DEFAULT 'Aberto'"),
+        ("triagem_notas", "TEXT"),
+        ("criado_em", "TEXT DEFAULT (datetime('now'))"),
+        ("atualizado_em", "TEXT DEFAULT (datetime('now'))"),
+    ]
+    if _table_exists(cursor, "support_tickets"):
+        _add_columns_if_missing(cursor, "support_tickets", support_tickets_extras)
+
+    usage_events_extras = [
+        ("user_id", "INTEGER"),
+        ("guild_id", "INTEGER"),
+        ("channel_id", "INTEGER"),
+        ("command_name", "TEXT"),
+        ("status", "TEXT"),
+        ("criado_em", "TEXT DEFAULT (datetime('now'))"),
+    ]
+    if _table_exists(cursor, "usage_events"):
+        _add_columns_if_missing(cursor, "usage_events", usage_events_extras)
+
 
 
     # 4. Migração de Índices de Performance
@@ -182,6 +223,59 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
                 qualidade_min INTEGER DEFAULT 40,
                 qualidade_max INTEGER DEFAULT 100,
                 descricao TEXT
+            );
+            """
+        )
+
+    if not _table_exists(cursor, "feedback_entries"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS feedback_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                guild_id INTEGER,
+                channel_id INTEGER,
+                feedback_type TEXT NOT NULL,
+                score INTEGER,
+                sentiment TEXT,
+                comentario TEXT,
+                contexto TEXT,
+                criado_em TEXT DEFAULT (datetime('now'))
+            );
+            """
+        )
+
+    if not _table_exists(cursor, "support_tickets"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS support_tickets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                guild_id INTEGER,
+                channel_id INTEGER,
+                titulo TEXT NOT NULL,
+                descricao TEXT NOT NULL,
+                categoria TEXT,
+                prioridade TEXT,
+                status TEXT DEFAULT 'Aberto',
+                triagem_notas TEXT,
+                criado_em TEXT DEFAULT (datetime('now')),
+                atualizado_em TEXT DEFAULT (datetime('now'))
+            );
+            """
+        )
+
+    if not _table_exists(cursor, "usage_events"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS usage_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                guild_id INTEGER,
+                channel_id INTEGER,
+                command_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                criado_em TEXT DEFAULT (datetime('now'))
             );
             """
         )

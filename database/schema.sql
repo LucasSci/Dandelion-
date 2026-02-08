@@ -359,6 +359,45 @@ CREATE TABLE IF NOT EXISTS monsters (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- FEEDBACK, NPS E SUPORTE --
+CREATE TABLE IF NOT EXISTS feedback_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    guild_id INTEGER,
+    channel_id INTEGER,
+    feedback_type TEXT NOT NULL,
+    score INTEGER,
+    sentiment TEXT,
+    comentario TEXT,
+    contexto TEXT,
+    criado_em TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    guild_id INTEGER,
+    channel_id INTEGER,
+    titulo TEXT NOT NULL,
+    descricao TEXT NOT NULL,
+    categoria TEXT,
+    prioridade TEXT,
+    status TEXT DEFAULT 'Aberto',
+    triagem_notas TEXT,
+    criado_em TEXT DEFAULT (datetime('now')),
+    atualizado_em TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS usage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    guild_id INTEGER,
+    channel_id INTEGER,
+    command_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    criado_em TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS variants (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   monster_id INTEGER NOT NULL,
