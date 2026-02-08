@@ -22,3 +22,10 @@ beautifulsoup4
 aiohttp
 fastapi
 async-lru
+prometheus-client
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-requests
+opentelemetry-instrumentation-aiohttp-client
