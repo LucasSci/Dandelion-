@@ -107,6 +107,13 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_logs_channel_id ON session_logs(channel_id);")
         if _table_exists(cursor, "quests"):
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_quests_thread_id ON quests(thread_id);")
+
+        if _table_exists(cursor, "rolagens_personagem"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rolagens_personagem_pid_ordem ON rolagens_personagem(personagem_id, ordem);")
+
+        if _table_exists(cursor, "habilidades_personagem"):
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_habilidades_personagem_pid_nome ON habilidades_personagem(personagem_id, nome COLLATE NOCASE);")
+
         print("⚡ Índices de performance aplicados.")
     except Exception as e:
         print(f"⚠️ Erro ao aplicar índices: {e}")
@@ -151,6 +158,17 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
                 quantidade INTEGER DEFAULT 0,
                 atualizado_em TEXT DEFAULT (datetime('now')),
                 UNIQUE(user_id, nome)
+            );
+            """
+        )
+
+    if not _table_exists(cursor, "user_dashboards"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_dashboards (
+                user_id INTEGER PRIMARY KEY,
+                layout_json TEXT NOT NULL,
+                atualizado_em TEXT DEFAULT (datetime('now'))
             );
             """
         )
@@ -250,14 +268,12 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
                 personagem_id INTEGER NOT NULL,
                 sessao_id INTEGER NOT NULL,
                 criado_em TEXT DEFAULT (datetime('now')),
+                log_id INTEGER,
+                descricao_fato TEXT,
+                relevancia INTEGER DEFAULT 1,
                 UNIQUE(personagem_id, sessao_id),
                 FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
-                FOREIGN KEY(sessao_id) REFERENCES memoria_campanha(id) ON DELETE CASCADE
-                log_id INTEGER,
-                descricao_fato TEXT NOT NULL,
-                relevancia INTEGER DEFAULT 1,
-                criado_em TEXT DEFAULT (datetime('now')),
-                FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
+                FOREIGN KEY(sessao_id) REFERENCES memoria_campanha(id) ON DELETE CASCADE,
                 FOREIGN KEY(log_id) REFERENCES session_logs(id) ON DELETE SET NULL
             );
             """

@@ -1,0 +1,32 @@
+{
+  "id": "example-echo",
+  "name": "Example Echo",
+  "version": "1.0.0",
+  "description": "Plugin de exemplo que ecoa prompts de narrativa.",
+  "entrypoint": "plugin:handle_narration",
+  "permissions": {
+    "filesystem_read": true,
+    "filesystem_write": false,
+    "network": false,
+    "subprocess": false
+  },
+  "hooks": [
+    {
+      "name": "echo-narration",
+      "extension_point": "narration",
+      "description": "Retorna uma resposta simples a partir do prompt.",
+      "input_schema": {
+        "required": ["prompt"],
+        "properties": {
+          "prompt": "str"
+        }
+      },
+      "output_schema": {
+        "required": ["response"],
+        "properties": {
+          "response": "str"
+        }
+      }
+    }
+  ]
+}

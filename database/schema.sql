@@ -112,6 +112,13 @@ CREATE TABLE IF NOT EXISTS solo_resources (
     atualizado_em TEXT DEFAULT (datetime('now')),
     UNIQUE(user_id, nome)
 );
+
+-- DASHBOARDS PERSONALIZADOS --
+CREATE TABLE IF NOT EXISTS user_dashboards (
+    user_id INTEGER PRIMARY KEY,
+    layout_json TEXT NOT NULL,
+    atualizado_em TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS habilidades_personagem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     personagem_id INTEGER,
