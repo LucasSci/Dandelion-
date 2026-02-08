@@ -50,7 +50,7 @@ class SkillRepository:
         query = "SELECT nome, dado, descricao FROM habilidades_personagem WHERE personagem_id = ?"
         params = [personagem_id]
         if order_by_name:
-            query += " ORDER BY nome"
+            query += " ORDER BY nome COLLATE NOCASE"
         if limit:
             query += f" LIMIT {int(limit)}"
         async with self.db.execute(query, params) as cursor:
@@ -62,7 +62,7 @@ class SkillRepository:
             SELECT nome, dado, descricao
             FROM habilidades_personagem
             WHERE personagem_id = ? AND nome LIKE ?
-            ORDER BY nome ASC
+            ORDER BY nome COLLATE NOCASE ASC
             LIMIT ?
             """,
             (personagem_id, term, limit),

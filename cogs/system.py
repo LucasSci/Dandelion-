@@ -6,6 +6,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from ui.design_system import themed_embed
 
 @dataclass(frozen=True)
 class HealthCheck:
@@ -37,10 +38,7 @@ class System(commands.Cog):
         latency_ms = round(self.bot.latency * 1000, 2)
         uptime = datetime.now(timezone.utc) - self.started_at
 
-        embed = discord.Embed(
-            title="🛠️ Status do Dandelion",
-            color=0x2b2d31,
-        )
+        embed = themed_embed("🛠️ Status do Dandelion", variant="surface")
         embed.add_field(name="Latência", value=f"{latency_ms}ms", inline=True)
         embed.add_field(name="Uptime", value=str(uptime).split(".")[0], inline=True)
         embed.add_field(name="Servidor Python", value=platform.python_version(), inline=True)
