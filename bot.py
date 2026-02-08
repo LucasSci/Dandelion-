@@ -11,6 +11,8 @@ from google import genai
 from google.genai import types
 
 from config import settings
+from utils.data_retention import start_retention_loop, stop_retention_loop
+from utils.task_queue import TaskQueue
 from database import DB_NAME, init_db
 from cogs.characters import Characters
 from cogs.dice import Dice
@@ -37,6 +39,8 @@ class DandelionBot(commands.Bot):
         self.db = None
         self.http_session = None
         self.gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+        self.task_queue = TaskQueue()
+        self.retention_task = None
 
     async def setup_hook(self):
         timeout = aiohttp.ClientTimeout(total=settings.http_timeout_seconds)
@@ -45,6 +49,8 @@ class DandelionBot(commands.Bot):
         # Conexão persistente com banco de dados
         self.db = await aiosqlite.connect(DB_NAME)
         await self.db.execute("PRAGMA foreign_keys = ON")
+        await self.task_queue.start()
+        self.retention_task = await start_retention_loop(self.db, logger)
 
         # Cogs carregadas diretamente
         await self.add_cog(Characters(self))
@@ -74,6 +80,8 @@ class DandelionBot(commands.Bot):
             logger.info("Bot pronto. Sincronização de comandos desativada.")
 
     async def close(self):
+        await stop_retention_loop(self.retention_task)
+        await self.task_queue.stop()
         if hasattr(self, 'db') and self.db:
             await self.db.close()
         if self.http_session:

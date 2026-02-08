@@ -100,27 +100,29 @@ class Bestiary(commands.Cog):
 
     # --- BUSCA NA WIKI ---
     async def buscar_imagem_api(self, termo_busca):
-        async with aiohttp.ClientSession() as session:
-            try:
-                params_busca = {"action": "opensearch", "search": termo_busca, "limit": "1", "format": "json"}
-                async with session.get(WITCHER_API_URL, params=params_busca) as resp:
-                    if resp.status != 200: return None, None
-                    data = await resp.json()
-                    if not data[1]: return None, None
-                    titulo_oficial = data[1][0]
+        session = self.bot.http_session
+        if not session:
+            return None, None
+        try:
+            params_busca = {"action": "opensearch", "search": termo_busca, "limit": "1", "format": "json"}
+            async with session.get(WITCHER_API_URL, params=params_busca) as resp:
+                if resp.status != 200: return None, None
+                data = await resp.json()
+                if not data[1]: return None, None
+                titulo_oficial = data[1][0]
 
-                params_img = {"action": "query", "titles": titulo_oficial, "prop": "pageimages", "pithumbsize": "1024", "format": "json"}
-                async with session.get(WITCHER_API_URL, params=params_img) as resp:
-                    if resp.status != 200: return None, None
-                    data = await resp.json()
-                    pages = data.get("query", {}).get("pages", {})
-                    for page_id in pages:
-                        if "thumbnail" in pages[page_id]:
-                            return pages[page_id]["thumbnail"]["source"], titulo_oficial
-                return None, titulo_oficial
-            except Exception as e:
-                print(f"Erro Wiki: {e}")
-                return None, None
+            params_img = {"action": "query", "titles": titulo_oficial, "prop": "pageimages", "pithumbsize": "1024", "format": "json"}
+            async with session.get(WITCHER_API_URL, params=params_img) as resp:
+                if resp.status != 200: return None, None
+                data = await resp.json()
+                pages = data.get("query", {}).get("pages", {})
+                for page_id in pages:
+                    if "thumbnail" in pages[page_id]:
+                        return pages[page_id]["thumbnail"]["source"], titulo_oficial
+            return None, titulo_oficial
+        except Exception as e:
+            print(f"Erro Wiki: {e}")
+            return None, None
 
     async def _buscar_personagem(self, user_id: int):
         async with self.bot.db.execute(
@@ -222,10 +224,13 @@ class Bestiary(commands.Cog):
 
         # 3. GPT-4o: CRIAÇÃO DO PROMPT "ESTILO WITCHER"
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url_referencia) as resp:
-                    image_data = await resp.read()
-                    base64_image = base64.b64encode(image_data).decode('utf-8')
+            session = self.bot.http_session
+            if not session:
+                return await interaction.followup.send("❌ Sessão HTTP indisponível.")
+
+            async with session.get(url_referencia) as resp:
+                image_data = await resp.read()
+                base64_image = base64.b64encode(image_data).decode('utf-8')
 
             # --- AQUI ESTÁ A MÁGICA DO ESTILO ---
             prompt_instruction = f"""

@@ -22,4 +22,4 @@ beautifulsoup4
 aiohttp
 fastapi
 async-lru
-strawberry-graphql
+cryptography
