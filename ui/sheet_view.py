@@ -668,6 +668,15 @@ class BuscarPericiaModal(ui.Modal, title="🔎 Buscar Perícia"):
         embed.set_footer(text="Mostrando os 5 primeiros resultados.")
         await interaction.response.send_message(embed=embed, ephemeral=True, view=view_retry)
 
+class TentarBuscaNovamenteView(ui.View):
+    def __init__(self, personagem_id):
+        super().__init__(timeout=60)
+        self.personagem_id = personagem_id
+
+    @ui.button(label="🔎 Tentar Novamente", style=discord.ButtonStyle.primary)
+    async def btn_retry(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BuscarPericiaModal(self.personagem_id))
+
 # ==============================================================================
 # 2. VIEWS AUXILIARES (GERENCIAMENTO)
 # ==============================================================================
