@@ -56,14 +56,14 @@ class TestVisualBar(unittest.TestCase):
         """Verifies that turning off color (cor=False) correctly produces a Blue bar."""
         # 5/10 = 0.5 -> Blue if cor=False
         bar = gerar_barra(5, 10, segmentos=5, cor=False)
-        self.assertEqual(bar, "[🟨🟨⬛⬛⬛]")
+        self.assertEqual(bar, "[🟦🟦⬛⬛⬛]")
 
     def test_rounding_half(self):
         """Check int truncation for 50% on odd segments."""
         # 5/10 = 0.5. 0.5 * 5 = 2.5. int(2.5) -> 2.
         # cor=False -> Blue
         bar = gerar_barra(5, 10, segmentos=5, cor=False)
-        self.assertEqual(bar, "[🟨🟨⬛⬛⬛]")
+        self.assertEqual(bar, "[🟦🟦⬛⬛⬛]")
 
 if __name__ == '__main__':
     unittest.main()

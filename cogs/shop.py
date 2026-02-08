@@ -217,7 +217,7 @@ class Shop(commands.Cog):
         return rep_multiplier, economy_mods
 
     async def ac_item(self, i, current: str):
-        async with self.bot.db.execute("SELECT nome FROM loja_itens WHERE nome LIKE ? LIMIT 25", (f'%{current}%',)) as c:
+        async with self.bot.db.execute("SELECT nome FROM loja_itens WHERE nome LIKE ? ORDER BY nome COLLATE NOCASE LIMIT 25", (f'%{current}%',)) as c:
             return [app_commands.Choice(name=r[0], value=r[0]) for r in await c.fetchall()]
 
     @app_commands.command(name="loja", description="🏪 Abre a loja")

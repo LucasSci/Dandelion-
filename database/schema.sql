@@ -70,6 +70,15 @@ CREATE TABLE IF NOT EXISTS memoria_campanha (
     data_registro TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS memoria_campanha_archive (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_id INTEGER,
+    tipo TEXT,
+    conteudo TEXT,
+    data_registro TEXT,
+    archived_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS personagem_memorias (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     personagem_id INTEGER NOT NULL,
@@ -111,6 +120,13 @@ CREATE TABLE IF NOT EXISTS solo_resources (
     quantidade INTEGER DEFAULT 0,
     atualizado_em TEXT DEFAULT (datetime('now')),
     UNIQUE(user_id, nome)
+);
+
+-- DASHBOARDS PERSONALIZADOS --
+CREATE TABLE IF NOT EXISTS user_dashboards (
+    user_id INTEGER PRIMARY KEY,
+    layout_json TEXT NOT NULL,
+    atualizado_em TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS habilidades_personagem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -225,15 +241,39 @@ CREATE TABLE IF NOT EXISTS session_logs (
     timestamp TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS session_logs_archive (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_id INTEGER,
+    channel_id INTEGER,
+    user_name TEXT,
+    content TEXT,
+    is_bot BOOLEAN,
+    timestamp TEXT,
+    archived_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS mencoes_personagem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     personagem_id INTEGER NOT NULL,
     session_log_id INTEGER,
+    memoria_id INTEGER,
     descricao_fato TEXT NOT NULL,
     relevancia INTEGER DEFAULT 0,
     criado_em TEXT DEFAULT (datetime('now')),
     FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE CASCADE,
     FOREIGN KEY(session_log_id) REFERENCES session_logs(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS mencoes_personagem_archive (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_id INTEGER,
+    personagem_id INTEGER NOT NULL,
+    session_log_id INTEGER,
+    memoria_id INTEGER,
+    descricao_fato TEXT NOT NULL,
+    relevancia INTEGER DEFAULT 0,
+    criado_em TEXT,
+    archived_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS transcription_settings (
@@ -357,6 +397,45 @@ CREATE TABLE IF NOT EXISTS monsters (
   canon_tier TEXT DEFAULT 'core',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- FEEDBACK, NPS E SUPORTE --
+CREATE TABLE IF NOT EXISTS feedback_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    guild_id INTEGER,
+    channel_id INTEGER,
+    feedback_type TEXT NOT NULL,
+    score INTEGER,
+    sentiment TEXT,
+    comentario TEXT,
+    contexto TEXT,
+    criado_em TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    guild_id INTEGER,
+    channel_id INTEGER,
+    titulo TEXT NOT NULL,
+    descricao TEXT NOT NULL,
+    categoria TEXT,
+    prioridade TEXT,
+    status TEXT DEFAULT 'Aberto',
+    triagem_notas TEXT,
+    criado_em TEXT DEFAULT (datetime('now')),
+    atualizado_em TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS usage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    guild_id INTEGER,
+    channel_id INTEGER,
+    command_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    criado_em TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS variants (
@@ -493,16 +572,33 @@ CREATE TABLE IF NOT EXISTS lore_entry_tags (
 -- =========================
 
 CREATE INDEX IF NOT EXISTS idx_personagens_user_id ON personagens(user_id);
+CREATE INDEX IF NOT EXISTS idx_personagens_nome_nocase ON personagens(nome COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_inventario_user_id ON inventario(user_id);
 CREATE INDEX IF NOT EXISTS idx_habilidades_personagem_id ON habilidades_personagem(personagem_id);
 CREATE INDEX IF NOT EXISTS idx_criaturas_nome ON criaturas(nome);
+CREATE INDEX IF NOT EXISTS idx_world_locations_nome_nocase ON world_locations(nome COLLATE NOCASE);
 
 CREATE INDEX IF NOT EXISTS idx_monsters_category ON monsters(category);
 CREATE INDEX IF NOT EXISTS idx_monsters_name ON monsters(name);
+CREATE INDEX IF NOT EXISTS idx_monsters_name_nocase ON monsters(name COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_weaknesses_type ON weaknesses(type);
 CREATE INDEX IF NOT EXISTS idx_traits_key ON traits(key);
 CREATE INDEX IF NOT EXISTS idx_loot_items_key ON loot_items(key);
 CREATE INDEX IF NOT EXISTS idx_sources_key ON sources(key);
 CREATE INDEX IF NOT EXISTS idx_lore_entries_titulo ON lore_entries(titulo);
+CREATE INDEX IF NOT EXISTS idx_lore_entries_atualizado_em ON lore_entries(atualizado_em);
+CREATE INDEX IF NOT EXISTS idx_lore_entries_owner_id ON lore_entries(owner_id);
+CREATE INDEX IF NOT EXISTS idx_lore_entries_private_owner ON lore_entries(is_private, owner_id);
 
 CREATE INDEX IF NOT EXISTS idx_lore_sources_tipo ON lore_sources(tipo);
+CREATE INDEX IF NOT EXISTS idx_memoria_campanha_tipo ON memoria_campanha(tipo);
+CREATE INDEX IF NOT EXISTS idx_memoria_campanha_data_registro ON memoria_campanha(data_registro);
+CREATE INDEX IF NOT EXISTS idx_quests_status ON quests(status);
+CREATE INDEX IF NOT EXISTS idx_quests_regiao ON quests(regiao);
+CREATE INDEX IF NOT EXISTS idx_quest_participantes_quest_id ON quest_participantes(quest_id);
+CREATE INDEX IF NOT EXISTS idx_quest_participantes_user_id ON quest_participantes(user_id);
+CREATE INDEX IF NOT EXISTS idx_session_logs_channel_timestamp ON session_logs(channel_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_personagem_id ON mencoes_personagem(personagem_id);
+CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_session_log_id ON mencoes_personagem(session_log_id);
+CREATE INDEX IF NOT EXISTS idx_mencoes_personagem_memoria_id ON mencoes_personagem(memoria_id);
+CREATE INDEX IF NOT EXISTS idx_npc_profiles_nome ON npc_profiles(nome);
