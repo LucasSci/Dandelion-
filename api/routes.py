@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any, List, Tuple
 
-from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from api.security import authorize, authorize_websocket
 from vtt_engine.grid_system import GridMap
 from witcher_rules import rolar_pericia
 from witcher_rules import rolar_d10_explosivo
@@ -53,7 +54,7 @@ class RollSkillResponse(BaseModel):
     rolls: List[int]
 
 
-@router.post("/roll_skill", response_model=None)
+@router.post("/roll_skill", response_model=None, dependencies=[authorize("vtt:roll")])
 def roll_skill(payload: RollSkillRequest) -> RollSkillResponse:
     result = rolar_pericia(stat=payload.stat, skill=payload.skill)
     return RollSkillResponse(total=result.total, rolls=result.rolls)
@@ -92,7 +93,7 @@ class GenerateMapResponse(BaseModel):
     metadata: dict
 
 
-@router.post("/combat_update", response_model=None)
+@router.post("/combat_update", response_model=None, dependencies=[authorize("vtt:combat:update")])
 def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
     width = len(payload.grid[0]) if payload.grid else 0
     height = len(payload.grid)
@@ -114,7 +115,7 @@ def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
     )
 
 
-@router.post("/vtt/event", response_model=None)
+@router.post("/vtt/event", response_model=None, dependencies=[authorize("vtt:event:publish", mfa_required=True)])
 async def vtt_event(payload: VTTEvent) -> dict[str, str]:
     await ws_manager.broadcast({"event": payload.event_type, "data": payload.payload})
     return {"status": "ok"}
@@ -122,6 +123,7 @@ async def vtt_event(payload: VTTEvent) -> dict[str, str]:
 
 @router.websocket("/ws/vtt")
 async def vtt_ws(websocket: WebSocket) -> None:
+    authorize_websocket(websocket, "vtt:event:publish")
     await ws_manager.connect(websocket)
     try:
         while True:
@@ -148,7 +150,7 @@ class MapGenerateResponse(BaseModel):
     scale_meters: float
 
 
-@router.post("/generate_map", response_model=None)
+@router.post("/generate_map", response_model=None, dependencies=[authorize("vtt:map:generate")])
 def generate_map(payload: MapGenerateRequest) -> MapGenerateResponse:
     grid_map = GridMap(
         width=payload.width,
@@ -171,7 +173,7 @@ def generate_map(payload: MapGenerateRequest) -> MapGenerateResponse:
     )
 
 
-@router.post("/generate_map", response_model=None)
+@router.post("/generate_map", response_model=None, dependencies=[authorize("vtt:map:generate")])
 def generate_map(payload: GenerateMapRequest) -> GenerateMapResponse:
     grid_map = GridMap(
         width=payload.width,

@@ -346,14 +346,34 @@ class NovaHabilidadeModal(ui.Modal, title="✨ Nova Habilidade"):
         if self.dado.value:
             detalhes, _ = rolar_dados(self.dado.value)
             if detalhes is None:
-                # Palette UX: Better error feedback
-                embed_erro = _criar_embed_erro_formula(self.dado.value)
-                return await interaction.response.send_message(embed=embed_erro, ephemeral=True)
+                embed = discord.Embed(
+                    title="❌ Fórmula Inválida",
+                    description=f"Não consegui entender a fórmula **`{self.dado.value}`**.",
+                    color=0xED4245
+                )
+                embed.add_field(
+                    name="💡 Exemplos de Fórmulas",
+                    value="• `1d20+5` (Um d20 mais 5)\n• `2d6` (Dois d6)\n• `d10` (Um d10)\n• `10` (Valor fixo)",
+                    inline=False
+                )
+                return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         skill_repo = SkillRepository(interaction.client.db)
         await skill_repo.add_skill(self.personagem_id, self.nome.value, self.descricao.value, self.dado.value)
         
-        await interaction.response.send_message(f"✅ Habilidade **{self.nome.value}** aprendida!", ephemeral=True)
+        # Rich Success State
+        embed = discord.Embed(
+            title="✨ Habilidade Aprendida!",
+            color=0x57F287
+        )
+        embed.add_field(name="Nome", value=self.nome.value, inline=True)
+        if self.dado.value:
+            embed.add_field(name="Dano/Efeito", value=self.dado.value, inline=True)
+        if self.descricao.value:
+            embed.add_field(name="Descrição", value=self.descricao.value, inline=False)
+        embed.set_footer(text="Habilidade adicionada à sua ficha.")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
 class EditarHabilidadeModal(ui.Modal, title="✏️ Editar Habilidade"):
@@ -374,14 +394,33 @@ class EditarHabilidadeModal(ui.Modal, title="✏️ Editar Habilidade"):
         if self.dado_input.value:
             detalhes, _ = rolar_dados(self.dado_input.value)
             if detalhes is None:
-                # Palette UX: Better error feedback
-                embed_erro = _criar_embed_erro_formula(self.dado_input.value)
-                return await interaction.response.send_message(embed=embed_erro, ephemeral=True)
+                embed = discord.Embed(
+                    title="❌ Fórmula Inválida",
+                    description=f"Não consegui entender a fórmula **`{self.dado_input.value}`**.",
+                    color=0xED4245
+                )
+                embed.add_field(
+                    name="💡 Exemplos de Fórmulas",
+                    value="• `1d20+5` (Um d20 mais 5)\n• `2d6` (Dois d6)\n• `d10` (Um d10)\n• `10` (Valor fixo)",
+                    inline=False
+                )
+                return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         skill_repo = SkillRepository(interaction.client.db)
         await skill_repo.update_skill(self.skill_id, self.nome_input.value, self.dado_input.value, self.desc_input.value)
         
-        await interaction.response.send_message(f"✅ Habilidade **{self.nome_input.value}** atualizada!", ephemeral=True)
+        # Rich Success State
+        embed = discord.Embed(
+            title="✏️ Habilidade Atualizada!",
+            color=0xFEE75C
+        )
+        embed.add_field(name="Nome", value=self.nome_input.value, inline=True)
+        if self.dado_input.value:
+            embed.add_field(name="Dano/Efeito", value=self.dado_input.value, inline=True)
+        if self.desc_input.value:
+            embed.add_field(name="Descrição", value=self.desc_input.value, inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         await self.view_pai.atualizar_botoes_habilidade(interaction)
 
 class RolarPericiaModal(ui.Modal, title="🎯 Rolagem de Perícia"):
@@ -639,7 +678,13 @@ class AcoesHabilidadeView(ui.View):
             skill_repo = SkillRepository(itx.client.db)
             await skill_repo.delete_skill(self.skill_id)
 
-            await itx.response.edit_message(content=f"🗑️ Habilidade **{self.nome}** removida.", view=None)
+            # Rich Success State
+            embed = discord.Embed(
+                title="🗑️ Habilidade Removida",
+                description=f"A habilidade **{self.nome}** foi excluída da sua ficha.",
+                color=0xED4245
+            )
+            await itx.response.edit_message(content=None, embed=embed, view=None)
             await self.view_ficha.atualizar_botoes_habilidade(itx)
 
         async def cancelar(itx: discord.Interaction):
