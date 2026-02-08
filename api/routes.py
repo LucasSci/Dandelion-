@@ -2,16 +2,30 @@ from __future__ import annotations
 
 from typing import Any, List, Tuple
 
-from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+from strawberry.fastapi import GraphQLRouter
 
+from api.auth import require_api_key, validate_api_key
+from api.graphql import schema
+from api.rate_limit import rate_limiter
 from vtt_engine.grid_system import GridMap
 from witcher_rules import rolar_pericia
-from witcher_rules import rolar_d10_explosivo
 
 
-router = APIRouter()
-app = FastAPI(title="Witcher TTRPG Integration")
+router = APIRouter(
+    prefix="/v1",
+    dependencies=[Depends(require_api_key), Depends(rate_limiter)],
+    tags=["v1"],
+)
+app = FastAPI(
+    title="Witcher TTRPG Integration",
+    version="1.0.0",
+    description=(
+        "REST e GraphQL para automações de VTT com autenticação por API key, "
+        "versionamento e rate limiting."
+    ),
+)
 MAP_SCALE_METERS_PER_SQUARE = 2
 
 
@@ -53,13 +67,10 @@ class RollSkillResponse(BaseModel):
     rolls: List[int]
 
 
-@router.post("/roll_skill", response_model=None)
+@router.post("/roll_skill", response_model=RollSkillResponse)
 def roll_skill(payload: RollSkillRequest) -> RollSkillResponse:
     result = rolar_pericia(stat=payload.stat, skill=payload.skill)
     return RollSkillResponse(total=result.total, rolls=result.rolls)
-    roll_total, rolls = rolar_d10_explosivo()
-    total = roll_total + payload.stat + payload.skill
-    return RollSkillResponse(total=total, rolls=rolls)
 
 
 class CombatUpdateRequest(BaseModel):
@@ -78,21 +89,7 @@ class CombatUpdateResponse(BaseModel):
     scale_meters: float
 
 
-class GenerateMapRequest(BaseModel):
-    width: int
-    height: int
-    biome: str
-    clima: str | None = None
-    seed: int | None = None
-    grid_mode: str = "square"
-
-
-class GenerateMapResponse(BaseModel):
-    grid: List[List[int]]
-    metadata: dict
-
-
-@router.post("/combat_update", response_model=None)
+@router.post("/combat_update", response_model=CombatUpdateResponse)
 def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
     width = len(payload.grid[0]) if payload.grid else 0
     height = len(payload.grid)
@@ -114,22 +111,6 @@ def combat_update(payload: CombatUpdateRequest) -> CombatUpdateResponse:
     )
 
 
-@router.post("/vtt/event", response_model=None)
-async def vtt_event(payload: VTTEvent) -> dict[str, str]:
-    await ws_manager.broadcast({"event": payload.event_type, "data": payload.payload})
-    return {"status": "ok"}
-
-
-@router.websocket("/ws/vtt")
-async def vtt_ws(websocket: WebSocket) -> None:
-    await ws_manager.connect(websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        ws_manager.disconnect(websocket)
-
-
 class MapGenerateRequest(BaseModel):
     width: int
     height: int
@@ -142,37 +123,11 @@ class MapGenerateRequest(BaseModel):
 
 class MapGenerateResponse(BaseModel):
     grid: List[List[int]]
-    biome: str
-    clima: str | None
-    grid_mode: str
-    scale_meters: float
+    metadata: dict
 
 
-@router.post("/generate_map", response_model=None)
+@router.post("/generate_map", response_model=MapGenerateResponse)
 def generate_map(payload: MapGenerateRequest) -> MapGenerateResponse:
-    grid_map = GridMap(
-        width=payload.width,
-        height=payload.height,
-        grid_mode=payload.grid_mode,
-        scale_meters=payload.scale_meters,
-    )
-    grid_map.generate(
-        biome=payload.biome,
-        seed=payload.seed,
-        clima=payload.clima,
-        grid_mode=payload.grid_mode,
-    )
-    return MapGenerateResponse(
-        grid=grid_map.grid,
-        biome=payload.biome,
-        clima=payload.clima,
-        grid_mode=grid_map.grid_mode,
-        scale_meters=grid_map.scale_meters,
-    )
-
-
-@router.post("/generate_map", response_model=None)
-def generate_map(payload: GenerateMapRequest) -> GenerateMapResponse:
     grid_map = GridMap(
         width=payload.width,
         height=payload.height,
@@ -186,7 +141,40 @@ def generate_map(payload: GenerateMapRequest) -> GenerateMapResponse:
         "scale_meters_per_square": grid_map.scale_meters_per_square,
         "grid_mode": grid_map.grid_mode,
     }
-    return GenerateMapResponse(grid=grid_map.grid, metadata=metadata)
+    return MapGenerateResponse(grid=grid_map.grid, metadata=metadata)
 
+
+@router.post("/vtt/event", response_model=dict[str, str])
+async def vtt_event(payload: VTTEvent) -> dict[str, str]:
+    await ws_manager.broadcast({"event": payload.event_type, "data": payload.payload})
+    return {"status": "ok"}
+
+
+@router.websocket("/ws/vtt")
+async def vtt_ws(websocket: WebSocket) -> None:
+    api_key = (
+        websocket.query_params.get("api_key")
+        or websocket.headers.get("x-api-key")
+        or websocket.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    )
+    try:
+        validate_api_key(api_key)
+    except Exception:
+        await websocket.close(code=1008)
+        return
+
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+
+
+graphql_router = GraphQLRouter(
+    schema,
+    dependencies=[Depends(require_api_key), Depends(rate_limiter)],
+)
 
 app.include_router(router)
+app.include_router(graphql_router, prefix="/v1/graphql", tags=["graphql"])
