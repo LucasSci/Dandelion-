@@ -11,6 +11,7 @@ from google.genai import types
 from openai import AsyncOpenAI
 
 from config import settings
+from data.repositories.lore_repository import LoreRepository
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 _STOPWORDS = frozenset(
@@ -45,6 +46,7 @@ class AIHandler(commands.Cog):
         self.bot = bot
         self.client = None
         self.gemini_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+        self.lore_repo = LoreRepository(bot.db)
         self._skip_teste_gerar_prompt = self.bot.tree.get_command("teste_gerar_prompt") is not None
         if self._skip_teste_gerar_prompt:
             self.__cog_app_commands__ = [
@@ -190,31 +192,36 @@ class AIHandler(commands.Cog):
     async def gerar_quest_cronologica(self, dificuldade: str, regiao: str = None) -> dict:
         if not self.client: return None
         
-        cronologia = await self.ler_cronologia_estrita()
-        lore = await self.ler_lore_mundo()
+        # 1. Fetch Context via Repo (Optimized)
+        timeline_rows = await self.lore_repo.get_recent_events(limit=20)
+        # Format timeline: ID - Conteúdo
+        cronologia = "\n".join([f"[{r[0]}] {r[2]}" for r in timeline_rows]) if timeline_rows else "INÍCIO DA AVENTURA."
 
-        regiao_info = (
-            f"REGIÃO ESCOLHIDA PELO MESTRE: {regiao}. A missão deve acontecer exatamente nesta região.\n"
-            if regiao
-            else "REGIÃO: escolha a região mais coerente com a cronologia e o lore.\n"
-        )
+        lore_global_rows = await self.lore_repo.get_lore(regiao="Global", limit=5, is_mestre=True)
+        lore_txt = "--- LORE GLOBAL ---\n" + ("\n".join([f"- {r[1]}: {r[2]}" for r in lore_global_rows]) if lore_global_rows else "Nada registrado.")
+
+        if regiao:
+            lore_local_rows = await self.lore_repo.get_lore(regiao=regiao, limit=5, is_mestre=True)
+            if lore_local_rows:
+                lore_txt += f"\n\n--- LORE DE {regiao.upper()} ---\n" + "\n".join([f"- {r[1]}: {r[2]}" for r in lore_local_rows])
+            regiao_info = f"REGIÃO ESCOLHIDA: {regiao}. Foque em elementos locais descritos acima."
+        else:
+            regiao_info = "REGIÃO: Escolha a mais adequada com base na Cronologia recente."
         
         prompt = (
             f"Atue como Mestre de RPG (The Witcher/Zerrikania).\n"
-            f"=== LINHA DO TEMPO (FATOS REAIS) ===\n"
+            f"=== CONTEXTO DA CAMPANHA (MEMÓRIA) ===\n"
             f"{cronologia}\n"
+            f"======================================\n\n"
+            f"=== CONHECIMENTO DE MUNDO (LORE) ===\n"
+            f"{lore_txt}\n"
             f"====================================\n\n"
-            f"=== LORE DO MUNDO (FATOS REAIS) ===\n"
-            f"{lore}\n"
-            f"===================================\n\n"
             f"{regiao_info}\n"
             
-            f"TAREFA: Crie um CONTRATO (Dificuldade {dificuldade}) que seja uma consequência LÓGICA dos eventos acima e do lore.\n"
-            f"ESTILO: Misture o senso investigativo e moral cinzento de The Witcher, a sensação de rivalidade e escalada de ameaça de Sombras de Mordor, e a exploração/descoberta de Skyrim.\n"
-            f"FOCO: A missão precisa fazer sentido dentro do universo de The Witcher e na região escolhida.\n"
-            f"IMPORTANTE: Você deve explicar qual evento específico do passado motivou esta missão e quais fatos do lore foram usados.\n"
-            f"GANCHOS: A descrição deve terminar com uma linha 'Gancho futuro: ...' conectando a missão a um próximo arco.\n\n"
-            f"LINGUAGEM: escreva tudo em português brasileiro.\n\n"
+            f"TAREFA: Crie um CONTRATO (Dificuldade {dificuldade}) que seja uma consequência LÓGICA dos eventos recentes ou use o Lore local.\n"
+            f"ESTILO: Misture o senso investigativo e moral cinzento de The Witcher.\n"
+            f"IMPORTANTE: Você deve explicar qual evento específico do passado motivou esta missão.\n"
+            f"LINGUAGEM: Português brasileiro.\n\n"
             
             f"FORMATO DE RESPOSTA (Obrigatório, separado por '|'):\n"
             f"TÍTULO | DESCRIÇÃO | OURO (apenas numeros) | XP (apenas numeros) | CLASSES | REGIÃO | MONSTRO | PROMPT VISUAL (em português brasileiro e sem texto na imagem) | JUSTIFICATIVA"
@@ -230,16 +237,14 @@ class AIHandler(commands.Cog):
             raw = resp.choices[0].message.content.strip().replace("```", "")
             parts = raw.split('|')
             
-            # Garante que temos pelo menos os campos essenciais
             if len(parts) >= 8:
-                # Se faltar a nota (índice 8), cria uma padrão
                 nota = parts[8].strip() if len(parts) > 8 else "Sem justificativa gerada."
                 
                 return {
                     "titulo": parts[0].strip(),
                     "descricao": parts[1].strip(),
-                    "ouro": self.safe_int(parts[2]), # <--- CORREÇÃO AQUI
-                    "xp": self.safe_int(parts[3]),   # <--- CORREÇÃO AQUI
+                    "ouro": self.safe_int(parts[2]),
+                    "xp": self.safe_int(parts[3]),
                     "classes": parts[4].strip(),
                     "regiao": parts[5].strip(),
                     "monstro": parts[6].strip(),
