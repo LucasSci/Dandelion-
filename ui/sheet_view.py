@@ -777,9 +777,10 @@ class AcoesHabilidadeView(ui.View):
         for child in self.children:
             if not isinstance(child, ui.Button):
                 continue
-            if child.callback.__name__ == "btn_editar":
+            callback_name = getattr(child.callback, "__name__", "")
+            if callback_name == "btn_editar":
                 child.label = translate("ui.sheet.edit_label", locale=self.locale)
-            elif child.callback.__name__ == "btn_excluir":
+            elif callback_name == "btn_excluir":
                 child.label = translate("ui.sheet.delete_label", locale=self.locale)
 
     @ui.button(label="Editar", emoji="✏️", style=discord.ButtonStyle.primary)
@@ -1288,7 +1289,7 @@ class FichaView(BaseRPGView):
         for child in self.children:
             if not isinstance(child, ui.Button):
                 continue
-            callback_name = child.callback.__name__
+            callback_name = getattr(child.callback, "__name__", "")
             if callback_name in label_map:
                 key, i18n_key = label_map[callback_name]
                 child.label = translate(i18n_key, locale=self.locale)
@@ -1399,6 +1400,7 @@ class FichaView(BaseRPGView):
         _apply_embed_identity(embed, nome, classe, raca, genero, imagem_url, ctx)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction, target_message: discord.Message = None):
+        ctx = get_interaction_context(interaction)
         self.update_buttons_state("magia")
         self.clear_dynamic_buttons()
 
