@@ -569,13 +569,15 @@ class RolarPericiaModal(ui.Modal):
         if dc_informada is not None:
             margem = total - dc_informada
             if margem < 0:
-                nivel = ctx.t("ui.sheet.failure")
+                outcome_key = "ui.sheet.failure"
             elif margem == 0:
-                nivel = ctx.t("ui.sheet.marginal_success")
+                outcome_key = "ui.sheet.marginal_success"
             elif margem < 10:
-                nivel = ctx.t("ui.sheet.success")
+                outcome_key = "ui.sheet.success"
             else:
-                nivel = ctx.t("ui.sheet.critical")
+                outcome_key = "ui.sheet.critical"
+
+            nivel = ctx.t(outcome_key)
             embed.add_field(
                 name=ctx.t("ui.sheet.dc_comparison"),
                 value=f"DC **{dc_informada}** ({ctx.t('ui.sheet.difference')}: {margem:+d})",
@@ -583,29 +585,30 @@ class RolarPericiaModal(ui.Modal):
             )
         else:
             if total >= self.dcs["Extrema"]:
-                nivel = ctx.t("ui.sheet.critical")
+                outcome_key = "ui.sheet.critical"
             elif total >= self.dcs["Difícil"]:
-                nivel = ctx.t("ui.sheet.major_success")
+                outcome_key = "ui.sheet.major_success"
             elif total >= self.dcs["Média"]:
-                nivel = ctx.t("ui.sheet.success")
+                outcome_key = "ui.sheet.success"
             elif total >= self.dcs["Fácil"]:
-                nivel = ctx.t("ui.sheet.marginal_success")
+                outcome_key = "ui.sheet.marginal_success"
             else:
-                nivel = ctx.t("ui.sheet.failure")
+                outcome_key = "ui.sheet.failure"
+
+            nivel = ctx.t(outcome_key)
 
         embed.add_field(name=ctx.t("ui.sheet.level"), value=nivel, inline=False)
         embed.add_field(name=ctx.t("ui.sheet.classification"), value=classificacao, inline=False)
 
         # Palette: UX Improvement - Color coded results
         color_map = {
-            "Falha": 0xED4245,           # Red
-            "Vitória Marginal": 0xFEE75C,# Yellow
-            "Vitória": 0x57F287,         # Green
-            "Vitória Maior": 0x57F287,   # Green
-            "Crítica": 0x57F287,         # Green
-            "Sucesso": 0x57F287,         # Green (via _avaliar_dificuldade fallback)
+            "ui.sheet.failure": 0xED4245,           # Red
+            "ui.sheet.marginal_success": 0xFEE75C,  # Yellow
+            "ui.sheet.success": 0x57F287,           # Green
+            "ui.sheet.major_success": 0x57F287,     # Green
+            "ui.sheet.critical": 0xFFD700,          # Gold
         }
-        embed.color = color_map.get(nivel, 0x2b2d31)
+        embed.color = color_map.get(outcome_key, 0x2b2d31)
 
         await interaction.response.send_message(embed=embed)
 

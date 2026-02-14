@@ -23,3 +23,5 @@ aiohttp
 fastapi
 async-lru
 cryptography
+babel
+pytz
