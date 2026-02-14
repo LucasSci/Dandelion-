@@ -51,7 +51,7 @@ class TestSearchUX(unittest.IsolatedAsyncioTestCase):
 
             button = view.children[0]
             self.assertIsInstance(button, discord.ui.Button)
-            self.assertTrue("Tentar" in button.label or "Buscar" in button.label, "Button should clearly indicate retry")
+            self.assertTrue("Tentar" in button.label or "Busca" in button.label, "Button should clearly indicate retry")
 
 if __name__ == "__main__":
     unittest.main()
