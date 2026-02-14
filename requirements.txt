@@ -25,3 +25,5 @@ async-lru
 cryptography
 babel
 pytz
+pytest
+pytest-asyncio
