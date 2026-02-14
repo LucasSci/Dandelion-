@@ -39,19 +39,25 @@ class I18nContext:
 def _available_locales() -> set[str]:
     if not os.path.isdir(LOCALES_DIR):
         return set()
-    return {
-        filename.replace(".json", "")
-        for filename in os.listdir(LOCALES_DIR)
-        if filename.endswith(".json")
-    }
+    locales = set()
+    for filename in os.listdir(LOCALES_DIR):
+        if filename.endswith(".json"):
+            # Ensure we load available locales in a Babel-friendly format (underscore)
+            # Filenames might be 'en-US.json' or 'pt-BR.json'
+            name = filename.replace(".json", "")
+            locales.add(normalize_locale(name))
+    return locales
 
 
 def normalize_locale(locale: str) -> str:
+    # Handle pt_BR -> pt-BR
     locale = locale.replace("_", "-")
     parts = locale.split("-")
     if len(parts) == 1:
         return parts[0].lower()
-    return f"{parts[0].lower()}-{parts[1].upper()}"
+    # Normalize language code to lowercase and territory to uppercase (e.g. pt-BR)
+    # This is what Babel typically expects for composite locales
+    return f"{parts[0].lower()}_{parts[1].upper()}"
 
 
 def resolve_locale(locale: str | None) -> str:
@@ -65,9 +71,9 @@ def resolve_locale(locale: str | None) -> str:
         normalized = normalize_locale(locale)
         if normalized in available:
             return normalized
-        base = normalized.split("-")[0]
+        base = normalized.split("_")[0]
         for candidate in available:
-            if candidate.split("-")[0] == base:
+            if candidate.split("_")[0] == base:
                 return candidate
 
     for candidate in settings.priority_languages:
@@ -83,9 +89,13 @@ def resolve_locale(locale: str | None) -> str:
 
 @lru_cache(maxsize=None)
 def _load_locale(locale: str) -> dict[str, Any]:
+    # Try normalized first
     path = os.path.join(LOCALES_DIR, f"{locale}.json")
     if not os.path.exists(path):
-        return {}
+        # Try dash version if underscore failed (since files are en-US.json)
+        path = os.path.join(LOCALES_DIR, f"{locale.replace('_', '-')}.json")
+        if not os.path.exists(path):
+            return {}
     with open(path, "r", encoding="utf-8") as handle:
         return json.load(handle)
 

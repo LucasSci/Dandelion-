@@ -602,7 +602,7 @@ class RolarPericiaModal(ui.Modal):
             "Vitória Marginal": 0xFEE75C,# Yellow
             "Vitória": 0x57F287,         # Green
             "Vitória Maior": 0x57F287,   # Green
-            "Crítica": 0x57F287,         # Green
+            "Crítica": 0xFFD700,         # Gold
             "Sucesso": 0x57F287,         # Green (via _avaliar_dificuldade fallback)
         }
         embed.color = color_map.get(nivel, 0x2b2d31)
@@ -777,9 +777,14 @@ class AcoesHabilidadeView(ui.View):
         for child in self.children:
             if not isinstance(child, ui.Button):
                 continue
-            if child.callback.__name__ == "btn_editar":
+            # Handle both direct function and _ViewCallback wrapper
+            callback = child.callback
+            if hasattr(callback, "callback"):  # _ViewCallback wrapper
+                callback = callback.callback
+
+            if callback.__name__ == "btn_editar":
                 child.label = translate("ui.sheet.edit_label", locale=self.locale)
-            elif child.callback.__name__ == "btn_excluir":
+            elif callback.__name__ == "btn_excluir":
                 child.label = translate("ui.sheet.delete_label", locale=self.locale)
 
     @ui.button(label="Editar", emoji="✏️", style=discord.ButtonStyle.primary)
@@ -1288,7 +1293,13 @@ class FichaView(BaseRPGView):
         for child in self.children:
             if not isinstance(child, ui.Button):
                 continue
-            callback_name = child.callback.__name__
+
+            # Handle both direct function and _ViewCallback wrapper
+            callback = child.callback
+            if hasattr(callback, "callback"):  # _ViewCallback wrapper
+                callback = callback.callback
+
+            callback_name = callback.__name__
             if callback_name in label_map:
                 key, i18n_key = label_map[callback_name]
                 child.label = translate(i18n_key, locale=self.locale)
