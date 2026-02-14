@@ -1410,6 +1410,7 @@ class FichaView(BaseRPGView):
         _apply_embed_identity(embed, nome, classe, raca, genero, imagem_url, ctx)
 
     async def atualizar_botoes_habilidade(self, interaction: discord.Interaction, target_message: discord.Message = None):
+        ctx = get_interaction_context(interaction)
         self.update_buttons_state("magia")
         self.clear_dynamic_buttons()
 
