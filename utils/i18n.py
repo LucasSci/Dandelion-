@@ -47,6 +47,19 @@ def _available_locales() -> set[str]:
 
 
 def normalize_locale(locale: str) -> str:
+    # Babel expects underscores for locales (e.g. pt_BR), but many web standards use dashes (pt-BR)
+    # We normalize to underscore for Babel compatibility where needed, but this function
+    # seems to have been returning dash-separated.
+    # However, babel functions often handle both if parsed correctly, but Locale.parse specifically wants underscores or correct separation.
+
+    # Existing logic returned dash separated (e.g. 'pt-BR').
+    # If Babel fails with 'pt-BR', we might need to change how we pass it to Babel functions
+    # OR change this normalization to use underscores.
+    # Given the codebase uses this for filename lookups (json files), changing to underscore might break file lookups if files are named 'pt-BR.json'.
+
+    # Let's keep the return format as dash-separated for internal consistency (file lookups),
+    # but Ensure we replace dashes with underscores ONLY when passing to Babel functions in format_* wrappers.
+
     locale = locale.replace("_", "-")
     parts = locale.split("-")
     if len(parts) == 1:
@@ -176,7 +189,7 @@ def get_interaction_context(interaction) -> I18nContext:
 
 
 def format_datetime(value, locale: str | None = None, timezone: str | None = None, format: str = "medium") -> str:
-    chosen_locale = resolve_locale(locale)
+    chosen_locale = resolve_locale(locale).replace("-", "_")
     tz = timezone or settings.default_timezone
     try:
         tzinfo = ZoneInfo(tz)
@@ -186,7 +199,7 @@ def format_datetime(value, locale: str | None = None, timezone: str | None = Non
 
 
 def format_date(value, locale: str | None = None, timezone: str | None = None, format: str = "medium") -> str:
-    chosen_locale = resolve_locale(locale)
+    chosen_locale = resolve_locale(locale).replace("-", "_")
     tz = timezone or settings.default_timezone
     try:
         tzinfo = ZoneInfo(tz)
@@ -196,7 +209,7 @@ def format_date(value, locale: str | None = None, timezone: str | None = None, f
 
 
 def format_currency(amount: float | int, currency: str | None = None, locale: str | None = None) -> str:
-    chosen_locale = resolve_locale(locale)
+    chosen_locale = resolve_locale(locale).replace("-", "_")
     currency_code = currency or settings.default_currency
     return babel_format_currency(amount, currency_code, locale=chosen_locale)
 

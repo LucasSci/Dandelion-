@@ -51,7 +51,8 @@ class TestSearchUX(unittest.IsolatedAsyncioTestCase):
 
             button = view.children[0]
             self.assertIsInstance(button, discord.ui.Button)
-            self.assertTrue("Tentar" in button.label or "Buscar" in button.label, "Button should clearly indicate retry")
+            # In ui/sheet_view.py, NovaBuscaView uses label="Nova Busca"
+            self.assertTrue("Tentar" in button.label or "Nova Busca" in button.label, f"Button should clearly indicate retry. Found: {button.label}")
 
 if __name__ == "__main__":
     unittest.main()

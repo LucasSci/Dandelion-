@@ -777,9 +777,15 @@ class AcoesHabilidadeView(ui.View):
         for child in self.children:
             if not isinstance(child, ui.Button):
                 continue
-            if child.callback.__name__ == "btn_editar":
+
+            # Handle bound methods or partials safely
+            callback_name = getattr(child.callback, "__name__", None)
+            if not callback_name and hasattr(child.callback, "func"): # Handle partials
+                 callback_name = getattr(child.callback.func, "__name__", None)
+
+            if callback_name == "btn_editar":
                 child.label = translate("ui.sheet.edit_label", locale=self.locale)
-            elif child.callback.__name__ == "btn_excluir":
+            elif callback_name == "btn_excluir":
                 child.label = translate("ui.sheet.delete_label", locale=self.locale)
 
     @ui.button(label="Editar", emoji="✏️", style=discord.ButtonStyle.primary)
@@ -1288,7 +1294,11 @@ class FichaView(BaseRPGView):
         for child in self.children:
             if not isinstance(child, ui.Button):
                 continue
-            callback_name = child.callback.__name__
+            # Handle bound methods or partials safely
+            callback_name = getattr(child.callback, "__name__", None)
+            if not callback_name and hasattr(child.callback, "func"): # Handle partials
+                 callback_name = getattr(child.callback.func, "__name__", None)
+
             if callback_name in label_map:
                 key, i18n_key = label_map[callback_name]
                 child.label = translate(i18n_key, locale=self.locale)

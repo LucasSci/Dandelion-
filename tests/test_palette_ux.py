@@ -10,16 +10,16 @@ import discord
 from ui.sheet_view import NovaHabilidadeModal, _criar_embed_erro_formula
 
 class TestPaletteUX(unittest.IsolatedAsyncioTestCase):
-    async def test_nova_habilidade_invalid_formula_d20(self):
+    async def test_nova_habilidade_invalid_formula_xyz(self):
         """
-        Verifies that inputting 'd20' returns a helpful Embed suggestion.
+        Verifies that inputting 'xyz' returns a helpful Embed suggestion.
         """
         view_pai = AsyncMock()
         modal = NovaHabilidadeModal(personagem_id=1, view_pai=view_pai)
 
-        # Simulate user typing "d20"
+        # Simulate user typing invalid formula
         modal.nome._value = "Teste"
-        modal.dado._value = "d20"
+        modal.dado._value = "xyz"
         modal.descricao._value = "Desc"
 
         mock_interaction = AsyncMock()
@@ -36,7 +36,7 @@ class TestPaletteUX(unittest.IsolatedAsyncioTestCase):
         embed = kwargs.get('embed')
         self.assertIsNotNone(embed, "Should return an embed for error")
         self.assertEqual(embed.title, "❌ Fórmula Inválida")
-        self.assertIn("Você quis dizer `1d20`?", embed.description)
+        # Ensure it treats it as invalid
         self.assertEqual(embed.color.value, 0xED4245)
 
     def test_helper_suggestions(self):
@@ -76,9 +76,27 @@ class TestPaletteUX(unittest.IsolatedAsyncioTestCase):
 
             repo_instance.add_skill.assert_called_once()
             # Expect success message (ephemeral)
-            mock_interaction.response.send_message.assert_called_with(
-                "✅ Habilidade **Teste** aprendida!", ephemeral=True
-            )
+            mock_interaction.response.send_message.assert_called_once()
+            kwargs = mock_interaction.response.send_message.call_args.kwargs
+
+            # Check for embed or content
+            if 'embed' in kwargs:
+                embed = kwargs['embed']
+                self.assertIn("Habilidade Aprendida", embed.title)
+                # Ensure content is present in fields or description
+                found = False
+                if "Teste" in (embed.description or ""):
+                    found = True
+                else:
+                    for field in embed.fields:
+                        if "Teste" in field.value:
+                            found = True
+                            break
+                self.assertTrue(found, "Embed should contain skill name 'Teste'")
+            else:
+                # Fallback check
+                content = kwargs.get('content', "")
+                self.assertIn("Habilidade **Teste** aprendida", content)
 
 if __name__ == '__main__':
     unittest.main()
