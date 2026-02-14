@@ -24,3 +24,5 @@ fastapi
 async-lru
 cryptography
 babel
+pytest
+pytest-asyncio
