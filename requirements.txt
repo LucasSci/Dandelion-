@@ -17,6 +17,9 @@ discord-ext-voice-recv
 # Banco de dados assíncrono SQLite
 aiosqlite
 
+# Internacionalização
+Babel
+
 deep-translator
 beautifulsoup4
 aiohttp
