@@ -384,16 +384,7 @@ class NovaHabilidadeModal(ui.Modal):
         if self.dado.value:
             detalhes, _ = rolar_dados(self.dado.value)
             if detalhes is None:
-                embed = discord.Embed(
-                    title="❌ Fórmula Inválida",
-                    description=f"Não consegui entender a fórmula **`{self.dado.value}`**.",
-                    color=0xED4245
-                )
-                embed.add_field(
-                    name="💡 Exemplos de Fórmulas",
-                    value="• `1d20+5` (Um d20 mais 5)\n• `2d6` (Dois d6)\n• `d10` (Um d10)\n• `10` (Valor fixo)",
-                    inline=False
-                )
+                embed = _criar_embed_erro_formula(self.dado.value)
                 return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         skill_repo = SkillRepository(interaction.client.db)
@@ -446,16 +437,7 @@ class EditarHabilidadeModal(ui.Modal):
         if self.dado_input.value:
             detalhes, _ = rolar_dados(self.dado_input.value)
             if detalhes is None:
-                embed = discord.Embed(
-                    title="❌ Fórmula Inválida",
-                    description=f"Não consegui entender a fórmula **`{self.dado_input.value}`**.",
-                    color=0xED4245
-                )
-                embed.add_field(
-                    name="💡 Exemplos de Fórmulas",
-                    value="• `1d20+5` (Um d20 mais 5)\n• `2d6` (Dois d6)\n• `d10` (Um d10)\n• `10` (Valor fixo)",
-                    inline=False
-                )
+                embed = _criar_embed_erro_formula(self.dado_input.value)
                 return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         skill_repo = SkillRepository(interaction.client.db)
@@ -602,7 +584,7 @@ class RolarPericiaModal(ui.Modal):
             "Vitória Marginal": 0xFEE75C,# Yellow
             "Vitória": 0x57F287,         # Green
             "Vitória Maior": 0x57F287,   # Green
-            "Crítica": 0x57F287,         # Green
+            "Crítica": 0xFFD700,         # Gold
             "Sucesso": 0x57F287,         # Green (via _avaliar_dificuldade fallback)
         }
         embed.color = color_map.get(nivel, 0x2b2d31)
@@ -777,9 +759,19 @@ class AcoesHabilidadeView(ui.View):
         for child in self.children:
             if not isinstance(child, ui.Button):
                 continue
-            if child.callback.__name__ == "btn_editar":
+
+            # Safely get callback name
+            cb = child.callback
+            if hasattr(cb, "__name__"):
+                name = cb.__name__
+            elif hasattr(cb, "func") and hasattr(cb.func, "__name__"):
+                name = cb.func.__name__
+            else:
+                continue
+
+            if name == "btn_editar":
                 child.label = translate("ui.sheet.edit_label", locale=self.locale)
-            elif child.callback.__name__ == "btn_excluir":
+            elif name == "btn_excluir":
                 child.label = translate("ui.sheet.delete_label", locale=self.locale)
 
     @ui.button(label="Editar", emoji="✏️", style=discord.ButtonStyle.primary)
@@ -1288,7 +1280,15 @@ class FichaView(BaseRPGView):
         for child in self.children:
             if not isinstance(child, ui.Button):
                 continue
-            callback_name = child.callback.__name__
+
+            # Safely get callback name
+            cb = child.callback
+            callback_name = ""
+            if hasattr(cb, "__name__"):
+                callback_name = cb.__name__
+            elif hasattr(cb, "func") and hasattr(cb.func, "__name__"):
+                callback_name = cb.func.__name__
+
             if callback_name in label_map:
                 key, i18n_key = label_map[callback_name]
                 child.label = translate(i18n_key, locale=self.locale)
