@@ -28,7 +28,18 @@ class MestreView(ui.View):
 
     def _apply_labels(self) -> None:
         for child in self.children:
-            if isinstance(child, ui.Button) and child.callback.__name__ == "btn_proximo":
+            if not isinstance(child, ui.Button):
+                continue
+
+            cb = child.callback
+            if hasattr(cb, "__name__"):
+                callback_name = cb.__name__
+            elif hasattr(cb, "callback") and hasattr(cb.callback, "__name__"):
+                callback_name = cb.callback.__name__
+            else:
+                continue
+
+            if callback_name == "btn_proximo":
                 child.label = translate("ui.combat.unlock_turn", locale=self.locale)
 
     @ui.button(label="Destravar / Próximo Turno", emoji="▶️", style=discord.ButtonStyle.success)
@@ -93,9 +104,18 @@ class CombateView(ui.View):
         for child in self.children:
             if not isinstance(child, ui.Button):
                 continue
-            if child.callback.__name__ == "btn_atacar":
+
+            cb = child.callback
+            if hasattr(cb, "__name__"):
+                callback_name = cb.__name__
+            elif hasattr(cb, "callback") and hasattr(cb.callback, "__name__"):
+                callback_name = cb.callback.__name__
+            else:
+                continue
+
+            if callback_name == "btn_atacar":
                 child.label = translate("ui.combat.attack", locale=self.locale)
-            elif child.callback.__name__ == "btn_defender":
+            elif callback_name == "btn_defender":
                 child.label = translate("ui.combat.defend", locale=self.locale)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
