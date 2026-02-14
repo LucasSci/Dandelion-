@@ -27,3 +27,4 @@ babel
 pytz
 pytest
 pytest-asyncio
+pytest-cov

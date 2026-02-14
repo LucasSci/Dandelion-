@@ -53,6 +53,10 @@ def normalize_locale(locale: str) -> str:
         return parts[0].lower()
     return f"{parts[0].lower()}-{parts[1].upper()}"
 
+def _to_babel_locale(locale: str) -> str:
+    """Converts a locale string to a format accepted by Babel (e.g., pt-BR -> pt_BR)."""
+    return locale.replace("-", "_")
+
 
 def resolve_locale(locale: str | None) -> str:
     available = _available_locales()
@@ -177,26 +181,29 @@ def get_interaction_context(interaction) -> I18nContext:
 
 def format_datetime(value, locale: str | None = None, timezone: str | None = None, format: str = "medium") -> str:
     chosen_locale = resolve_locale(locale)
+    babel_locale = _to_babel_locale(chosen_locale)
     tz = timezone or settings.default_timezone
     try:
         tzinfo = ZoneInfo(tz)
     except Exception:
         tzinfo = ZoneInfo("UTC")
-    return babel_format_datetime(value, format=format, tzinfo=tzinfo, locale=chosen_locale)
+    return babel_format_datetime(value, format=format, tzinfo=tzinfo, locale=babel_locale)
 
 
 def format_date(value, locale: str | None = None, timezone: str | None = None, format: str = "medium") -> str:
     chosen_locale = resolve_locale(locale)
+    babel_locale = _to_babel_locale(chosen_locale)
     tz = timezone or settings.default_timezone
     try:
         tzinfo = ZoneInfo(tz)
     except Exception:
         tzinfo = ZoneInfo("UTC")
-    return babel_format_date(value, format=format, locale=chosen_locale, tzinfo=tzinfo)
+    return babel_format_date(value, format=format, locale=babel_locale, tzinfo=tzinfo)
 
 
 def format_currency(amount: float | int, currency: str | None = None, locale: str | None = None) -> str:
     chosen_locale = resolve_locale(locale)
+    babel_locale = _to_babel_locale(chosen_locale)
     currency_code = currency or settings.default_currency
-    return babel_format_currency(amount, currency_code, locale=chosen_locale)
+    return babel_format_currency(amount, currency_code, locale=babel_locale)
 
