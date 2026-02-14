@@ -23,3 +23,7 @@ aiohttp
 fastapi
 async-lru
 cryptography
+Babel
+pytest
+pytest-asyncio
+pytest-cov
