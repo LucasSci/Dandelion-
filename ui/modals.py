@@ -3,8 +3,6 @@ from discord import ui
 
 from utils.i18n import get_interaction_context, resolve_locale, translate
 
-# DB_NAME não é mais necessário aqui
-
 
 class CriarFichaModal(ui.Modal):
     def __init__(self, target_user_id=None, locale: str | None = None):
@@ -53,7 +51,7 @@ class CriarFichaModal(ui.Modal):
         if final_user_id == 'proprio':
             final_user_id = interaction.user.id
         
-        # FIX: Acessando DB via client, evitando abrir nova conexão (bolt.md)
+        # Acessando DB via client, evitando abrir nova conexão (bolt.md)
         db = interaction.client.db
 
         try:

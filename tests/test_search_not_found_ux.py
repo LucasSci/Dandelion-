@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 sys.path.append(os.getcwd())
 
 import discord
-from ui.sheet_view import BuscarPericiaModal, BuscarNovamenteView
+from ui.sheet_view import BuscarPericiaModal, NovaBuscaView
 
 class TestSearchNotFoundUX(unittest.IsolatedAsyncioTestCase):
     async def test_search_no_results_dead_end(self):
@@ -45,10 +45,10 @@ class TestSearchNotFoundUX(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(embed)
             self.assertIn("Nenhuma perícia encontrada", embed.title)
 
-            # CRITICAL CHECK: View should be present (BuscarNovamenteView)
+            # CRITICAL CHECK: View should be present (NovaBuscaView)
             view = kwargs.get('view')
             self.assertIsNotNone(view, "Expected a view to be present to avoid Dead End.")
-            self.assertIsInstance(view, BuscarNovamenteView)
+            self.assertIsInstance(view, NovaBuscaView)
 
 if __name__ == '__main__':
     unittest.main()
