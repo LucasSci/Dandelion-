@@ -568,6 +568,49 @@ CREATE TABLE IF NOT EXISTS lore_entry_tags (
 );
 
 -- =========================
+-- RPG DE FÓRUM COM MODERAÇÃO DE IA
+-- =========================
+
+CREATE TABLE IF NOT EXISTS forum_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id INTEGER NOT NULL,
+  canal_publicacao_id INTEGER,
+  titulo TEXT NOT NULL,
+  descricao TEXT,
+  master_id INTEGER NOT NULL,
+  status TEXT DEFAULT 'ativa',
+  criado_em TEXT DEFAULT (datetime('now')),
+  atualizado_em TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS forum_session_participants (
+  session_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  personagem_id INTEGER,
+  personagem_nome TEXT,
+  entrou_em TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (session_id, user_id),
+  FOREIGN KEY(session_id) REFERENCES forum_sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS forum_session_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  decisao_jogador TEXT NOT NULL,
+  contexto_geracao TEXT,
+  texto_ia TEXT NOT NULL,
+  status TEXT DEFAULT 'pendente',
+  texto_final TEXT,
+  observacao_mestre TEXT,
+  moderado_por INTEGER,
+  criado_em TEXT DEFAULT (datetime('now')),
+  moderado_em TEXT,
+  FOREIGN KEY(session_id) REFERENCES forum_sessions(id) ON DELETE CASCADE
+);
+
+-- =========================
 -- INDICES
 -- =========================
 
@@ -591,6 +634,9 @@ CREATE INDEX IF NOT EXISTS idx_lore_entries_owner_id ON lore_entries(owner_id);
 CREATE INDEX IF NOT EXISTS idx_lore_entries_private_owner ON lore_entries(is_private, owner_id);
 
 CREATE INDEX IF NOT EXISTS idx_lore_sources_tipo ON lore_sources(tipo);
+CREATE INDEX IF NOT EXISTS idx_forum_sessions_guild_status ON forum_sessions(guild_id, status);
+CREATE INDEX IF NOT EXISTS idx_forum_posts_status ON forum_session_posts(session_id, status);
+CREATE INDEX IF NOT EXISTS idx_forum_posts_user ON forum_session_posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_memoria_campanha_tipo ON memoria_campanha(tipo);
 CREATE INDEX IF NOT EXISTS idx_memoria_campanha_data_registro ON memoria_campanha(data_registro);
 CREATE INDEX IF NOT EXISTS idx_quests_status ON quests(status);

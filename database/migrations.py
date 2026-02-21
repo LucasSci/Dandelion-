@@ -223,6 +223,73 @@ def migrate_db(cursor: sqlite3.Cursor) -> None:
             """
         )
 
+    if not _table_exists(cursor, "forum_sessions"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS forum_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                canal_publicacao_id INTEGER,
+                titulo TEXT NOT NULL,
+                descricao TEXT,
+                master_id INTEGER NOT NULL,
+                status TEXT DEFAULT 'ativa',
+                criado_em TEXT DEFAULT (datetime('now')),
+                atualizado_em TEXT DEFAULT (datetime('now'))
+            );
+            """
+        )
+
+    if not _table_exists(cursor, "forum_session_participants"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS forum_session_participants (
+                session_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                personagem_id INTEGER,
+                personagem_nome TEXT,
+                entrou_em TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (session_id, user_id),
+                FOREIGN KEY(session_id) REFERENCES forum_sessions(id) ON DELETE CASCADE,
+                FOREIGN KEY(personagem_id) REFERENCES personagens(id) ON DELETE SET NULL
+            );
+            """
+        )
+
+    if not _table_exists(cursor, "forum_session_posts"):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS forum_session_posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                decisao_jogador TEXT NOT NULL,
+                contexto_geracao TEXT,
+                texto_ia TEXT NOT NULL,
+                status TEXT DEFAULT 'pendente',
+                texto_final TEXT,
+                observacao_mestre TEXT,
+                moderado_por INTEGER,
+                criado_em TEXT DEFAULT (datetime('now')),
+                moderado_em TEXT,
+                FOREIGN KEY(session_id) REFERENCES forum_sessions(id) ON DELETE CASCADE
+            );
+            """
+        )
+
+    if _table_exists(cursor, "forum_session_posts"):
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_forum_posts_status ON forum_session_posts(session_id, status);"
+        )
+
+    if _table_exists(cursor, "forum_sessions"):
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_forum_sessions_guild_status ON forum_sessions(guild_id, status);"
+        )
+
+    if _table_exists(cursor, "forum_session_posts"):
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_forum_posts_user ON forum_session_posts(user_id);")
+
     if not _table_exists(cursor, "user_dashboards"):
         cursor.execute(
             """

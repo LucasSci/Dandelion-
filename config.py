@@ -64,6 +64,7 @@ def load_settings() -> Settings:
             "cogs.progress",
             "cogs.gwent",
             "cogs.solo",
+            "cogs.forum_session",
         ),
         optional_extensions=("cogs.shop",),
         default_locale=os.getenv("DEFAULT_LOCALE", "pt-BR"),
