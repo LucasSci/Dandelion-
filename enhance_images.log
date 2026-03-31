@@ -1,0 +1,17 @@
+[INFO] 2026-03-19 13:13:09 - Encontrados 2 arquivos PNG em dummy_input.
+[INFO] 2026-03-19 13:13:09 - Iniciando processamento para 2 arquivos.
+[WARNING] 2026-03-19 13:13:09 - [test2.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('::1', 8000, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 8000)]. Aguardando 5s... (Tentativa 1/5)
+[WARNING] 2026-03-19 13:13:10 - [test1.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('127.0.0.1', 8000), [Errno 111] Connect call failed ('::1', 8000, 0, 0)]. Aguardando 5s... (Tentativa 1/5)
+[WARNING] 2026-03-19 13:13:14 - [test2.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('::1', 8000, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 8000)]. Aguardando 10s... (Tentativa 2/5)
+[WARNING] 2026-03-19 13:13:15 - [test1.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('127.0.0.1', 8000), [Errno 111] Connect call failed ('::1', 8000, 0, 0)]. Aguardando 10s... (Tentativa 2/5)
+[WARNING] 2026-03-19 13:13:24 - [test2.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('::1', 8000, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 8000)]. Aguardando 20s... (Tentativa 3/5)
+[WARNING] 2026-03-19 13:13:25 - [test1.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('127.0.0.1', 8000), [Errno 111] Connect call failed ('::1', 8000, 0, 0)]. Aguardando 20s... (Tentativa 3/5)
+[WARNING] 2026-03-19 13:13:44 - [test2.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('::1', 8000, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 8000)]. Aguardando 40s... (Tentativa 4/5)
+[WARNING] 2026-03-19 13:13:45 - [test1.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('127.0.0.1', 8000), [Errno 111] Connect call failed ('::1', 8000, 0, 0)]. Aguardando 40s... (Tentativa 4/5)
+[WARNING] 2026-03-19 13:14:24 - [test2.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('::1', 8000, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 8000)]. Aguardando 80s... (Tentativa 5/5)
+[WARNING] 2026-03-19 13:14:25 - [test1.png] Erro de rede: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 111] Connect call failed ('127.0.0.1', 8000), [Errno 111] Connect call failed ('::1', 8000, 0, 0)]. Aguardando 80s... (Tentativa 5/5)
+[ERROR] 2026-03-19 13:15:44 - [test2.png] Falha permanente após 5 tentativas.
+[INFO] 2026-03-19 13:15:44 - [1/2] Falha ao processar a imagem test2.png.
+[ERROR] 2026-03-19 13:15:45 - [test1.png] Falha permanente após 5 tentativas.
+[INFO] 2026-03-19 13:15:45 - [2/2] Falha ao processar a imagem test1.png.
+[INFO] 2026-03-19 13:15:45 - Processamento concluído.
